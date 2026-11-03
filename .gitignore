@@ -1,0 +1,8 @@
+# Personal Claude Code settings
+.claude/settings.local.json
+
+# OS
+.DS_Store
+
+# Worktrees created for dispatched tickets
+.worktrees/
