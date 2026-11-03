@@ -1,20 +1,20 @@
 # Domain Docs
 
-This repo **reads** the domain documentation; `template-context` owns it.
+This repo **reads** the domain documentation; `stock-flow-context` owns it.
 
 ## Before exploring, read these
 
-- **`../template-context/GLOSSARY.md`**: the shared vocabulary.
-- **`../template-context/docs/requirements/`**: the module files that touch the area you're working in.
-- **`../template-context/docs/adr/`**: business decisions that touch it. Each ADR's `Affects:` line says whether it applies to this repo.
+- **`../stock-flow-context/GLOSSARY.md`**: the shared vocabulary.
+- **`../stock-flow-context/docs/requirements/`**: the module files that touch the area you're working in.
+- **`../stock-flow-context/docs/adr/`**: business decisions that touch it. Each ADR's `Affects:` line says whether it applies to this repo.
 - **`docs/adr/`** here: technical decisions.
 
-If a file doesn't exist yet, proceed silently. If `template-context` itself can't be found, stop and say so: the record is never optional.
+If a file doesn't exist yet, proceed silently. If `stock-flow-context` itself can't be found, stop and say so: the record is never optional.
 
 ## Never create these here
 
-- **No `GLOSSARY.md` in this repo.** A second glossary is two vocabularies. A missing term is an open question for `template-context`.
-- **No business ADRs here.** The test is in `template-context`'s `AGENTS.md`: a decision that would survive a rewrite in another stack belongs there.
+- **No `GLOSSARY.md` in this repo.** A second glossary is two vocabularies. A missing term is an open question for `stock-flow-context`.
+- **No business ADRs here.** The test is in `stock-flow-context`'s `AGENTS.md`: a decision that would survive a rewrite in another stack belongs there.
 
 ## Technical ADRs
 
@@ -42,4 +42,4 @@ Name modules, types, functions, tests and endpoints with the glossary's terms, n
 
 ## Flag ADR conflicts
 
-If your change contradicts an ADR, here or in `template-context`, say so explicitly rather than silently overriding it.
+If your change contradicts an ADR, here or in `stock-flow-context`, say so explicitly rather than silently overriding it.

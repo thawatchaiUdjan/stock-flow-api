@@ -11,7 +11,7 @@ Tests come in two layers, and they run in different places, because waiting on s
 
 ## Overrides
 
-- **This overrides `implement`'s "the full test suite once at the end".** Locally, "the full suite" means the whole fast layer. The slow layer runs only in CI, and **nobody waits for it**: a pull request can be merged before its pipeline finishes. When the user reports a red pipeline, the fix comes back as work (`template-context`'s `docs/workflow.md`).
+- **This overrides `implement`'s "the full test suite once at the end".** Locally, "the full suite" means the whole fast layer. The slow layer runs only in CI, and **nobody waits for it**: a pull request can be merged before its pipeline finishes. When the user reports a red pipeline, the fix comes back as work (`stock-flow-context`'s `docs/workflow.md`).
 - You still **write** slow tests where only the real dependency can show the behaviour (below); you just don't wait for them. Write them so they pass first time on a clean environment: unique data, no ordering assumptions.
 - **Until CI exists, nothing runs the slow layer.** In that case, run it locally once before opening the pull request, and say in it that you did.
 

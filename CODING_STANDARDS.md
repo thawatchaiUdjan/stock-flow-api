@@ -10,7 +10,7 @@
 
 ## Naming
 
-- Domain concepts use the terms in `template-context`'s `GLOSSARY.md`, never their `_Avoid_` synonyms.
+- Domain concepts use the terms in `stock-flow-context`'s `GLOSSARY.md`, never their `_Avoid_` synonyms.
 
 ## Structure
 
