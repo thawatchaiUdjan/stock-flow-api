@@ -7,7 +7,15 @@ Tests come in two layers, and they run in different places, because waiting on s
 | **Fast** | Business logic through in-memory fakes of the ports (store, mailer, clock) | seconds for the whole layer | **all of it**, as often as you like | all of it |
 | **Slow** | A real database or other real dependency | seconds to minutes per package | **no** (see below) | all of it, every pipeline; nobody waits for it |
 
-<!-- FILL: the commands for each layer, once the stack is chosen: run the fast layer, run one slow test by name, run everything. -->
+The layers are split by a build tag (ADR 0011): a slow test file starts with `//go:build slow`, and its package's `TestMain` is `func TestMain(m *testing.M) { os.Exit(testdb.Main(m)) }`. Each test gets its own migrated database from `testdb.URL(t)`.
+
+| | Command |
+| --- | --- |
+| Run the fast layer | `go test ./...` |
+| Run one slow test by name | `go test -tags slow -run '^TestName$' ./internal/<package>/` |
+| Run everything (what CI runs) | `go test -tags slow ./...` |
+
+The first slow run on a machine downloads the Postgres binaries (about a minute); later runs start Postgres in seconds. No Docker needed.
 
 ## Overrides
 
