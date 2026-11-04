@@ -2,6 +2,8 @@ module github.com/thawatchaiUdjan/stock-flow-api
 
 go 1.27.0
 
+toolchain go1.27.3
+
 require (
 	github.com/danielgtaylor/huma/v2 v2.40.0
 	github.com/fergusstrange/embedded-postgres/v2 v2.0.1

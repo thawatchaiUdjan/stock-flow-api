@@ -56,7 +56,7 @@ Tickets arrive from `stock-flow-context` (see `docs/agents/issue-tracker.md`). A
 This repo owns the contract, and `stock-flow-web` generates its client from it.
 
 - Publish it in a machine-readable form (for HTTP APIs, OpenAPI), **generated from the code** wherever the framework can, so it cannot drift from what the server does. Here: **`openapi.yaml`** at the repo root, OpenAPI 3.1, written from the Huma operations by `go generate ./...` and checked by CI (ADR 0013). The running API also serves it at `/openapi.yaml`.
-- Publish every error code the API can return, in one machine-readable list that `stock-flow-web` checks against. Errors are RFC 9457 Problem Details (ADR 0014). For now the list is the per-operation error statuses in `openapi.yaml`: declare each one in `huma.Operation.Errors`. Whether domain errors get their own codes is open for the first feature that returns one (ADR 0014).
+- Publish every error code the API can return, in one machine-readable list that `stock-flow-web` checks against. Errors are RFC 9457 Problem Details (ADR 0014). For now the list is the per-operation error statuses in `openapi.yaml`: declare each one in `huma.Operation.Errors`. Whether domain errors get their own codes is an open question for `stock-flow-context`, to settle before the first feature that returns one (ADR 0014).
 - **Changing what an existing request or response means is a breaking change.** Before merging one, name every caller it breaks in the pull request's *Contract* section; `stock-flow-context` writes the `stock-flow-web` ticket from it. A contract change merges before the web change that depends on it.
 
 ## Tests

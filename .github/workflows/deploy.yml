@@ -1,7 +1,7 @@
 name: deploy
 
 # Runs when ci.yml finishes on a push to main, and deploys only if it passed.
-# Vercel's Git auto-deploy is off (vercel.json), so this is the only way to production.
+# Vercel's Git auto-deploy is off (vercel.json), so this is the only way to production (ADR 0017).
 on:
   workflow_run:
     workflows: [ci]
@@ -29,7 +29,7 @@ jobs:
           go-version-file: go.mod
 
       # Before the deploy, never at process startup: every Vercel instance runs main().
-      # The session pooler, because goose holds a session lock and runners have no IPv6.
+      # The session pooler, because goose holds a session lock and runners have no IPv6 (ADR 0006, 0007).
       - name: Migrate the database
         env:
           MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}

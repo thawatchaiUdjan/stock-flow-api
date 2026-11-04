@@ -18,7 +18,7 @@ Date: 2026-11-04
 
 - No Docker. The first run downloads the Postgres binaries into a user cache; later starts take a few seconds.
 - Per-test isolation costs one `CREATE DATABASE … TEMPLATE`, not a migration run.
-- One server per test package, not one per machine. pgtestdb would share templates across packages pointed at a single server, if the slow layer outgrows this.
+- **This departs from `docs/agents/testing.md`** ("One shared test database, not one container per test package"): each slow package's `TestMain` starts its own embedded server, as the stack ticket specified. With one slow package today the cost is a single start. If the slow layer grows to several packages and the starts add up, share one server: pgtestdb already shares templates across packages pointed at one server.
 - `go vet` and editors need `-tags slow` to see slow files (`ci.yml` passes it).
 
 ## Alternatives considered

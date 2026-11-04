@@ -19,6 +19,7 @@
 - `cmd/openapi`: writes `openapi.yaml`.
 - `internal/api`: HTTP only. Huma operations with their input and output types, grouped one file per business area (`health.go`, later `orders.go`…). It depends on what it needs from the database through small interfaces declared here (`api.Store`), so the fast layer can fake them.
 - `internal/store`: the database. SQL in `db/queries/*.sql`, the Go generated from it, and `pool.go`. No HTTP types.
+- `internal/testdb`: real Postgres for slow tests. Imported only by `//go:build slow` files.
 - `db/migrations`: goose SQL, numbered sequentially, never edited once merged: fix forward with a new migration.
 - Dependencies point inwards: `cmd` → `internal/api` → interfaces satisfied by `internal/store`. `internal/store` imports nothing from `internal/api`.
 - A business rule that spans several statements runs in one transaction (`pool.Begin`, then `store.New(tx)`), with constraints in the schema backing the Go checks.
@@ -29,7 +30,7 @@
 - Errors reach the client as RFC 9457 Problem Details (ADR 0014): handlers return `huma.Error4xx…`/`huma.Error5xx…`, with `huma.ErrorDetail{Location: "body.quantity", …}` for field errors. Never write an error body by hand.
 - Declare every status an operation can return in `huma.Operation.Errors`, so it is in `openapi.yaml`.
 - Inside the server, wrap with context, `fmt.Errorf("create order: %w", err)`, and log the cause with `slog` where it becomes a 5xx. A 5xx detail never contains the internal error: no SQL, hosts or credentials.
-- Every error the API can return has a code in the published error-code list.
+- Every error the API can return is in the published error-code list: for now, its status declared on the operation and so in `openapi.yaml` (ADR 0014).
 
 ## Comments
 

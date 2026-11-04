@@ -13,7 +13,7 @@ Resolved on 2026-11-04, all of them working together, so nothing stepped back:
 
 | Component | Version |
 | --- | --- |
-| Go | 1.27.3 (`go 1.27.0` in `go.mod`, ADR 0001) |
+| Go | 1.27.3 (`toolchain go1.27.3` in `go.mod`, so CI and Vercel build with it; `go 1.27.0` is the minimum, ADR 0001) |
 | Huma | v2.40.0 |
 | chi | v5.5.0 |
 | pgx | v5.12.0 |

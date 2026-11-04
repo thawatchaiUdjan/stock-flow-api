@@ -25,7 +25,8 @@ If `POSTGRES_URL` turns out to be the session pooler, the app keeps working (sim
 
 ## Consequences
 
-- A slow test (`internal/store`) fails if a query leaves a prepared statement on the server, so the mode can't be dropped by accident.
+- A slow test (`internal/store`) fails if a parameterised query leaves a prepared statement on the server, so the mode can't be dropped by accident. (pgx already uses simple protocol for queries without arguments, so only parameterised queries show the difference.)
+- The integration's `POSTGRES_URL` carries `supa=base-pooler.x`, which pgx would forward as a startup parameter that Postgres rejects. `store.Open` drops it, and a slow test opens a URL with it.
 - Simple protocol sends parameters as text. pgx handles the encoding; sqlc's output is unaffected.
 - `MIGRATION_DATABASE_URL` is set by hand: locally in `.env`, and as a GitHub Actions secret. It doesn't come from Vercel.
 

@@ -18,8 +18,8 @@ func main() {
 		os.Exit(2)
 	}
 	// The contract describes routes only; no handler runs, so no store is needed.
-	_, a := api.New(nil)
-	spec, err := a.OpenAPI().YAML()
+	_, contract := api.New(nil)
+	spec, err := contract.OpenAPI().YAML()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "openapi: render:", err)
 		os.Exit(1)

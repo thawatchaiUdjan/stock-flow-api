@@ -5,6 +5,10 @@ Date: 2026-11-04
 
 A shared decision, made the same way in `stock-flow-web`'s stack ticket. No code implements it yet: the first feature with users does.
 
+## Context
+
+The system has two kinds of user, owner and staff, using the web app. Credentials must not be readable by page scripts, and the browser should talk to a single origin.
+
 ## Decision
 
 - Authentication uses server-side sessions owned by this API. The session ID travels in a cookie that is `HttpOnly`, `Secure` and `SameSite=Lax`. No token in browser storage, no Supabase Auth.

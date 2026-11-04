@@ -5,6 +5,10 @@ Date: 2026-11-04
 
 A shared decision, made the same way in `stock-flow-web`'s stack ticket.
 
+## Context
+
+This is a practice project: hosting must cost nothing and need no card, and the demo must answer quickly from Southeast Asia.
+
 ## Decision
 
 - Everything runs on Vercel Hobby plus Supabase Free: $0, no card.

@@ -9,7 +9,7 @@ stock-flow is a practice project for frontend development (`stock-flow-context` 
 
 ## Decision
 
-The API is written in Go 1.27 (`go 1.27.0` in `go.mod`, built locally and in CI with 1.27.3). The owner already works in Go.
+The API is written in Go 1.27: `go 1.27.0` (the minimum) and `toolchain go1.27.3` (what it's built with) in `go.mod`. The owner already works in Go.
 
 ## Consequences
 
