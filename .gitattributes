@@ -1,0 +1,3 @@
+# LF everywhere, including Windows checkouts: gofmt and the generated-code check in CI
+# compare bytes, and CRLF would fail both.
+* text=auto eol=lf
