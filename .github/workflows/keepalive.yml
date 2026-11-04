@@ -15,4 +15,4 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: GET /health
-        run: curl --fail --silent --show-error --max-time 30 --retry 3 --retry-all-errors https://stock-flow-api.vercel.app/health
+        run: curl --fail --silent --show-error --max-time 30 --retry 3 --retry-all-errors https://stock-flow-api-ten.vercel.app/health
