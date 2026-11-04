@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod # caches the module and build cache by default
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then echo "Run gofmt -w on:"; echo "$unformatted"; exit 1; fi
+
+      - name: go vet
+        run: go vet -tags slow ./...
+
+      - name: go test (fast and slow layers)
+        run: go test -tags slow ./...
+
+      - name: Generated code matches its sources (sqlc output, openapi.yaml)
+        run: |
+          go generate ./...
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Run 'go generate ./...' and commit the result:"
+            git status --porcelain
+            git diff
+            exit 1
+          fi
