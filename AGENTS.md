@@ -14,22 +14,29 @@ Start sessions with `--add-dir ../stock-flow-context` so the record is readable.
 
 ## Stack and commands
 
-<!-- FILL: fill this table when the stack is chosen. `/implement` runs typechecking and tests (which ones: `docs/agents/testing.md`); it needs these commands, and an agent must never guess them. -->
+Project goal: a practice project for frontend development ([`stock-flow-context` README, *Project goal*](https://github.com/thawatchaiUdjan/stock-flow-context#project-goal)). Here that means: prefer the simplest thing that works.
+
+`/implement` runs typechecking and tests (which ones: `docs/agents/testing.md`) with these commands; never guess others. All of them run from the repo root, in bash and in PowerShell.
 
 | | |
 | --- | --- |
-| Language / runtime | <!-- FILL --> |
-| Framework | <!-- FILL --> |
-| Database | <!-- FILL --> |
-| Install dependencies | <!-- FILL --> |
-| Run locally | <!-- FILL --> |
-| Typecheck / build | <!-- FILL --> |
-| Run the fast layer | <!-- FILL --> |
-| Run one slow test by name | <!-- FILL --> |
-| Run everything (CI) | <!-- FILL --> |
-| Lint / format | <!-- FILL --> |
+| Language / runtime | Go 1.27 (ADR 0001), on Vercel's Go Framework Preset in `sin1` (ADR 0008) |
+| Framework | Huma v2 on chi v5 (ADR 0002); pgx v5 + sqlc for SQL (ADR 0003); goose v3 migrations (ADR 0007) |
+| Database | PostgreSQL 17 on Supabase Free, Singapore (ADR 0005); app via the transaction pooler (ADR 0006) |
+| Install dependencies | `go mod download` (sqlc and goose are `go tool`s, ADR 0004: nothing to install globally) |
+| Run locally | Copy `.env.example` to `.env` and fill it in, then `go run ./cmd/api` |
+| Typecheck / build | `go build ./...` and `go vet -tags slow ./...` |
+| Run the fast layer | `go test ./...` |
+| Run one slow test by name | `go test -tags slow -run '^TestName$' ./internal/<package>/` |
+| Run everything (CI) | `go test -tags slow ./...` (`ci.yml` also runs gofmt, vet, and the generated-code check) |
+| Lint / format | `gofmt -l .` lists unformatted files (`gofmt -w .` fixes them); `go vet -tags slow ./...` |
+| Regenerate sqlc code and `openapi.yaml` | `go generate ./...`, then commit the result; CI fails if it is stale |
+| New migration | `go tool goose -dir db/migrations -s create <slug> sql` (`-s`: sequential `NNNNN_` numbers, not timestamps) |
+| Migrate a database by hand | `go tool goose -dir db/migrations postgres "<MIGRATION_DATABASE_URL>" up` (production is migrated by `deploy.yml` only) |
 
 Coding standards: `CODING_STANDARDS.md`. Technical decisions: `docs/adr/`.
+
+**Logs:** Vercel Hobby keeps runtime logs for **1 hour**. When debugging production, reproduce first, then read the logs in the Vercel dashboard straight away.
 
 ## Where the rules come from
 
@@ -48,8 +55,8 @@ Tickets arrive from `stock-flow-context` (see `docs/agents/issue-tracker.md`). A
 
 This repo owns the contract, and `stock-flow-web` generates its client from it.
 
-- Publish it in a machine-readable form (for HTTP APIs, OpenAPI), **generated from the code** wherever the framework can, so it cannot drift from what the server does. <!-- FILL: where the contract is published, e.g. a path or an endpoint. -->
-- Publish every error code the API can return, in one machine-readable list that `stock-flow-web` checks against. <!-- FILL: path of the error-code list. -->
+- Publish it in a machine-readable form (for HTTP APIs, OpenAPI), **generated from the code** wherever the framework can, so it cannot drift from what the server does. Here: **`openapi.yaml`** at the repo root, OpenAPI 3.1, written from the Huma operations by `go generate ./...` and checked by CI (ADR 0013). The running API also serves it at `/openapi.yaml`.
+- Publish every error code the API can return, in one machine-readable list that `stock-flow-web` checks against. Errors are RFC 9457 Problem Details (ADR 0014). For now the list is the per-operation error statuses in `openapi.yaml`: declare each one in `huma.Operation.Errors`. Whether domain errors get their own codes is open for the first feature that returns one (ADR 0014).
 - **Changing what an existing request or response means is a breaking change.** Before merging one, name every caller it breaks in the pull request's *Contract* section; `stock-flow-context` writes the `stock-flow-web` ticket from it. A contract change merges before the web change that depends on it.
 
 ## Tests
