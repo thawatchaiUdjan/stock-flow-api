@@ -69,19 +69,20 @@ This repo owns the contract, and `stock-flow-web` generates its client from it.
 
 ## Working a dispatched ticket
 
-When `stock-flow-context` dispatches a ticket, you start in a worktree of this repo (`.worktrees/ticket-<n>`, on branch `ticket-<n>`), with no one watching.
+When `stock-flow-context` dispatches a ticket, you start in a fresh worktree of this repo on branch `ticket-<n>`, with no one watching. Usually an Orca orchestration worker: your prompt then opens with a preamble carrying Task and Dispatch IDs. Without Orca, `scripts/dispatch.sh` started you headless in `.worktrees/ticket-<n>`, with no preamble.
 
 - **Paths.** From a worktree, the `../stock-flow-context` paths in these docs don't resolve. Use the absolute paths your dispatch prompt gives. If the record isn't there, stop and say so on the ticket: never build without it.
 - **Nobody answers questions.** Where a skill would ask the user, decide as follows instead:
   - `tdd`'s seams: the seam the ticket or spec names counts as agreed. If it doesn't fit the code, that is a question (below).
   - `code-review`'s fixed point: the branch you started from, i.e. the merge-base with the default branch.
-  - Anything else, including any business decision you cannot find in the record, or the record, the ticket and the code disagreeing: comment the question on the ticket, open no pull request, and stop. The coordinator brings the answer back.
+  - Anything else, including any business decision you cannot find in the record, or the record, the ticket and the code disagreeing, is a question for the coordinator. **Always** comment it on the ticket first: the ticket is the record of every question and answer. Then, with an Orca preamble, run `orca orchestration ask` with the same question and end your turn; Orca wakes you with the answer and you carry on on this branch. Without one, open no pull request and stop; you are resumed on this branch once the answer is on the ticket.
 
 Then:
 
 1. `/implement` the ticket (the prompt you were started with).
 2. Push the branch and open a pull request filling every section of the template. Comment its link on the ticket.
-3. Never merge, and never edit another repo.
+3. With an Orca preamble, report `worker_done` with the pull request's link as evidence; if you stop without a pull request, report that too, with what stopped you.
+4. Never merge, and never edit another repo.
 
 ## Commits & pull requests
 
