@@ -23,7 +23,7 @@
 - `internal/store`: the database. SQL in `db/queries/*.sql`, the Go generated from it, and `pool.go`. No HTTP types.
 - `internal/store/storetest`: the contract suite of the store ports and the fake that passes it. Imported by tests only.
 - `internal/testdb`: real Postgres for slow tests. Imported only by `//go:build slow` files.
-- `db/migrations`: goose SQL, numbered sequentially, never edited once merged: fix forward with a new migration.
+- `db/migrations`: goose SQL, numbered sequentially, never edited once merged: fix forward with a new migration. A new table enables Row Level Security, with no policy, in the migration that creates it (ADR 0021).
 - Dependencies point inwards: `cmd` → `internal/api` → `internal/auth` → `internal/store`, with the database reached through interfaces `internal/store` satisfies. `internal/store` imports nothing from `internal/api` or `internal/auth`.
 - A business rule that spans several statements runs in one transaction (`store.InTx`), with constraints in the schema backing the Go checks.
 - No root `api/` directory: Vercel would treat it as Serverless Functions (ADR 0008).
