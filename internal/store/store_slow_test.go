@@ -202,7 +202,7 @@ func TestASetupLinkUsedTwiceAtOnceWorksOnce(t *testing.T) {
 	}
 }
 
-// context ADR 0003: the Owner's sessions end in the same transaction that uses up the
+// context ADR 0003: the Owner's sessions end in the same statement that uses up the
 // Setup link, so a password that can't be set ends no session and keeps the link.
 func TestAFailedPasswordSetEndsNoSessionAndKeepsTheLink(t *testing.T) {
 	ctx := context.Background()
@@ -221,7 +221,7 @@ func TestAFailedPasswordSetEndsNoSessionAndKeepsTheLink(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The password update fails after the link is deleted and the sessions are marked
-	// for deletion, which is when a missing transaction would show.
+	// for deletion, which is when ending the sessions in a separate step would show.
 	if _, err := pool.Exec(ctx, `ALTER TABLE users ADD CONSTRAINT users_no_boom CHECK (password_hash IS DISTINCT FROM 'boom')`); err != nil {
 		t.Fatal(err)
 	}

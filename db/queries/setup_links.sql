@@ -26,6 +26,6 @@ WITH used AS (
     RETURNING users.id, users.role
 ), ended AS (
     DELETE FROM sessions
-    WHERE user_id IN (SELECT id FROM updated WHERE role = 'owner')
+    WHERE user_id IN (SELECT updated.id FROM updated WHERE updated.role = 'owner')
 )
 SELECT count(*) FROM updated;

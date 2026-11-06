@@ -347,7 +347,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}
 	})
 
-	t.Run("setting a User's password leaves their sessions, as only the Owner's ends them", func(t *testing.T) {
+	t.Run("setting a non-Owner's password ends no session", func(t *testing.T) {
 		s := newSubject(t)
 		malee := s.AddUser(t, owner("malee@example.com"))
 		somchai := s.AddUser(t, staff("staff@example.com"))
@@ -370,8 +370,12 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		session(t, s, malee, "laptop")
 		issue(t, s, malee, "link")
 
-		setPassword(t, s, "link", at)
-		setPassword(t, s, "unknown", at.Add(-time.Second))
+		if used := setPassword(t, s, "link", at); used != 0 {
+			t.Errorf("at its expiry: used = %d, want 0", used)
+		}
+		if used := setPassword(t, s, "unknown", at.Add(-time.Second)); used != 0 {
+			t.Errorf("unknown link: used = %d, want 0", used)
+		}
 
 		if !live(s, "laptop") {
 			t.Error("the Owner's session ended")
