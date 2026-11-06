@@ -5,6 +5,7 @@ package testdb
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -63,6 +64,17 @@ func Main(m *testing.M) int {
 func URL(t testing.TB) string {
 	t.Helper()
 	return pgtestdb.Custom(t, server, migrator).URL()
+}
+
+// AdminURL returns databaseURL connecting as the server's superuser, for what the role of
+// URL may not do, such as creating another role.
+func AdminURL(databaseURL string) string {
+	parsed, err := url.Parse(databaseURL)
+	if err != nil {
+		panic(fmt.Sprintf("testdb: parse %q: %v", databaseURL, err))
+	}
+	parsed.User = url.UserPassword(server.User, server.Password)
+	return parsed.String()
 }
 
 func migrationsDir() string {

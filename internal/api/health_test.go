@@ -1,7 +1,6 @@
 package api_test
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,11 +8,8 @@ import (
 	"testing"
 
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/api"
+	"github.com/thawatchaiUdjan/stock-flow-api/internal/store/storetest"
 )
-
-type fakeStore struct{ pingErr error }
-
-func (f fakeStore) Ping(context.Context) error { return f.pingErr }
 
 func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -23,7 +19,7 @@ func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
 }
 
 func TestHealthReportsOKWhenTheDatabaseAnswers(t *testing.T) {
-	h, _ := api.New(fakeStore{})
+	h, _ := api.New(api.Deps{Store: storetest.NewFake()})
 
 	rec := get(t, h, "/health")
 
@@ -42,7 +38,7 @@ func TestHealthReportsOKWhenTheDatabaseAnswers(t *testing.T) {
 }
 
 func TestHealthReportsUnavailableAsProblemDetailsWhenTheDatabaseFails(t *testing.T) {
-	h, _ := api.New(fakeStore{pingErr: errors.New("connection refused")})
+	h, _ := api.New(api.Deps{Store: &storetest.Fake{Err: errors.New("connection refused")}})
 
 	rec := get(t, h, "/health")
 
@@ -71,14 +67,14 @@ func TestEveryResponseForbidsCaching(t *testing.T) {
 		store api.Store
 		path  string
 	}{
-		"health ok":          {fakeStore{}, "/health"},
-		"health unavailable": {fakeStore{pingErr: errors.New("down")}, "/health"},
-		"unknown path":       {fakeStore{}, "/no-such-path"},
-		"published contract": {fakeStore{}, "/openapi.yaml"},
+		"health ok":          {storetest.NewFake(), "/health"},
+		"health unavailable": {&storetest.Fake{Err: errors.New("down")}, "/health"},
+		"unknown path":       {storetest.NewFake(), "/no-such-path"},
+		"published contract": {storetest.NewFake(), "/openapi.yaml"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			h, _ := api.New(tc.store)
+			h, _ := api.New(api.Deps{Store: tc.store})
 
 			rec := get(t, h, tc.path)
 

@@ -17,12 +17,15 @@
 
 - `cmd/api`: the server's `main`, which reads configuration and wires things together. No logic.
 - `cmd/openapi`: writes `openapi.yaml`.
+- `cmd/install`: the developer command that issues the Owner's Setup link. Wiring, flags and printing; no logic.
 - `internal/api`: HTTP only. Huma operations with their input and output types, grouped one file per business area (`health.go`, later `orders.go`…). It depends on what it needs from the database through small interfaces declared here (`api.Store`), so the fast layer can fake them.
+- `internal/auth`: what logging in rests on outside HTTP: password hashing, tokens, issuing the Owner's Setup link.
 - `internal/store`: the database. SQL in `db/queries/*.sql`, the Go generated from it, and `pool.go`. No HTTP types.
+- `internal/store/storetest`: the contract suite of the store ports and the fake that passes it. Imported by tests only.
 - `internal/testdb`: real Postgres for slow tests. Imported only by `//go:build slow` files.
-- `db/migrations`: goose SQL, numbered sequentially, never edited once merged: fix forward with a new migration.
-- Dependencies point inwards: `cmd` → `internal/api` → interfaces satisfied by `internal/store`. `internal/store` imports nothing from `internal/api`.
-- A business rule that spans several statements runs in one transaction (`pool.Begin`, then `store.New(tx)`), with constraints in the schema backing the Go checks.
+- `db/migrations`: goose SQL, numbered sequentially, never edited once merged: fix forward with a new migration. A new table enables Row Level Security, with no policy, in the migration that creates it (ADR 0021).
+- Dependencies point inwards: `cmd` → `internal/api` → `internal/auth` → `internal/store`, with the database reached through interfaces `internal/store` satisfies. `internal/store` imports nothing from `internal/api` or `internal/auth`.
+- A business rule that spans several statements runs in one transaction (`store.InTx`), with constraints in the schema backing the Go checks.
 - No root `api/` directory: Vercel would treat it as Serverless Functions (ADR 0008).
 
 ## Errors
@@ -30,7 +33,7 @@
 - Errors reach the client as RFC 9457 Problem Details (ADR 0014): handlers return `huma.Error4xx…`/`huma.Error5xx…`, with `huma.ErrorDetail{Location: "body.quantity", …}` for field errors. Never write an error body by hand.
 - Declare every status an operation can return in `huma.Operation.Errors`, so it is in `openapi.yaml`.
 - Inside the server, wrap with context, `fmt.Errorf("create order: %w", err)`, and log the cause with `slog` where it becomes a 5xx. A 5xx detail never contains the internal error: no SQL, hosts or credentials.
-- Every error the API can return is in the published error-code list: for now, its status declared on the operation and so in `openapi.yaml` (ADR 0014).
+- A domain error is returned with `domainError`, its code in Problem Details' `type`, and that code is listed in `errorCodes` (`internal/api/errors.go`), which publishes it in `openapi.yaml` (ADR 0019). Field errors keep `errors[].location`.
 
 ## Comments
 

@@ -13,6 +13,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/api"
+	"github.com/thawatchaiUdjan/stock-flow-api/internal/auth"
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
 )
 
@@ -43,7 +44,7 @@ func run() error {
 	}
 	defer pool.Close()
 
-	handler, _ := api.New(store.New(pool))
+	handler, _ := api.New(api.Deps{Store: store.New(pool), PasswordHasher: auth.DefaultPasswordHasher, Now: time.Now})
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,

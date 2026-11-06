@@ -3,3 +3,30 @@
 //   sqlc v1.31.1
 
 package store
+
+import (
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type Session struct {
+	TokenHash []byte
+	UserID    int64
+	ExpiresAt time.Time
+}
+
+type SetupLink struct {
+	UserID    int64
+	TokenHash []byte
+	ExpiresAt time.Time
+}
+
+type User struct {
+	ID           int64
+	Name         string
+	Email        string
+	Role         string
+	Status       string
+	PasswordHash pgtype.Text
+}
