@@ -48,13 +48,17 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (i
 	return result.RowsAffected(), nil
 }
 
-const deleteSession = `-- name: DeleteSession :exec
+const deleteSession = `-- name: DeleteSession :execrows
 DELETE FROM sessions WHERE token_hash = $1
 `
 
-func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
-	_, err := q.db.Exec(ctx, deleteSession, tokenHash)
-	return err
+// The number of rows says whether this call ended the session or another got there first.
+func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSession, tokenHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteUserSessions = `-- name: DeleteUserSessions :exec
@@ -67,13 +71,14 @@ func (q *Queries) DeleteUserSessions(ctx context.Context, userID int64) error {
 }
 
 const getSession = `-- name: GetSession :one
-SELECT users.name, users.email, users.role, sessions.expires_at
+SELECT sessions.user_id, users.name, users.email, users.role, sessions.expires_at
 FROM sessions
 JOIN users ON users.id = sessions.user_id
 WHERE sessions.token_hash = $1
 `
 
 type GetSessionRow struct {
+	UserID    int64
 	Name      string
 	Email     string
 	Role      string
@@ -84,6 +89,7 @@ func (q *Queries) GetSession(ctx context.Context, tokenHash []byte) (GetSessionR
 	row := q.db.QueryRow(ctx, getSession, tokenHash)
 	var i GetSessionRow
 	err := row.Scan(
+		&i.UserID,
 		&i.Name,
 		&i.Email,
 		&i.Role,

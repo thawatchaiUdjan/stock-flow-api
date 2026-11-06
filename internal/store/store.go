@@ -21,6 +21,70 @@ const (
 	statusInactive = "inactive"
 )
 
+// The results a Login log entry records (users-and-access R36).
+const (
+	ResultLogin       = "login"
+	ResultFailedLogin = "failed-login"
+	ResultLogout      = "logout"
+)
+
+// StartSessionParams is a login that passed its password check: the session to start and
+// the entry that records it. Entry.Result is set by StartSession.
+type StartSessionParams struct {
+	Session CreateSessionParams
+	Entry   AddLoginLogEntryParams
+}
+
+// StartSession starts the session and writes the entry in one transaction, so a login is
+// never in one without the other (users-and-access R36). When the User changed while the
+// password was checked (R16, R31) no session starts and the entry is a failed login
+// instead. It reports whether a session started.
+func (s *Store) StartSession(ctx context.Context, arg StartSessionParams) (started bool, err error) {
+	err = InTx(ctx, s.pool, func(q *Queries) error {
+		n, err := q.CreateSession(ctx, arg.Session)
+		if err != nil {
+			return fmt.Errorf("create session: %w", err)
+		}
+		started = n > 0
+		arg.Entry.Result = ResultFailedLogin
+		if started {
+			arg.Entry.Result = ResultLogin
+		}
+		if err := q.AddLoginLogEntry(ctx, arg.Entry); err != nil {
+			return fmt.Errorf("add login log entry: %w", err)
+		}
+		return nil
+	})
+	return started && err == nil, err
+}
+
+// EndSessionParams is a logout: the session to end and the entry that records it.
+// Entry.Result is set by EndSession.
+type EndSessionParams struct {
+	TokenHash []byte
+	Entry     AddLoginLogEntryParams
+}
+
+// EndSession ends the session and writes the entry in one transaction (users-and-access
+// R7, R36). A session already gone, as when two logouts carry one cookie, writes no entry:
+// only the call that ended it logged out.
+func (s *Store) EndSession(ctx context.Context, arg EndSessionParams) error {
+	return InTx(ctx, s.pool, func(q *Queries) error {
+		ended, err := q.DeleteSession(ctx, arg.TokenHash)
+		if err != nil {
+			return fmt.Errorf("delete session: %w", err)
+		}
+		if ended == 0 {
+			return nil
+		}
+		arg.Entry.Result = ResultLogout
+		if err := q.AddLoginLogEntry(ctx, arg.Entry); err != nil {
+			return fmt.Errorf("add login log entry: %w", err)
+		}
+		return nil
+	})
+}
+
 // Store is every query, and the rules that take more than one statement. The API runs on
 // it rather than on Queries, whose ChangeUser alone would skip those rules.
 type Store struct {

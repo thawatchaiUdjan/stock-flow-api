@@ -592,3 +592,30 @@ func TestParameterisedQueriesLeaveNoPreparedStatementsOnTheServer(t *testing.T) 
 		t.Errorf("server holds %d prepared statements for this session, want 0", prepared)
 	}
 }
+
+// users-and-access R39: the schema refuses to edit or remove an entry, whoever asks.
+func TestTheSchemaRefusesToChangeOrRemoveALoginLogEntry(t *testing.T) {
+	ctx := context.Background()
+	pool := open(t, testdb.URL(t))
+	if err := store.New(pool).AddLoginLogEntry(ctx, store.AddLoginLogEntryParams{
+		At: time.Now(), Email: "nobody@example.com", Result: store.ResultFailedLogin, Ip: "203.0.113.7", UserAgent: "Firefox",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, statement := range map[string]string{
+		"update":   `UPDATE login_log SET email = 'someone@example.com'`,
+		"delete":   `DELETE FROM login_log`,
+		"truncate": `TRUNCATE login_log`,
+	} {
+		_, err := pool.Exec(ctx, statement)
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "23001" {
+			t.Errorf("%s: err = %v, want a restrict_violation", name, err)
+		}
+	}
+	var email string
+	if err := pool.QueryRow(ctx, `SELECT email FROM login_log`).Scan(&email); err != nil || email != "nobody@example.com" {
+		t.Errorf("entry = %q, %v, want it untouched", email, err)
+	}
+}

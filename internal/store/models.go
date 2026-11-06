@@ -10,6 +10,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type LoginLog struct {
+	ID        int64
+	At        time.Time
+	Email     string
+	UserID    pgtype.Int8
+	Result    string
+	Ip        string
+	UserAgent string
+}
+
 type Session struct {
 	TokenHash []byte
 	UserID    int64

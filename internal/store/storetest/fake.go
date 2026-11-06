@@ -20,11 +20,15 @@ import (
 type Fake struct {
 	// Err, when set, is returned by every operation, like a database that is down.
 	Err error
+	// LogErr, when set, is returned by every operation that writes a Login log entry, like
+	// a database that can read but not write.
+	LogErr error
 
 	mu       sync.Mutex
 	users    []store.User
 	sessions map[string]store.Session
 	links    map[int64]store.SetupLink
+	log      []store.ListLoginLogRow
 }
 
 var _ Store = (*Fake)(nil)
@@ -233,6 +237,104 @@ func (f *Fake) CreateSession(_ context.Context, arg store.CreateSessionParams) (
 	return 1, nil
 }
 
+// StartSession keeps the entry and the session together: with a refused session the entry
+// is still written, as a failed login. Like the real one it is one transaction, so an entry
+// that Postgres would refuse (a User that does not exist, an unknown result) starts no
+// session either.
+func (f *Fake) StartSession(_ context.Context, arg store.StartSessionParams) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return false, f.Err
+	}
+	arg.Entry.Result = store.ResultFailedLogin
+	user, ok := f.user(arg.Session.UserID)
+	started := ok && user.Status == "active" && user.PasswordHash == arg.Session.PasswordHash
+	if started {
+		if _, taken := f.sessions[string(arg.Session.TokenHash)]; taken {
+			return false, errors.New("violates sessions_pkey")
+		}
+		arg.Entry.Result = store.ResultLogin
+	}
+	if err := f.addEntry(arg.Entry); err != nil {
+		return false, err
+	}
+	if started {
+		f.sessions[string(arg.Session.TokenHash)] = store.Session{
+			TokenHash: arg.Session.TokenHash, UserID: arg.Session.UserID, ExpiresAt: arg.Session.ExpiresAt,
+		}
+	}
+	return started, nil
+}
+
+func (f *Fake) EndSession(_ context.Context, arg store.EndSessionParams) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return f.Err
+	}
+	if _, ok := f.sessions[string(arg.TokenHash)]; !ok {
+		return nil
+	}
+	arg.Entry.Result = store.ResultLogout
+	if err := f.addEntry(arg.Entry); err != nil {
+		return err
+	}
+	delete(f.sessions, string(arg.TokenHash))
+	return nil
+}
+
+func (f *Fake) AddLoginLogEntry(_ context.Context, arg store.AddLoginLogEntryParams) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return f.Err
+	}
+	return f.addEntry(arg)
+}
+
+func (f *Fake) addEntry(arg store.AddLoginLogEntryParams) error {
+	if f.LogErr != nil {
+		return f.LogErr
+	}
+	if arg.Result != store.ResultLogin && arg.Result != store.ResultFailedLogin && arg.Result != store.ResultLogout {
+		return errors.New("violates login_log_result_check")
+	}
+	entry := store.ListLoginLogRow{
+		ID: int64(len(f.log) + 1), At: arg.At, Email: arg.Email, UserID: arg.UserID,
+		Result: arg.Result, Ip: arg.Ip, UserAgent: arg.UserAgent,
+	}
+	if arg.UserID.Valid {
+		user, ok := f.user(arg.UserID.Int64)
+		if !ok {
+			return errors.New("violates login_log_user_id_fkey")
+		}
+		entry.UserName = pgtype.Text{String: user.Name, Valid: true}
+	}
+	f.log = append(f.log, entry)
+	return nil
+}
+
+func (f *Fake) ListLoginLog(_ context.Context, arg store.ListLoginLogParams) ([]store.ListLoginLogRow, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return nil, f.Err
+	}
+	var rows []store.ListLoginLogRow
+	for _, entry := range slices.Backward(f.log) {
+		switch {
+		case arg.UserID.Valid && entry.UserID != arg.UserID:
+		case arg.Result.Valid && entry.Result != arg.Result.String:
+		case arg.Before.Valid && entry.ID >= arg.Before.Int64:
+		case len(rows) >= int(arg.RowLimit):
+		default:
+			rows = append(rows, entry)
+		}
+	}
+	return rows, nil
+}
+
 func (f *Fake) GetSession(_ context.Context, tokenHash []byte) (store.GetSessionRow, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -244,17 +346,7 @@ func (f *Fake) GetSession(_ context.Context, tokenHash []byte) (store.GetSession
 		return store.GetSessionRow{}, store.ErrNotFound
 	}
 	user, _ := f.user(session.UserID)
-	return store.GetSessionRow{Name: user.Name, Email: user.Email, Role: user.Role, ExpiresAt: session.ExpiresAt}, nil
-}
-
-func (f *Fake) DeleteSession(_ context.Context, tokenHash []byte) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.Err != nil {
-		return f.Err
-	}
-	delete(f.sessions, string(tokenHash))
-	return nil
+	return store.GetSessionRow{UserID: session.UserID, Name: user.Name, Email: user.Email, Role: user.Role, ExpiresAt: session.ExpiresAt}, nil
 }
 
 func (f *Fake) IssueSetupLink(_ context.Context, arg store.IssueSetupLinkParams) error {
