@@ -9,6 +9,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// ErrNotFound is what a query for one row returns when there is none.
+var ErrNotFound = pgx.ErrNoRows
+
+// InTx runs fn in one transaction, for a rule that spans several statements. It commits
+// if fn returns nil and rolls back otherwise.
+func InTx(ctx context.Context, pool *pgxpool.Pool, fn func(*Queries) error) error {
+	return pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error { return fn(New(tx)) })
+}
+
 // Open returns a connection pool for the database at url. It connects lazily, so the
 // API starts while the database is unreachable and /health reports it.
 func Open(url string) (*pgxpool.Pool, error) {

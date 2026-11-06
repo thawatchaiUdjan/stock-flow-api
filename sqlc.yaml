@@ -9,3 +9,6 @@ sql:
         package: store
         out: internal/store
         sql_package: pgx/v5
+        overrides:
+          - db_type: timestamptz
+            go_type: time.Time

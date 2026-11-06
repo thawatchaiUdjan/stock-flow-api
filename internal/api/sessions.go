@@ -1,0 +1,184 @@
+package api
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"time"
+
+	"github.com/danielgtaylor/huma/v2"
+
+	"github.com/thawatchaiUdjan/stock-flow-api/internal/auth"
+	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
+)
+
+const (
+	sessionCookieName = "session"
+	securityScheme    = "session"
+
+	// sessionLifetime is fixed at login and never extended (users-and-access R21).
+	sessionLifetime = 7 * 24 * time.Hour
+
+	// cookieLifetime outlasts the session, so a request after the session ended still
+	// carries the cookie and hears why it was refused (users-and-access R26).
+	cookieLifetime = 30 * 24 * time.Hour
+)
+
+// statusActive is the status of a User who may log in.
+const statusActive = "active"
+
+// sessionInput is the input of an operation that needs a live session.
+// The cookie is hidden because the browser sends it, not the generated client: the
+// contract declares it as a security scheme instead.
+type sessionInput struct {
+	Session string `cookie:"session" hidden:"true"`
+}
+
+// sessionSecurity marks an operation as needing a live session in the contract.
+var sessionSecurity = []map[string][]string{{securityScheme: {}}}
+
+type currentUser struct {
+	Name  string `json:"name" doc:"The User's name, in any language."`
+	Email string `json:"email" doc:"The User's email, as it was entered when the User was created."`
+	Role  string `json:"role" enum:"owner,admin,staff" doc:"The User's Role."`
+}
+
+type logInInput struct {
+	Body struct {
+		// No format or length here: an email or password that couldn't be right must fail
+		// like any other, not with a different answer (users-and-access R5).
+		Email    string `json:"email" doc:"Compared without regard to letter case."`
+		Password string `json:"password"`
+	}
+}
+
+type logInOutput struct {
+	SetCookie http.Cookie `header:"Set-Cookie" doc:"Starts the session."`
+	Body      currentUser
+}
+
+type logOutOutput struct {
+	SetCookie http.Cookie `header:"Set-Cookie" doc:"Removes the session cookie."`
+}
+
+type currentUserOutput struct {
+	Body currentUser
+}
+
+func registerSessions(api huma.API, deps Deps) {
+	components := api.OpenAPI().Components
+	if components.SecuritySchemes == nil {
+		components.SecuritySchemes = map[string]*huma.SecurityScheme{}
+	}
+	components.SecuritySchemes[securityScheme] = &huma.SecurityScheme{
+		Type: "apiKey",
+		In:   "cookie",
+		Name: sessionCookieName,
+	}
+
+	huma.Register(api, huma.Operation{
+		OperationID: "log-in",
+		Method:      http.MethodPost,
+		Path:        "/login",
+		Summary:     "Log in with an email and a password",
+		Description: "Starts a session. Every failure answers the same 401 `login-failed`, in the same time.",
+		Tags:        []string{"Sessions"},
+		Errors:      []int{http.StatusUnauthorized},
+	}, func(ctx context.Context, input *logInInput) (*logInOutput, error) {
+		user, err := deps.Store.GetUserByEmail(ctx, input.Body.Email)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return nil, internalError(ctx, "log in: get user", err)
+		}
+		// Verify runs on every path and before the status is looked at, so an unknown
+		// email, a User with no password and an Inactive User all take as long as a wrong
+		// password (users-and-access R5). The zero User has an empty hash.
+		verified := deps.Passwords.Verify(user.PasswordHash.String, input.Body.Password)
+		if !verified || user.Status != statusActive {
+			return nil, domainError(http.StatusUnauthorized, codeLoginFailed, "Email or password is incorrect.")
+		}
+
+		token := auth.NewToken()
+		err = deps.Store.CreateSession(ctx, store.CreateSessionParams{
+			TokenHash: auth.HashToken(token),
+			UserID:    user.ID,
+			ExpiresAt: deps.Now().Add(sessionLifetime),
+		})
+		if err != nil {
+			return nil, internalError(ctx, "log in: create session", err)
+		}
+		out := &logInOutput{SetCookie: sessionCookie(token, cookieLifetime)}
+		out.Body = currentUser{Name: user.Name, Email: user.Email, Role: user.Role}
+		return out, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "log-out",
+		Method:      http.MethodPost,
+		Path:        "/logout",
+		Summary:     "End this device's session",
+		Description: "The User's sessions on other devices stay live.",
+		Tags:        []string{"Sessions"},
+		Security:    sessionSecurity,
+		Errors:      []int{http.StatusUnauthorized},
+	}, func(ctx context.Context, input *sessionInput) (*logOutOutput, error) {
+		if _, err := liveSession(ctx, deps, input.Session); err != nil {
+			return nil, err
+		}
+		if err := deps.Store.DeleteSession(ctx, auth.HashToken(input.Session)); err != nil {
+			return nil, internalError(ctx, "log out: delete session", err)
+		}
+		// users-and-access R7. The cookie goes too: having logged out is not a session
+		// that ended on its own, so the next request must not hear session-ended.
+		return &logOutOutput{SetCookie: sessionCookie("", -time.Second)}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "get-current-user",
+		Method:      http.MethodGet,
+		Path:        "/me",
+		Summary:     "Get the User who is logged in",
+		Tags:        []string{"Sessions"},
+		Security:    sessionSecurity,
+		Errors:      []int{http.StatusUnauthorized},
+	}, func(ctx context.Context, input *sessionInput) (*currentUserOutput, error) {
+		session, err := liveSession(ctx, deps, input.Session)
+		if err != nil {
+			return nil, err
+		}
+		out := &currentUserOutput{}
+		out.Body = currentUser{Name: session.Name, Email: session.Email, Role: session.Role}
+		return out, nil
+	})
+}
+
+// liveSession returns the session the request carries. With no cookie it answers the
+// plain 401 of a visitor; with a cookie that matches no live session it answers
+// session-ended, so the web app can tell the two apart (users-and-access R26).
+func liveSession(ctx context.Context, deps Deps, cookie string) (store.GetSessionRow, error) {
+	if cookie == "" {
+		return store.GetSessionRow{}, huma.Error401Unauthorized("Log in to continue.")
+	}
+	session, err := deps.Store.GetSession(ctx, auth.HashToken(cookie))
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return store.GetSessionRow{}, internalError(ctx, "get session", err)
+	}
+	// users-and-access R21: the expiry was fixed at login. A row not found leaves the
+	// zero time, which is long past.
+	if !deps.Now().Before(session.ExpiresAt) {
+		return store.GetSessionRow{}, domainError(http.StatusUnauthorized, codeSessionEnded, "Your session has ended. Log in again.")
+	}
+	return session, nil
+}
+
+// sessionCookie is the cookie of ADR 0015. A negative lifetime removes it.
+func sessionCookie(value string, lifetime time.Duration) http.Cookie {
+	return http.Cookie{
+		Name:     sessionCookieName,
+		Value:    value,
+		Path:     "/",
+		MaxAge:   int(lifetime.Seconds()),
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	}
+}
