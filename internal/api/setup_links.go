@@ -67,11 +67,13 @@ func registerSetupLinks(api huma.API, deps Deps) {
 	})
 
 	huma.Register(api, huma.Operation{
-		OperationID:   "set-password",
-		Method:        http.MethodPost,
-		Path:          "/setup-link/password",
-		Summary:       "Set a password through a Setup link",
-		Description:   "Uses up the Setup link. It starts no session: the person logs in next. " + setupLinkErrors,
+		OperationID: "set-password",
+		Method:      http.MethodPost,
+		Path:        "/setup-link/password",
+		Summary:     "Set a password through a Setup link",
+		Description: "Uses up the Setup link. It starts no session: the person logs in next. " +
+			"When the person is the Owner, all of the Owner's sessions end at once, on every device, " +
+			"and a request with one of those cookies is answered 401 `session-ended`. " + setupLinkErrors,
 		Tags:          []string{"Setup links"},
 		DefaultStatus: http.StatusNoContent,
 		Errors:        []int{http.StatusGone},
@@ -87,7 +89,8 @@ func registerSetupLinks(api huma.API, deps Deps) {
 		if used == 0 {
 			return nil, invalidLink()
 		}
-		// users-and-access R30: no session starts here, the person goes to Login.
+		// users-and-access R30: no session starts here, the person goes to Login. For the
+		// Owner, the store has also ended their sessions (R34, context ADR 0003).
 		return nil, nil
 	})
 }

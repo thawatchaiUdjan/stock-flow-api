@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/auth"
+	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
 )
 
 const ownerEmail = "malee@example.com"
@@ -211,5 +212,43 @@ func TestNoAnswerCarriesAPasswordHash(t *testing.T) {
 		if strings.Contains(rec.Body.String(), "argon2id") {
 			t.Errorf("%s: body = %s", name, rec.Body)
 		}
+	}
+}
+
+// context ADR 0003, users-and-access R34: setting the Owner's password through a new
+// Setup link ends the Owner's sessions on every device, and only theirs.
+func TestSettingTheOwnersPasswordEndsTheOwnersSessions(t *testing.T) {
+	h := newHarness(t)
+	h.addUser(ownerEmail, func(u *store.User) { u.Role = "owner"; u.Name = "Malee" })
+	h.addUser("staff@example.com")
+	laptop, phone := h.session(ownerEmail), h.session(ownerEmail)
+	staff := h.session("staff@example.com")
+	token := h.installOwner()
+
+	if rec := h.setPassword(token, "a new password"); rec.Code != http.StatusNoContent {
+		t.Fatalf("set password: status = %d, want 204; body %s", rec.Code, rec.Body)
+	}
+
+	assertProblem(t, h.me(laptop), http.StatusUnauthorized, "session-ended")
+	assertProblem(t, h.me(phone), http.StatusUnauthorized, "session-ended")
+	if rec := h.me(staff); rec.Code != http.StatusOK {
+		t.Errorf("another User's session: status = %d, want 200", rec.Code)
+	}
+	assertProblem(t, h.logIn(ownerEmail, password), http.StatusUnauthorized, "login-failed")
+	if rec := h.logIn(ownerEmail, "a new password"); rec.Code != http.StatusOK {
+		t.Errorf("log in with the new password: status = %d, want 200; body %s", rec.Code, rec.Body)
+	}
+}
+
+// A Setup link that doesn't work ends nothing.
+func TestAGoneSetupLinkLeavesTheOwnersSessions(t *testing.T) {
+	h := newHarness(t)
+	h.addUser(ownerEmail, func(u *store.User) { u.Role = "owner"; u.Name = "Malee" })
+	laptop := h.session(ownerEmail)
+
+	assertProblem(t, h.setPassword("no-such-token", "a new password"), http.StatusGone, "setup-link-invalid")
+
+	if rec := h.me(laptop); rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rec.Code)
 	}
 }

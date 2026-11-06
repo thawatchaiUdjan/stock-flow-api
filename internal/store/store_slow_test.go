@@ -202,6 +202,41 @@ func TestASetupLinkUsedTwiceAtOnceWorksOnce(t *testing.T) {
 	}
 }
 
+// context ADR 0003: the Owner's sessions end in the same statement that uses up the
+// Setup link, so a password that can't be set ends no session and keeps the link.
+func TestAFailedPasswordSetEndsNoSessionAndKeepsTheLink(t *testing.T) {
+	ctx := context.Background()
+	pool := open(t, testdb.URL(t))
+	q := store.New(pool)
+	now := time.Now().Truncate(time.Microsecond)
+	link, err := auth.IssueOwnerSetupLink(ctx, q, now, "Malee", "malee@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, err := q.GetUserByEmail(ctx, "malee@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := q.CreateSession(ctx, store.CreateSessionParams{TokenHash: []byte("laptop"), UserID: owner.ID, ExpiresAt: now.Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	// The password update fails after the link is deleted and the sessions are marked
+	// for deletion, which is when ending the sessions in a separate step would show.
+	if _, err := pool.Exec(ctx, `ALTER TABLE users ADD CONSTRAINT users_no_boom CHECK (password_hash IS DISTINCT FROM 'boom')`); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = q.SetPassword(ctx, store.SetPasswordParams{PasswordHash: "boom", TokenHash: auth.HashToken(link.Token), At: now})
+
+	assertViolates(t, err, "users_no_boom")
+	if _, err := q.GetSession(ctx, []byte("laptop")); err != nil {
+		t.Errorf("the Owner's session: %v, want it kept", err)
+	}
+	if _, err := q.GetSetupLinkUser(ctx, store.GetSetupLinkUserParams{TokenHash: auth.HashToken(link.Token), At: now}); err != nil {
+		t.Errorf("the Setup link: %v, want it kept", err)
+	}
+}
+
 // warm opens the pool's connections, so concurrent queries overlap instead of each waiting
 // for a connection to be made.
 func warm(t *testing.T, pool *pgxpool.Pool) {
