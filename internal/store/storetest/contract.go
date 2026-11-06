@@ -20,7 +20,6 @@ type Store interface {
 	api.Store
 	auth.OwnerStore
 	CreateSession(ctx context.Context, arg store.CreateSessionParams) (int64, error)
-	DeleteSession(ctx context.Context, tokenHash []byte) error
 }
 
 // Subject is one implementation of Store under the contract suite. AddUser seeds a User
@@ -145,27 +144,6 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}
 		if got.Name != user.Name || got.Email != user.Email || got.Role != "staff" || !got.ExpiresAt.Equal(at) {
 			t.Errorf("session = %+v", got)
-		}
-	})
-
-	t.Run("deleting a session leaves the User's other sessions", func(t *testing.T) {
-		s := newSubject(t)
-		user := s.AddUser(t, staff("staff@example.com"))
-		for _, hash := range []string{"one", "two"} {
-			if _, err := s.Store.CreateSession(ctx, store.CreateSessionParams{TokenHash: []byte(hash), UserID: user.ID, ExpiresAt: at}); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		if err := s.Store.DeleteSession(ctx, []byte("one")); err != nil {
-			t.Fatal(err)
-		}
-
-		if _, err := s.Store.GetSession(ctx, []byte("one")); !errors.Is(err, store.ErrNotFound) {
-			t.Errorf("deleted session: err = %v, want ErrNotFound", err)
-		}
-		if _, err := s.Store.GetSession(ctx, []byte("two")); err != nil {
-			t.Errorf("other session: %v", err)
 		}
 	})
 

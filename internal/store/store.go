@@ -66,11 +66,16 @@ type EndSessionParams struct {
 }
 
 // EndSession ends the session and writes the entry in one transaction (users-and-access
-// R7, R36).
+// R7, R36). A session already gone, as when two logouts carry one cookie, writes no entry:
+// only the call that ended it logged out.
 func (s *Store) EndSession(ctx context.Context, arg EndSessionParams) error {
 	return InTx(ctx, s.pool, func(q *Queries) error {
-		if err := q.DeleteSession(ctx, arg.TokenHash); err != nil {
+		ended, err := q.DeleteSession(ctx, arg.TokenHash)
+		if err != nil {
 			return fmt.Errorf("delete session: %w", err)
+		}
+		if ended == 0 {
+			return nil
 		}
 		arg.Entry.Result = ResultLogout
 		if err := q.AddLoginLogEntry(ctx, arg.Entry); err != nil {

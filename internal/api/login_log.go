@@ -22,8 +22,6 @@ const (
 	maxUserAgentChars = 512
 )
 
-const defaultLoginLogPage = 50
-
 // Where the visitor's IP address is, in the order they are trusted. Vercel sets these
 // itself and discards the visitor's own values (Vercel's "Request headers" documentation).
 // X-Vercel-Forwarded-For comes first because Vercel documents X-Forwarded-For as
@@ -123,10 +121,8 @@ func registerLoginLog(api huma.API, deps Deps) {
 		Middlewares: huma.Middlewares{ownerOnly(api, deps)},
 		Errors:      []int{http.StatusUnauthorized, http.StatusForbidden},
 	}, func(ctx context.Context, input *listLoginLogInput) (*listLoginLogOutput, error) {
+		// Huma has applied the default (50) and the bounds (1 to 100).
 		limit := input.Limit
-		if limit == 0 {
-			limit = defaultLoginLogPage
-		}
 		// One more than the page, to know whether another page follows.
 		rows, err := deps.Store.ListLoginLog(ctx, store.ListLoginLogParams{
 			UserID:   pgtype.Int8{Int64: input.UserID, Valid: input.UserID != 0},

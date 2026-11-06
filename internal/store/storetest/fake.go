@@ -273,6 +273,9 @@ func (f *Fake) EndSession(_ context.Context, arg store.EndSessionParams) error {
 	if f.Err != nil {
 		return f.Err
 	}
+	if _, ok := f.sessions[string(arg.TokenHash)]; !ok {
+		return nil
+	}
 	arg.Entry.Result = store.ResultLogout
 	if err := f.addEntry(arg.Entry); err != nil {
 		return err
@@ -344,16 +347,6 @@ func (f *Fake) GetSession(_ context.Context, tokenHash []byte) (store.GetSession
 	}
 	user, _ := f.user(session.UserID)
 	return store.GetSessionRow{UserID: session.UserID, Name: user.Name, Email: user.Email, Role: user.Role, ExpiresAt: session.ExpiresAt}, nil
-}
-
-func (f *Fake) DeleteSession(_ context.Context, tokenHash []byte) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.Err != nil {
-		return f.Err
-	}
-	delete(f.sessions, string(tokenHash))
-	return nil
 }
 
 func (f *Fake) IssueSetupLink(_ context.Context, arg store.IssueSetupLinkParams) error {

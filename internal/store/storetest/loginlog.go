@@ -236,4 +236,24 @@ func runLoginLog(t *testing.T, newSubject func(t *testing.T) Subject) {
 			t.Errorf("session: %v, want it kept", err)
 		}
 	})
+
+	// Two logouts with one cookie can both pass the live-session check; only one ends it.
+	t.Run("ending a session that is already gone writes no entry", func(t *testing.T) {
+		s := newSubject(t)
+		user := s.AddUser(t, staff("staff@example.com"))
+		if _, err := s.Store.CreateSession(ctx, store.CreateSessionParams{TokenHash: []byte("one"), UserID: user.ID, ExpiresAt: at}); err != nil {
+			t.Fatal(err)
+		}
+		end := store.EndSessionParams{TokenHash: []byte("one"), Entry: entry(user.Email, user, "203.0.113.7")}
+
+		for range 2 {
+			if err := s.Store.EndSession(ctx, end); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if rows := listLog(t, s, store.ListLoginLogParams{}); len(rows) != 1 {
+			t.Errorf("rows = %+v, want one logout", rows)
+		}
+	})
 }

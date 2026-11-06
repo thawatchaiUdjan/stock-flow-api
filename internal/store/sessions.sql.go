@@ -48,13 +48,17 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (i
 	return result.RowsAffected(), nil
 }
 
-const deleteSession = `-- name: DeleteSession :exec
+const deleteSession = `-- name: DeleteSession :execrows
 DELETE FROM sessions WHERE token_hash = $1
 `
 
-func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
-	_, err := q.db.Exec(ctx, deleteSession, tokenHash)
-	return err
+// The number of rows says whether this call ended the session or another got there first.
+func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSession, tokenHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteUserSessions = `-- name: DeleteUserSessions :exec

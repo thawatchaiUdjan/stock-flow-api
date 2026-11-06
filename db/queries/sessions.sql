@@ -19,7 +19,8 @@ FROM sessions
 JOIN users ON users.id = sessions.user_id
 WHERE sessions.token_hash = $1;
 
--- name: DeleteSession :exec
+-- The number of rows says whether this call ended the session or another got there first.
+-- name: DeleteSession :execrows
 DELETE FROM sessions WHERE token_hash = $1;
 
 -- name: DeleteUserSessions :exec
