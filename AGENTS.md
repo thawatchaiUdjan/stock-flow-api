@@ -33,6 +33,7 @@ Project goal: a practice project for frontend development ([`stock-flow-context`
 | Regenerate sqlc code and `openapi.yaml` | `go generate ./...`, then commit the result; CI fails if it is stale |
 | New migration | `go tool goose -dir db/migrations -s create <slug> sql` (`-s`: sequential `NNNNN_` numbers, not timestamps) |
 | Migrate a database by hand | `go tool goose -dir db/migrations postgres "<MIGRATION_DATABASE_URL>" up` (production is migrated by `deploy.yml` only) |
+| Issue the Owner's Setup link | `go run ./cmd/install -name "<name>" -email "<email>"` the first time, then `go run ./cmd/install`; uses `POSTGRES_URL` and prints a token (`users-and-access` R34) |
 
 Coding standards: `CODING_STANDARDS.md`. Technical decisions: `docs/adr/`.
 
@@ -56,7 +57,7 @@ Tickets arrive from `stock-flow-context` (see `docs/agents/issue-tracker.md`). A
 This repo owns the contract, and `stock-flow-web` generates its client from it.
 
 - Publish it in a machine-readable form (for HTTP APIs, OpenAPI), **generated from the code** wherever the framework can, so it cannot drift from what the server does. Here: **`openapi.yaml`** at the repo root, OpenAPI 3.1, written from the Huma operations by `go generate ./...` and checked by CI (ADR 0013). The running API also serves it at `/openapi.yaml`.
-- Publish every error code the API can return, in one machine-readable list that `stock-flow-web` checks against. Errors are RFC 9457 Problem Details (ADR 0014). For now the list is the per-operation error statuses in `openapi.yaml`: declare each one in `huma.Operation.Errors`. Whether domain errors get their own codes is an open question for `stock-flow-context`, to settle before the first feature that returns one (ADR 0014).
+- Publish every error code the API can return, in one machine-readable list that `stock-flow-web` checks against. Errors are RFC 9457 Problem Details (ADR 0014). A domain error carries a stable code in Problem Details' `type`, and the list is the `enum` of `ErrorModel.type` in `openapi.yaml`, written from `errorCodes` in `internal/api` (ADR 0019). Declare each status an operation can return in `huma.Operation.Errors`.
 - **Changing what an existing request or response means is a breaking change.** Before merging one, name every caller it breaks in the pull request's *Contract* section; `stock-flow-context` writes the `stock-flow-web` ticket from it. A contract change merges before the web change that depends on it.
 
 ## Tests
