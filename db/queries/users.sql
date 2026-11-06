@@ -45,5 +45,10 @@ SET name = coalesce(nullif(sqlc.arg(name)::text, ''), name),
 WHERE id = sqlc.arg(id)
 RETURNING id, name, email, role, status, (password_hash IS NOT NULL)::boolean AS password_set;
 
+-- name: SetUserPassword :one
+UPDATE users SET password_hash = sqlc.arg(password_hash)::text
+WHERE id = sqlc.arg(id)
+RETURNING role;
+
 -- name: ClearPassword :exec
 UPDATE users SET password_hash = NULL WHERE id = $1;

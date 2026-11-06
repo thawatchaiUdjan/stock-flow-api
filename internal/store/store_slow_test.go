@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -173,8 +174,8 @@ func TestASetupLinkUsedTwiceAtOnceWorksOnce(t *testing.T) {
 	ctx := context.Background()
 	pool := open(t, testdb.URL(t))
 	now := time.Now()
-	q := store.New(pool)
-	link, err := auth.IssueOwnerSetupLink(ctx, q, now, "Malee", "malee@example.com")
+	s := store.NewStore(pool)
+	link, err := auth.IssueOwnerSetupLink(ctx, s, now, "Malee", "malee@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +184,7 @@ func TestASetupLinkUsedTwiceAtOnceWorksOnce(t *testing.T) {
 
 	used := make([]int64, attempts)
 	errs := atTheSameTime(attempts, func(i int) (err error) {
-		used[i], err = q.SetPassword(ctx, store.SetPasswordParams{
+		used[i], err = s.SetPassword(ctx, store.SetPasswordParams{
 			PasswordHash: fmt.Sprintf("hash-%d", i),
 			TokenHash:    auth.HashToken(link.Token),
 			At:           now,
@@ -203,37 +204,37 @@ func TestASetupLinkUsedTwiceAtOnceWorksOnce(t *testing.T) {
 	}
 }
 
-// context ADR 0003: the Owner's sessions end in the same statement that uses up the
+// context ADR 0003: the Owner's sessions end in the same transaction that uses up the
 // Setup link, so a password that can't be set ends no session and keeps the link.
 func TestAFailedPasswordSetEndsNoSessionAndKeepsTheLink(t *testing.T) {
 	ctx := context.Background()
 	pool := open(t, testdb.URL(t))
-	q := store.New(pool)
+	s := store.NewStore(pool)
 	now := time.Now().Truncate(time.Microsecond)
-	link, err := auth.IssueOwnerSetupLink(ctx, q, now, "Malee", "malee@example.com")
+	link, err := auth.IssueOwnerSetupLink(ctx, s, now, "Malee", "malee@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := q.GetUserByEmail(ctx, "malee@example.com")
+	owner, err := s.GetUserByEmail(ctx, "malee@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := q.CreateSession(ctx, store.CreateSessionParams{TokenHash: []byte("laptop"), UserID: owner.ID, ExpiresAt: now.Add(time.Hour)}); err != nil {
+	if _, err := s.CreateSession(ctx, store.CreateSessionParams{TokenHash: []byte("laptop"), UserID: owner.ID, ExpiresAt: now.Add(time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
-	// The password update fails after the link is deleted and the sessions are marked
-	// for deletion, which is when ending the sessions in a separate step would show.
+	// The password update fails after the link is deleted, so the link comes back only if
+	// the two are one transaction.
 	if _, err := pool.Exec(ctx, `ALTER TABLE users ADD CONSTRAINT users_no_boom CHECK (password_hash IS DISTINCT FROM 'boom')`); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = q.SetPassword(ctx, store.SetPasswordParams{PasswordHash: "boom", TokenHash: auth.HashToken(link.Token), At: now})
+	_, err = s.SetPassword(ctx, store.SetPasswordParams{PasswordHash: "boom", TokenHash: auth.HashToken(link.Token), At: now})
 
 	assertViolates(t, err, "users_no_boom")
-	if _, err := q.GetSession(ctx, []byte("laptop")); err != nil {
+	if _, err := s.GetSession(ctx, []byte("laptop")); err != nil {
 		t.Errorf("the Owner's session: %v, want it kept", err)
 	}
-	if _, err := q.GetSetupLinkUser(ctx, store.GetSetupLinkUserParams{TokenHash: auth.HashToken(link.Token), At: now}); err != nil {
+	if _, err := s.GetSetupLinkUser(ctx, store.GetSetupLinkUserParams{TokenHash: auth.HashToken(link.Token), At: now}); err != nil {
 		t.Errorf("the Setup link: %v, want it kept", err)
 	}
 }
@@ -335,6 +336,171 @@ func TestALoginWaitsForAChangeUnderWayAndThenStartsNoSession(t *testing.T) {
 				t.Errorf("started = %d, err = %v, want 0 and nil", got.started, got.err)
 			}
 		})
+	}
+}
+
+// ownerWithSetupLink is an Owner who logs in with hashed and holds the Setup link "link":
+// the moment a leaked password is being replaced (users-and-access R34).
+func ownerWithSetupLink(t *testing.T, pool *pgxpool.Pool, s *store.Store) store.User {
+	t.Helper()
+	owner := addUser(t, pool, store.User{Name: "Malee", Email: "malee@example.com", Role: "owner", Status: "active", PasswordHash: hashed})
+	err := s.IssueSetupLink(context.Background(), store.IssueSetupLinkParams{UserID: owner.ID, TokenHash: []byte("link"), ExpiresAt: time.Now().Add(time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return owner
+}
+
+// logIn is a login whose password check against hashed passed.
+func logIn(ctx context.Context, s *store.Store, owner store.User, token string) (bool, error) {
+	return s.StartSession(ctx, store.StartSessionParams{
+		Session: store.CreateSessionParams{TokenHash: []byte(token), UserID: owner.ID, ExpiresAt: time.Now().Add(time.Hour), PasswordHash: hashed},
+		Entry: store.AddLoginLogEntryParams{
+			At: time.Now(), Email: owner.Email, UserID: pgtype.Int8{Int64: owner.ID, Valid: true}, Ip: "203.0.113.7", UserAgent: "Firefox",
+		},
+	})
+}
+
+// holdLogin leaves a login's session insert uncommitted, and returns its transaction.
+func holdLogin(t *testing.T, pool *pgxpool.Pool, owner store.User, token string) pgx.Tx {
+	t.Helper()
+	ctx := context.Background()
+	login, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { login.Rollback(ctx) })
+	started, err := store.New(login).CreateSession(ctx, store.CreateSessionParams{
+		TokenHash: []byte(token), UserID: owner.ID, ExpiresAt: time.Now().Add(time.Hour), PasswordHash: hashed,
+	})
+	if err != nil || started != 1 {
+		t.Fatalf("started = %d, err = %v", started, err)
+	}
+	return login
+}
+
+// settingThePassword sets a password through the Setup link "link", and answers once it
+// has finished.
+func settingThePassword(ctx context.Context, s *store.Store) <-chan error {
+	finished := make(chan error, 1)
+	go func() {
+		used, err := s.SetPassword(ctx, store.SetPasswordParams{PasswordHash: "new-hash", TokenHash: []byte("link"), At: time.Now()})
+		if err == nil && used != 1 {
+			err = fmt.Errorf("used = %d, want 1", used)
+		}
+		finished <- err
+	}()
+	return finished
+}
+
+func assertSessionEnded(t *testing.T, s *store.Store, token string) {
+	t.Helper()
+	if _, err := s.GetSession(context.Background(), []byte(token)); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("session %q: err = %v, want it ended", token, err)
+	}
+}
+
+// users-and-access R34, context ADR 0003: a login's insert is not committed yet when the
+// Owner sets a password. The password set waits for it, and then ends that session too.
+func TestSettingTheOwnersPasswordEndsASessionBeingStartedAtThatMoment(t *testing.T) {
+	ctx := context.Background()
+	pool := open(t, testdb.URL(t))
+	s := store.NewStore(pool)
+	owner := ownerWithSetupLink(t, pool, s)
+	login := holdLogin(t, pool, owner, "laptop")
+
+	finished := settingThePassword(ctx, s)
+	waitUntilBlocked(t, pool)
+	if err := login.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := <-finished; err != nil {
+		t.Fatal(err)
+	}
+	assertSessionEnded(t, s, "laptop")
+}
+
+// users-and-access R34, context ADR 0003: a login that starts once the password set has
+// begun, while it waits for an earlier login. Share locks don't queue behind that wait, so
+// this login starts its session and commits before the password is written, and the
+// password set has to end both.
+func TestSettingTheOwnersPasswordEndsASessionStartedWhileItWaits(t *testing.T) {
+	ctx := context.Background()
+	pool := open(t, testdb.URL(t))
+	s := store.NewStore(pool)
+	owner := ownerWithSetupLink(t, pool, s)
+	earlier := holdLogin(t, pool, owner, "laptop")
+
+	finished := settingThePassword(ctx, s)
+	waitUntilBlocked(t, pool)
+	inTime, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	started, err := logIn(inTime, s, owner, "phone")
+	if err != nil || !started {
+		t.Fatalf("started = %v, err = %v, want a session to end", started, err)
+	}
+	if err := earlier.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := <-finished; err != nil {
+		t.Fatal(err)
+	}
+	assertSessionEnded(t, s, "laptop")
+	assertSessionEnded(t, s, "phone")
+}
+
+// users-and-access R34, R36: a login that starts once the password is written, before the
+// password set commits. A logout under way holds the password set at the Owner's sessions,
+// which is that moment. The login waits, then finds the password changed: no session
+// starts, and the Login log says so.
+func TestALoginWaitsForTheOwnersPasswordSetAndThenStartsNoSession(t *testing.T) {
+	ctx := context.Background()
+	pool := open(t, testdb.URL(t))
+	s := store.NewStore(pool)
+	owner := ownerWithSetupLink(t, pool, s)
+	if started, err := logIn(ctx, s, owner, "laptop"); err != nil || !started {
+		t.Fatalf("started = %v, err = %v", started, err)
+	}
+	logout, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer logout.Rollback(ctx)
+	if _, err := store.New(logout).DeleteSession(ctx, []byte("laptop")); err != nil {
+		t.Fatal(err)
+	}
+
+	finished := settingThePassword(ctx, s)
+	waitUntilBlocked(t, pool)
+	type result struct {
+		started bool
+		err     error
+	}
+	login := make(chan result, 1)
+	go func() {
+		started, err := logIn(ctx, s, owner, "phone")
+		login <- result{started, err}
+	}()
+	waitUntilQueriesBlocked(t, pool, 2)
+	if err := logout.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := <-finished; err != nil {
+		t.Fatal(err)
+	}
+	if got := <-login; got.err != nil || got.started {
+		t.Errorf("started = %v, err = %v, want false and nil", got.started, got.err)
+	}
+	assertSessionEnded(t, s, "phone")
+	rows, err := s.ListLoginLog(ctx, store.ListLoginLogParams{RowLimit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Result != store.ResultFailedLogin {
+		t.Errorf("newest entries = %+v, want a failed login", rows)
 	}
 }
 
@@ -497,6 +663,12 @@ func TestAResetThatFailsPartwayChangesNothing(t *testing.T) {
 // happens while that query waits.
 func waitUntilBlocked(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
+	waitUntilQueriesBlocked(t, pool, 1)
+}
+
+// waitUntilQueriesBlocked is waitUntilBlocked for n queries at once.
+func waitUntilQueriesBlocked(t *testing.T, pool *pgxpool.Pool, n int) {
+	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		var waiting int
@@ -504,12 +676,12 @@ func waitUntilBlocked(t *testing.T, pool *pgxpool.Pool) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if waiting > 0 {
+		if waiting >= n {
 			return
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatal("no query blocked on a lock")
+	t.Fatalf("fewer than %d queries blocked on a lock", n)
 }
 
 // warm opens the pool's connections, so concurrent queries overlap instead of each waiting
