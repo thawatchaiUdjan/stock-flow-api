@@ -42,7 +42,8 @@ func ownerOnly(api huma.API, deps Deps) func(huma.Context, func(huma.Context)) {
 }
 
 // writeProblem answers a request from a Middleware, which has no handler to return the
-// error from.
+// error from. The body is still Huma's StatusError, so it is the same Problem Details
+// as any handler's (ADR 0014).
 func writeProblem(api huma.API, ctx huma.Context, problem huma.StatusError) {
 	ctx.SetStatus(problem.GetStatus())
 	ctx.SetHeader("Content-Type", "application/problem+json")

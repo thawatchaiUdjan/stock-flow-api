@@ -108,21 +108,22 @@ func (f *Fake) CreateUser(_ context.Context, arg store.CreateUserParams) (store.
 	if f.Err != nil {
 		return store.CreateUserRow{}, f.Err
 	}
-	for _, user := range f.users {
-		if strings.EqualFold(user.Email, arg.Email) {
-			return store.CreateUserRow{}, store.ErrNotFound
-		}
-	}
+	// Postgres checks the CHECK constraints before it looks for a conflicting email.
 	switch {
 	case strings.TrimSpace(arg.Name) == "":
 		return store.CreateUserRow{}, errors.New("violates users_name_check")
 	case arg.Role != "owner" && arg.Role != "admin" && arg.Role != "staff":
 		return store.CreateUserRow{}, errors.New("violates users_role_check")
 	}
+	owned := false
 	for _, user := range f.users {
-		if arg.Role == "owner" && user.Role == "owner" {
-			return store.CreateUserRow{}, errors.New("violates users_one_owner_key")
+		if strings.EqualFold(user.Email, arg.Email) {
+			return store.CreateUserRow{}, store.ErrNotFound
 		}
+		owned = owned || user.Role == "owner"
+	}
+	if arg.Role == "owner" && owned {
+		return store.CreateUserRow{}, errors.New("violates users_one_owner_key")
 	}
 	user := store.User{ID: int64(len(f.users) + 1), Name: arg.Name, Email: arg.Email, Role: arg.Role, Status: "active"}
 	f.users = append(f.users, user)

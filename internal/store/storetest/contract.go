@@ -386,6 +386,19 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}
 	})
 
+	t.Run("a blank name is refused even when the email is in use", func(t *testing.T) {
+		s := newSubject(t)
+		s.AddUser(t, staff("somchai@example.com"))
+
+		_, err := s.Store.CreateUser(ctx, store.CreateUserParams{
+			Name: " ", Email: "somchai@example.com", Role: "staff", TokenHash: []byte("link"), ExpiresAt: at,
+		})
+
+		if err == nil || errors.Is(err, store.ErrNotFound) {
+			t.Errorf("err = %v, want a refusal that is not ErrNotFound", err)
+		}
+	})
+
 	t.Run("lists every User in the order they were made, with whether a password is set", func(t *testing.T) {
 		s := newSubject(t)
 		first := s.AddUser(t, store.User{

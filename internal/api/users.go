@@ -90,14 +90,13 @@ func registerUsers(api huma.API, deps Deps) {
 		DefaultStatus: http.StatusCreated,
 		Errors:        []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusConflict},
 	}, func(ctx context.Context, input *createUserInput) (*createUserOutput, error) {
-		token := auth.NewToken()
-		expiresAt := deps.Now().Add(auth.SetupLinkLifetime)
+		link := auth.NewSetupLink(deps.Now(), input.Body.Email)
 		created, err := deps.Store.CreateUser(ctx, store.CreateUserParams{
 			Name:      input.Body.Name,
 			Email:     input.Body.Email,
 			Role:      input.Body.Role,
-			TokenHash: auth.HashToken(token),
-			ExpiresAt: expiresAt,
+			TokenHash: auth.HashToken(link.Token),
+			ExpiresAt: link.ExpiresAt,
 		})
 		// No row back means the email is in use, in any letter case (users-and-access R3).
 		if errors.Is(err, store.ErrNotFound) {
@@ -111,7 +110,7 @@ func registerUsers(api huma.API, deps Deps) {
 			ID: created.ID, Name: created.Name, Email: created.Email, Role: created.Role,
 			Status: created.Status, PasswordSet: false,
 		}
-		out.Body.SetupLink = setupLink{Token: token, ExpiresAt: expiresAt}
+		out.Body.SetupLink = setupLink{Token: link.Token, ExpiresAt: link.ExpiresAt}
 		return out, nil
 	})
 }

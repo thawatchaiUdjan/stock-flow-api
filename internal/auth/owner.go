@@ -10,8 +10,8 @@ import (
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
 )
 
-// SetupLinkLifetime is how long a Setup link works after it is issued (users-and-access R27).
-const SetupLinkLifetime = 24 * time.Hour
+// setupLinkLifetime is how long a Setup link works after it is issued (users-and-access R27).
+const setupLinkLifetime = 24 * time.Hour
 
 // ErrOwnerDetailsMissing means there is no Owner yet and no name or email to create one.
 var ErrOwnerDetailsMissing = errors.New("no Owner yet: a name and an email are needed to create one")
@@ -28,6 +28,12 @@ type SetupLink struct {
 	Token     string
 	Email     string
 	ExpiresAt time.Time
+}
+
+// NewSetupLink makes a link for the person with email, valid from now for 24 hours
+// (users-and-access R27). Storing the hash of its token is the caller's job.
+func NewSetupLink(now time.Time, email string) SetupLink {
+	return SetupLink{Token: NewToken(), Email: email, ExpiresAt: now.Add(setupLinkLifetime)}
 }
 
 // IssueOwnerSetupLink creates the Owner when there is none, and issues their Setup link,
@@ -50,7 +56,7 @@ func IssueOwnerSetupLink(ctx context.Context, q OwnerStore, now time.Time, name,
 		return SetupLink{}, fmt.Errorf("get owner: %w", err)
 	}
 
-	link := SetupLink{Token: NewToken(), Email: owner.Email, ExpiresAt: now.Add(SetupLinkLifetime)}
+	link := NewSetupLink(now, owner.Email)
 	err = q.IssueSetupLink(ctx, store.IssueSetupLinkParams{
 		UserID: owner.ID, TokenHash: HashToken(link.Token), ExpiresAt: link.ExpiresAt,
 	})

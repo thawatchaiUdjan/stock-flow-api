@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"bytes"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -112,7 +113,7 @@ func TestCreateUserAnswersTheUserAndASetupLinkTokenWithItsExpiry(t *testing.T) {
 			if got.SetupLink.Token == "" {
 				t.Error("no Setup link token")
 			}
-			if wantExpiry := h.clock.Now().Add(auth.SetupLinkLifetime); !got.SetupLink.ExpiresAt.Equal(wantExpiry) {
+			if wantExpiry := h.clock.Now().Add(24 * time.Hour); !got.SetupLink.ExpiresAt.Equal(wantExpiry) {
 				t.Errorf("expiry = %v, want %v", got.SetupLink.ExpiresAt, wantExpiry)
 			}
 		})
@@ -167,8 +168,8 @@ func TestTheSetupLinkTokenCannotBeReadAgain(t *testing.T) {
 	if len(links) != 1 {
 		t.Fatalf("stored links = %d, want 1", len(links))
 	}
-	if string(links[0].TokenHash) == created.SetupLink.Token {
-		t.Error("the token is stored as is")
+	if !bytes.Equal(links[0].TokenHash, auth.HashToken(created.SetupLink.Token)) {
+		t.Errorf("stored %x, want the hash of the token", links[0].TokenHash)
 	}
 }
 
