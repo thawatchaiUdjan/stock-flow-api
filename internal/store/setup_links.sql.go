@@ -51,29 +51,37 @@ func (q *Queries) IssueSetupLink(ctx context.Context, arg IssueSetupLinkParams) 
 	return err
 }
 
-const setPassword = `-- name: SetPassword :execrows
+const setPassword = `-- name: SetPassword :one
 WITH used AS (
     DELETE FROM setup_links
-    WHERE token_hash = $2 AND expires_at > $3
+    WHERE setup_links.token_hash = $1 AND setup_links.expires_at > $2
     RETURNING user_id
+), updated AS (
+    UPDATE users SET password_hash = $3::text
+    FROM used
+    WHERE users.id = used.user_id
+    RETURNING users.id, users.role
+), ended AS (
+    DELETE FROM sessions
+    WHERE user_id IN (SELECT id FROM updated WHERE role = 'owner')
 )
-UPDATE users SET password_hash = $1::text
-FROM used
-WHERE users.id = used.user_id
+SELECT count(*) FROM updated
 `
 
 type SetPasswordParams struct {
-	PasswordHash string
 	TokenHash    []byte
 	At           time.Time
+	PasswordHash string
 }
 
-// One statement, so a link opened twice at once works once: the second DELETE waits for
-// the first to commit and then finds no row (users-and-access R27).
+// One statement, so a link opened twice at once works once (the second DELETE waits for
+// the first to commit and then finds no row, users-and-access R27), and the password and
+// the ended sessions stand or fall together. Setting the Owner's password ends all the
+// Owner's sessions (users-and-access R34, context ADR 0003); no one else's password-set
+// ends any. Returns how many passwords were set: 1, or 0 when the link doesn't work.
 func (q *Queries) SetPassword(ctx context.Context, arg SetPasswordParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setPassword, arg.PasswordHash, arg.TokenHash, arg.At)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	row := q.db.QueryRow(ctx, setPassword, arg.TokenHash, arg.At, arg.PasswordHash)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }

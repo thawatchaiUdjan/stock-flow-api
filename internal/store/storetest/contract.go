@@ -301,6 +301,83 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}
 	})
 
+	owner := func(email string) store.User {
+		return store.User{Name: "Malee", Email: email, Role: "owner", Status: "active"}
+	}
+	session := func(t *testing.T, s Subject, user store.User, hash string) {
+		t.Helper()
+		if err := s.Store.CreateSession(ctx, store.CreateSessionParams{TokenHash: []byte(hash), UserID: user.ID, ExpiresAt: at}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	live := func(s Subject, hash string) bool {
+		_, err := s.Store.GetSession(ctx, []byte(hash))
+		return err == nil
+	}
+
+	// context ADR 0003, users-and-access R34.
+	t.Run("setting the Owner's password ends all the Owner's sessions and no one else's", func(t *testing.T) {
+		s := newSubject(t)
+		malee := s.AddUser(t, owner("malee@example.com"))
+		somchai := s.AddUser(t, staff("staff@example.com"))
+		session(t, s, malee, "laptop")
+		session(t, s, malee, "phone")
+		session(t, s, somchai, "staff-laptop")
+		issue(t, s, malee, "link")
+
+		if used := setPassword(t, s, "link", at.Add(-time.Second)); used != 1 {
+			t.Fatalf("used = %d, want 1", used)
+		}
+
+		if live(s, "laptop") || live(s, "phone") {
+			t.Error("an Owner's session is still live")
+		}
+		if !live(s, "staff-laptop") {
+			t.Error("another User's session ended")
+		}
+	})
+
+	t.Run("setting a password the Owner has no session for still works", func(t *testing.T) {
+		s := newSubject(t)
+		malee := s.AddUser(t, owner("malee@example.com"))
+		issue(t, s, malee, "link")
+
+		if used := setPassword(t, s, "link", at.Add(-time.Second)); used != 1 {
+			t.Errorf("used = %d, want 1", used)
+		}
+	})
+
+	t.Run("setting a User's password leaves their sessions, as only the Owner's ends them", func(t *testing.T) {
+		s := newSubject(t)
+		malee := s.AddUser(t, owner("malee@example.com"))
+		somchai := s.AddUser(t, staff("staff@example.com"))
+		session(t, s, malee, "owner-laptop")
+		session(t, s, somchai, "staff-laptop")
+		issue(t, s, somchai, "link")
+
+		if used := setPassword(t, s, "link", at.Add(-time.Second)); used != 1 {
+			t.Fatalf("used = %d, want 1", used)
+		}
+
+		if !live(s, "staff-laptop") || !live(s, "owner-laptop") {
+			t.Error("a session ended")
+		}
+	})
+
+	t.Run("an expired or unknown Setup link ends no session", func(t *testing.T) {
+		s := newSubject(t)
+		malee := s.AddUser(t, owner("malee@example.com"))
+		session(t, s, malee, "laptop")
+		issue(t, s, malee, "link")
+
+		setPassword(t, s, "link", at)
+		setPassword(t, s, "unknown", at.Add(-time.Second))
+
+		if !live(s, "laptop") {
+			t.Error("the Owner's session ended")
+		}
+	})
+
 	t.Run("a token hash round-trips as bytes, not text", func(t *testing.T) {
 		s := newSubject(t)
 		user := s.AddUser(t, staff("staff@example.com"))

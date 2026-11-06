@@ -5,6 +5,7 @@ package storetest
 import (
 	"context"
 	"errors"
+	"maps"
 	"strings"
 	"sync"
 
@@ -230,8 +231,13 @@ func (f *Fake) SetPassword(_ context.Context, arg store.SetPasswordParams) (int6
 		if string(link.TokenHash) == string(arg.TokenHash) && link.ExpiresAt.After(arg.At) {
 			delete(f.links, userID)
 			for i := range f.users {
-				if f.users[i].ID == userID {
-					f.users[i].PasswordHash = pgtype.Text{String: arg.PasswordHash, Valid: true}
+				if f.users[i].ID != userID {
+					continue
+				}
+				f.users[i].PasswordHash = pgtype.Text{String: arg.PasswordHash, Valid: true}
+				if f.users[i].Role == "owner" {
+					// users-and-access R34, context ADR 0003.
+					maps.DeleteFunc(f.sessions, func(_ string, session store.Session) bool { return session.UserID == userID })
 				}
 			}
 			return 1, nil
