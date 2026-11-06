@@ -94,6 +94,18 @@ type loginLogEntryBody struct {
 	UserAgent string        `json:"userAgent" doc:"The browser or device, as it called itself. Empty when it sent nothing."`
 }
 
+// TransformSchema marks user nullable. Huma cannot say so for a field that is a reference
+// to another schema (its nullable tag panics there), so the field says "this schema or
+// null" itself (users-and-access R36: the User, if the email matches one).
+func (loginLogEntryBody) TransformSchema(_ huma.Registry, s *huma.Schema) *huma.Schema {
+	user := s.Properties["user"]
+	s.Properties["user"] = &huma.Schema{
+		Description: user.Description,
+		OneOf:       []*huma.Schema{{Ref: user.Ref}, {Type: "null"}},
+	}
+	return s
+}
+
 type listLoginLogInput struct {
 	UserID int64  `query:"userId" minimum:"1" doc:"Only the entries of this User."`
 	Result string `query:"result" enum:"login,failed-login,logout" doc:"Only the entries with this result."`
