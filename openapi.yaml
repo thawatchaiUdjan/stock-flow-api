@@ -253,8 +253,10 @@ components:
             - logout
           type: string
         user:
-          $ref: "#/components/schemas/LoginLogUser"
           description: The User the email matches, or null when it matches none.
+          oneOf:
+            - $ref: "#/components/schemas/LoginLogUser"
+            - type: "null"
         userAgent:
           description: The browser or device, as it called itself. Empty when it sent nothing.
           type: string

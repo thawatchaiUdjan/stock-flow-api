@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
 )
@@ -448,5 +451,34 @@ func TestTheLogHasOnlyAReadOperation(t *testing.T) {
 		if strings.Contains(op.Path, "login-log") && (op.Method != http.MethodGet || id != "list-login-log") {
 			t.Errorf("%s %s (%s): only list-login-log may reach the log", op.Method, op.Path, id)
 		}
+	}
+}
+
+// users-and-access R36: "the User if it matches one". A client generated from the
+// contract must not be told the User is always there, so the response to the most common
+// failed-login entry (an email that matches no User) has to satisfy the published schema.
+func TestAFailedLogInWithAnUnknownEmailIsAnswerableByThePublishedSchema(t *testing.T) {
+	h := newHarness(t)
+	owner, _ := h.ownerAnd("somchai@example.com")
+	h.logIn("nobody@shop.example", "guess")
+
+	rec := h.do(http.MethodGet, "/login-log?result=failed-login", nil, owner)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d; body %s", rec.Code, rec.Body)
+	}
+	var body any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rec.Body.String(), `"user":null`) {
+		t.Fatalf("the response has no entry with a null user, so it proves nothing: %s", rec.Body)
+	}
+	openapi := h.contract.OpenAPI()
+	schema := openapi.Paths["/login-log"].Get.Responses["200"].Content["application/json"].Schema
+	res := &huma.ValidateResult{}
+	huma.Validate(openapi.Components.Schemas, schema, huma.NewPathBuffer([]byte(""), 0), huma.ModeReadFromServer, body, res)
+	if len(res.Errors) != 0 {
+		t.Errorf("the response does not satisfy the published schema: %v\n%s", res.Errors, rec.Body)
 	}
 }
