@@ -239,6 +239,42 @@ func TestAFailedPasswordSetEndsNoSessionAndKeepsTheLink(t *testing.T) {
 	}
 }
 
+// context ADR 0003: the other end of that transaction. The Owner's sessions can't be ended,
+// so the password isn't set and the link isn't used up: a new password never stands beside
+// a session that outlived it.
+func TestAPasswordSetThatCannotEndTheOwnersSessionsSetsNoPassword(t *testing.T) {
+	ctx := context.Background()
+	pool := open(t, testdb.URL(t))
+	s := store.NewStore(pool)
+	owner := ownerWithSetupLink(t, pool, s)
+	if started, err := logIn(ctx, s, owner, "laptop"); err != nil || !started {
+		t.Fatalf("started = %v, err = %v", started, err)
+	}
+	if _, err := pool.Exec(ctx, `
+		CREATE FUNCTION refuse_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'refused'; END $$;
+		CREATE TRIGGER sessions_refuse_delete BEFORE DELETE ON sessions FOR EACH ROW EXECUTE FUNCTION refuse_delete();
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := s.SetPassword(ctx, store.SetPasswordParams{PasswordHash: "new-hash", TokenHash: []byte("link"), At: time.Now()})
+
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Message != "refused" {
+		t.Errorf("err = %v, want the refused delete", err)
+	}
+	got, err := s.GetUserByEmail(ctx, owner.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PasswordHash != hashed {
+		t.Errorf("password hash = %+v, want it kept", got.PasswordHash)
+	}
+	if _, err := s.GetSetupLinkUser(ctx, store.GetSetupLinkUserParams{TokenHash: []byte("link"), At: time.Now()}); err != nil {
+		t.Errorf("the Setup link: %v, want it kept", err)
+	}
+}
+
 var hashed = pgtype.Text{String: "hash", Valid: true}
 
 // endsAccess is what the Owner can do to end a User's access, through the real Store.

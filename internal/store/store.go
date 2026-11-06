@@ -181,12 +181,12 @@ type SetPasswordParams struct {
 // context ADR 0003); no one else's password-set ends any. It returns how many passwords
 // were set: 1, or 0 when the link doesn't work.
 //
-// No session of the Owner survives, however a login overlaps this. The password goes first:
-// it waits for every login holding the User (CreateSession's FOR SHARE), and a login that
-// comes later waits for this transaction and then finds the password changed. The sessions
-// go in a statement of their own, after that wait: its snapshot holds what those logins
-// committed, which one statement's snapshot, older than the wait, would miss.
-func (s *Store) SetPassword(ctx context.Context, arg SetPasswordParams) (set int64, err error) {
+// No session of the Owner survives, however a login overlaps this. The password goes before
+// the sessions: it waits for every login holding the User (CreateSession's FOR SHARE), and a
+// login that comes later waits for this transaction and then finds the password changed.
+// The sessions go in a statement of their own, after that wait: its snapshot holds what
+// those logins committed, which one statement's snapshot, older than the wait, would miss.
+func (s *Store) SetPassword(ctx context.Context, arg SetPasswordParams) (used int64, err error) {
 	err = InTx(ctx, s.pool, func(q *Queries) error {
 		userID, err := q.UseSetupLink(ctx, UseSetupLinkParams{TokenHash: arg.TokenHash, At: arg.At})
 		if errors.Is(err, ErrNotFound) {
@@ -204,11 +204,11 @@ func (s *Store) SetPassword(ctx context.Context, arg SetPasswordParams) (set int
 				return fmt.Errorf("delete sessions: %w", err)
 			}
 		}
-		set = 1
+		used = 1
 		return nil
 	})
 	if err != nil {
 		return 0, err
 	}
-	return set, nil
+	return used, nil
 }
