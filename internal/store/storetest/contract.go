@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -312,6 +313,108 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 
 		if _, err := s.Store.GetSetupLinkUser(ctx, store.GetSetupLinkUserParams{TokenHash: hash, At: at.Add(-time.Second)}); err != nil {
 			t.Errorf("lookup by the same bytes: %v", err)
+		}
+	})
+
+	t.Run("creates an Active User with no password, and their Setup link", func(t *testing.T) {
+		s := newSubject(t)
+
+		created, err := s.Store.CreateUser(ctx, store.CreateUserParams{
+			Name: "สมชาย", Email: "Somchai@Example.com", Role: "admin", TokenHash: []byte("link"), ExpiresAt: at,
+		})
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := store.CreateUserRow{ID: created.ID, Name: "สมชาย", Email: "Somchai@Example.com", Role: "admin", Status: "active"}
+		if created != want || created.ID == 0 {
+			t.Errorf("created = %+v, want %+v", created, want)
+		}
+		got, err := s.Store.GetUserByEmail(ctx, "somchai@example.com")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.ID != created.ID || got.PasswordHash.Valid {
+			t.Errorf("stored = %+v", got)
+		}
+		link, err := s.Store.GetSetupLinkUser(ctx, store.GetSetupLinkUserParams{TokenHash: []byte("link"), At: at.Add(-time.Second)})
+		if err != nil {
+			t.Fatalf("the new User's Setup link: %v", err)
+		}
+		if link.Name != "สมชาย" || link.Email != "Somchai@Example.com" {
+			t.Errorf("link is for %+v", link)
+		}
+	})
+
+	t.Run("an email in use creates no User and no Setup link, whatever its letter case", func(t *testing.T) {
+		s := newSubject(t)
+		s.AddUser(t, staff("somchai@example.com"))
+
+		_, err := s.Store.CreateUser(ctx, store.CreateUserParams{
+			Name: "Another", Email: "SOMCHAI@example.com", Role: "staff", TokenHash: []byte("link"), ExpiresAt: at,
+		})
+
+		if !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("err = %v, want ErrNotFound", err)
+		}
+		_, err = s.Store.GetSetupLinkUser(ctx, store.GetSetupLinkUserParams{TokenHash: []byte("link"), At: at.Add(-time.Second)})
+		if !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("Setup link: err = %v, want ErrNotFound", err)
+		}
+		users, err := s.Store.ListUsers(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(users) != 1 {
+			t.Errorf("users = %+v, want only the first", users)
+		}
+	})
+
+	t.Run("refuses a blank name, an unknown Role and a second Owner", func(t *testing.T) {
+		s := newSubject(t)
+		s.AddUser(t, store.User{Name: "Malee", Email: "malee@example.com", Role: "owner", Status: "active"})
+
+		for name, arg := range map[string]store.CreateUserParams{
+			"blank name":   {Name: " ", Email: "a@example.com", Role: "staff"},
+			"unknown Role": {Name: "A", Email: "b@example.com", Role: "manager"},
+			"second Owner": {Name: "A", Email: "c@example.com", Role: "owner"},
+		} {
+			arg.TokenHash, arg.ExpiresAt = []byte(name), at
+			if _, err := s.Store.CreateUser(ctx, arg); err == nil || errors.Is(err, store.ErrNotFound) {
+				t.Errorf("%s: err = %v, want a refusal", name, err)
+			}
+		}
+	})
+
+	t.Run("lists every User in the order they were made, with whether a password is set", func(t *testing.T) {
+		s := newSubject(t)
+		first := s.AddUser(t, store.User{
+			Name: "Malee", Email: "malee@example.com", Role: "owner", Status: "active",
+			PasswordHash: pgtype.Text{String: "hash", Valid: true},
+		})
+		second := s.AddUser(t, store.User{Name: "Napa", Email: "napa@example.com", Role: "admin", Status: "inactive"})
+
+		got, err := s.Store.ListUsers(ctx)
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []store.ListUsersRow{
+			{ID: first.ID, Name: "Malee", Email: "malee@example.com", Role: "owner", Status: "active", PasswordSet: true},
+			{ID: second.ID, Name: "Napa", Email: "napa@example.com", Role: "admin", Status: "inactive", PasswordSet: false},
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("users = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("lists no User as an empty list", func(t *testing.T) {
+		s := newSubject(t)
+
+		got, err := s.Store.ListUsers(ctx)
+
+		if err != nil || len(got) != 0 {
+			t.Errorf("users = %+v, err = %v", got, err)
 		}
 	})
 }

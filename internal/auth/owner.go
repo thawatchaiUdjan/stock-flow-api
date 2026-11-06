@@ -10,8 +10,8 @@ import (
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
 )
 
-// setupLinkLifetime is how long a Setup link works after it is issued (users-and-access R27).
-const setupLinkLifetime = 24 * time.Hour
+// SetupLinkLifetime is how long a Setup link works after it is issued (users-and-access R27).
+const SetupLinkLifetime = 24 * time.Hour
 
 // ErrOwnerDetailsMissing means there is no Owner yet and no name or email to create one.
 var ErrOwnerDetailsMissing = errors.New("no Owner yet: a name and an email are needed to create one")
@@ -50,7 +50,7 @@ func IssueOwnerSetupLink(ctx context.Context, q OwnerStore, now time.Time, name,
 		return SetupLink{}, fmt.Errorf("get owner: %w", err)
 	}
 
-	link := SetupLink{Token: NewToken(), Email: owner.Email, ExpiresAt: now.Add(setupLinkLifetime)}
+	link := SetupLink{Token: NewToken(), Email: owner.Email, ExpiresAt: now.Add(SetupLinkLifetime)}
 	err = q.IssueSetupLink(ctx, store.IssueSetupLinkParams{
 		UserID: owner.ID, TokenHash: HashToken(link.Token), ExpiresAt: link.ExpiresAt,
 	})

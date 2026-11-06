@@ -16,6 +16,7 @@ const (
 	codeLoginFailed      = "login-failed"
 	codeSessionEnded     = "session-ended"
 	codeSetupLinkInvalid = "setup-link-invalid"
+	codeEmailTaken       = "email-taken"
 )
 
 // errorCodes is the published list. Every code above must be in it.
@@ -23,6 +24,7 @@ var errorCodes = []struct{ code, meaning string }{
 	{codeLoginFailed, "The email and password did not log anyone in. Identical for every cause."},
 	{codeSessionEnded, "The request carried a session cookie that matches no live session."},
 	{codeSetupLinkInvalid, "The Setup link is used, expired, replaced or was never issued."},
+	{codeEmailTaken, "A User has this email already, in any letter case."},
 }
 
 func domainError(status int, code, detail string) huma.StatusError {

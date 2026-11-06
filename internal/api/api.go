@@ -23,6 +23,8 @@ type Store interface {
 	DeleteSession(ctx context.Context, tokenHash []byte) error
 	GetSetupLinkUser(ctx context.Context, arg store.GetSetupLinkUserParams) (store.GetSetupLinkUserRow, error)
 	SetPassword(ctx context.Context, arg store.SetPasswordParams) (int64, error)
+	ListUsers(ctx context.Context) ([]store.ListUsersRow, error)
+	CreateUser(ctx context.Context, arg store.CreateUserParams) (store.CreateUserRow, error)
 }
 
 // PasswordHasher hashes and verifies passwords. Verify takes "" for a User with no
@@ -49,6 +51,7 @@ func New(deps Deps) (http.Handler, huma.API) {
 	registerHealth(api, deps.Store)
 	registerSessions(api, deps)
 	registerSetupLinks(api, deps)
+	registerUsers(api, deps)
 	publishErrorCodes(api)
 
 	return router, api

@@ -102,6 +102,50 @@ func (f *Fake) CreateOwner(_ context.Context, arg store.CreateOwnerParams) error
 	return nil
 }
 
+func (f *Fake) CreateUser(_ context.Context, arg store.CreateUserParams) (store.CreateUserRow, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return store.CreateUserRow{}, f.Err
+	}
+	for _, user := range f.users {
+		if strings.EqualFold(user.Email, arg.Email) {
+			return store.CreateUserRow{}, store.ErrNotFound
+		}
+	}
+	switch {
+	case strings.TrimSpace(arg.Name) == "":
+		return store.CreateUserRow{}, errors.New("violates users_name_check")
+	case arg.Role != "owner" && arg.Role != "admin" && arg.Role != "staff":
+		return store.CreateUserRow{}, errors.New("violates users_role_check")
+	}
+	for _, user := range f.users {
+		if arg.Role == "owner" && user.Role == "owner" {
+			return store.CreateUserRow{}, errors.New("violates users_one_owner_key")
+		}
+	}
+	user := store.User{ID: int64(len(f.users) + 1), Name: arg.Name, Email: arg.Email, Role: arg.Role, Status: "active"}
+	f.users = append(f.users, user)
+	f.links[user.ID] = store.SetupLink{UserID: user.ID, TokenHash: arg.TokenHash, ExpiresAt: arg.ExpiresAt}
+	return store.CreateUserRow{ID: user.ID, Name: user.Name, Email: user.Email, Role: user.Role, Status: user.Status}, nil
+}
+
+func (f *Fake) ListUsers(context.Context) ([]store.ListUsersRow, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return nil, f.Err
+	}
+	rows := make([]store.ListUsersRow, 0, len(f.users))
+	for _, user := range f.users {
+		rows = append(rows, store.ListUsersRow{
+			ID: user.ID, Name: user.Name, Email: user.Email, Role: user.Role, Status: user.Status,
+			PasswordSet: user.PasswordHash.Valid,
+		})
+	}
+	return rows, nil
+}
+
 func (f *Fake) CreateSession(_ context.Context, arg store.CreateSessionParams) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
