@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/auth"
@@ -57,7 +58,7 @@ func TestRealStoreKeepsTheStoreContract(t *testing.T) {
 	storetest.Run(t, func(t *testing.T) storetest.Subject {
 		pool := open(t, testdb.URL(t))
 		return storetest.Subject{
-			Store:   store.New(pool),
+			Store:   store.NewStore(pool),
 			AddUser: func(t *testing.T, user store.User) store.User { return addUser(t, pool, user) },
 		}
 	})
@@ -217,7 +218,7 @@ func TestAFailedPasswordSetEndsNoSessionAndKeepsTheLink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := q.CreateSession(ctx, store.CreateSessionParams{TokenHash: []byte("laptop"), UserID: owner.ID, ExpiresAt: now.Add(time.Hour)}); err != nil {
+	if _, err := q.CreateSession(ctx, store.CreateSessionParams{TokenHash: []byte("laptop"), UserID: owner.ID, ExpiresAt: now.Add(time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
 	// The password update fails after the link is deleted and the sessions are marked
@@ -235,6 +236,237 @@ func TestAFailedPasswordSetEndsNoSessionAndKeepsTheLink(t *testing.T) {
 	if _, err := q.GetSetupLinkUser(ctx, store.GetSetupLinkUserParams{TokenHash: auth.HashToken(link.Token), At: now}); err != nil {
 		t.Errorf("the Setup link: %v, want it kept", err)
 	}
+}
+
+var hashed = pgtype.Text{String: "hash", Valid: true}
+
+// endsAccess is what the Owner can do to end a User's access, through the real Store.
+var endsAccess = map[string]func(ctx context.Context, s *store.Store, id int64) error{
+	"Inactive": func(ctx context.Context, s *store.Store, id int64) error {
+		_, err := s.UpdateUser(ctx, store.ChangeUserParams{ID: id, Status: "inactive"})
+		return err
+	},
+	"reset": func(ctx context.Context, s *store.Store, id int64) error {
+		return s.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: id, TokenHash: []byte("new-link"), ExpiresAt: time.Now().Add(time.Hour)})
+	},
+}
+
+// users-and-access R16, R31: a login's insert is not committed yet when the Owner acts.
+// The Owner's change waits for it, and then finds and ends that session, so it can't
+// outlive the change. Without the lock, or with the sessions deleted on the snapshot of a
+// single statement, the session would survive.
+func TestEndingAUsersAccessEndsASessionBeingStartedAtThatMoment(t *testing.T) {
+	for name, end := range endsAccess {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			pool := open(t, testdb.URL(t))
+			s := store.NewStore(pool)
+			user := addUser(t, pool, store.User{Name: "Somchai", Email: "s@example.com", Role: "staff", Status: "active", PasswordHash: hashed})
+			login, err := pool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer login.Rollback(ctx)
+			started, err := store.New(login).CreateSession(ctx, store.CreateSessionParams{
+				TokenHash: []byte("laptop"), UserID: user.ID, ExpiresAt: time.Now().Add(time.Hour), PasswordHash: hashed,
+			})
+			if err != nil || started != 1 {
+				t.Fatalf("started = %d, err = %v", started, err)
+			}
+
+			ended := make(chan error, 1)
+			go func() { ended <- end(ctx, s, user.ID) }()
+			waitUntilBlocked(t, pool)
+			if err := login.Commit(ctx); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := <-ended; err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.GetSession(ctx, []byte("laptop")); !errors.Is(err, store.ErrNotFound) {
+				t.Errorf("session: err = %v, want it ended", err)
+			}
+		})
+	}
+}
+
+// users-and-access R16, R31: the other order. The Owner's change is not committed yet when
+// the login inserts: the login waits for it, then starts no session.
+func TestALoginWaitsForAChangeUnderWayAndThenStartsNoSession(t *testing.T) {
+	for name, change := range map[string]func(ctx context.Context, q *store.Queries, id int64) error{
+		"Inactive": func(ctx context.Context, q *store.Queries, id int64) error {
+			_, err := q.ChangeUser(ctx, store.ChangeUserParams{ID: id, Status: "inactive"})
+			return err
+		},
+		"reset": func(ctx context.Context, q *store.Queries, id int64) error { return q.ClearPassword(ctx, id) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			pool := open(t, testdb.URL(t))
+			s := store.NewStore(pool)
+			user := addUser(t, pool, store.User{Name: "Somchai", Email: "s@example.com", Role: "staff", Status: "active", PasswordHash: hashed})
+			owner, err := pool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer owner.Rollback(ctx)
+			if err := change(ctx, store.New(owner), user.ID); err != nil {
+				t.Fatal(err)
+			}
+
+			type result struct {
+				started int64
+				err     error
+			}
+			login := make(chan result, 1)
+			go func() {
+				started, err := s.CreateSession(ctx, store.CreateSessionParams{
+					TokenHash: []byte("laptop"), UserID: user.ID, ExpiresAt: time.Now().Add(time.Hour), PasswordHash: hashed,
+				})
+				login <- result{started, err}
+			}()
+			waitUntilBlocked(t, pool)
+			if err := owner.Commit(ctx); err != nil {
+				t.Fatal(err)
+			}
+
+			if got := <-login; got.err != nil || got.started != 0 {
+				t.Errorf("started = %d, err = %v, want 0 and nil", got.started, got.err)
+			}
+		})
+	}
+}
+
+// users-and-access R32: an Inactive not committed yet when a reset arrives. The reset waits
+// for it, sees the User Inactive, and is refused: a status read without the lock would
+// still say Active.
+func TestAResetWaitsForAnInactiveUnderWayAndIsThenRefused(t *testing.T) {
+	ctx := context.Background()
+	pool := open(t, testdb.URL(t))
+	s := store.NewStore(pool)
+	user := addUser(t, pool, store.User{Name: "Somchai", Email: "s@example.com", Role: "staff", Status: "active", PasswordHash: hashed})
+	owner, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer owner.Rollback(ctx)
+	if _, err := store.New(owner).ChangeUser(ctx, store.ChangeUserParams{ID: user.ID, Status: "inactive"}); err != nil {
+		t.Fatal(err)
+	}
+
+	reset := make(chan error, 1)
+	go func() {
+		reset <- s.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("link"), ExpiresAt: time.Now().Add(time.Hour)})
+	}()
+	waitUntilBlocked(t, pool)
+	if err := owner.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := <-reset; !errors.Is(err, store.ErrUserInactive) {
+		t.Errorf("err = %v, want ErrUserInactive", err)
+	}
+	if links := setupLinks(t, pool, user.ID); links != 0 {
+		t.Errorf("an Inactive User has %d Setup links", links)
+	}
+}
+
+// users-and-access R32: the other order. A reset not committed yet when Inactive arrives:
+// Inactive waits for it, then finds the new Setup link and stops it.
+func TestAnInactiveWaitsForAResetUnderWayAndStopsItsSetupLink(t *testing.T) {
+	ctx := context.Background()
+	pool := open(t, testdb.URL(t))
+	s := store.NewStore(pool)
+	user := addUser(t, pool, store.User{Name: "Somchai", Email: "s@example.com", Role: "staff", Status: "active", PasswordHash: hashed})
+	reset, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reset.Rollback(ctx)
+	q := store.New(reset)
+	if _, err := q.LockUser(ctx, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	link := store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("link"), ExpiresAt: time.Now().Add(time.Hour)}
+	if err := q.IssueSetupLink(ctx, link); err != nil {
+		t.Fatal(err)
+	}
+
+	inactive := make(chan error, 1)
+	go func() {
+		_, err := s.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Status: "inactive"})
+		inactive <- err
+	}()
+	waitUntilBlocked(t, pool)
+	if err := reset.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := <-inactive; err != nil {
+		t.Fatal(err)
+	}
+	if links := setupLinks(t, pool, user.ID); links != 0 {
+		t.Errorf("an Inactive User has %d Setup links", links)
+	}
+}
+
+func setupLinks(t *testing.T, pool *pgxpool.Pool, userID int64) (links int) {
+	t.Helper()
+	err := pool.QueryRow(context.Background(), `SELECT count(*) FROM setup_links WHERE user_id = $1`, userID).Scan(&links)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return links
+}
+
+// A User change and its deletes commit together: one that fails partway ends nothing.
+func TestAResetThatFailsPartwayChangesNothing(t *testing.T) {
+	ctx := context.Background()
+	pool := open(t, testdb.URL(t))
+	s := store.NewStore(pool)
+	user := addUser(t, pool, store.User{Name: "Somchai", Email: "s@example.com", Role: "staff", Status: "active", PasswordHash: hashed})
+	other := addUser(t, pool, store.User{Name: "Other", Email: "o@example.com", Role: "staff", Status: "active"})
+	expires := time.Now().Add(time.Hour)
+	if _, err := s.CreateSession(ctx, store.CreateSessionParams{TokenHash: []byte("laptop"), UserID: user.ID, ExpiresAt: expires, PasswordHash: hashed}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.IssueSetupLink(ctx, store.IssueSetupLinkParams{UserID: other.ID, TokenHash: []byte("taken"), ExpiresAt: expires}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := s.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("taken"), ExpiresAt: expires})
+
+	assertViolates(t, err, "setup_links_token_hash_key")
+	got, err := s.GetUserByEmail(ctx, user.Email)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PasswordHash != hashed {
+		t.Errorf("password hash = %+v, want it kept", got.PasswordHash)
+	}
+	if _, err := s.GetSession(ctx, []byte("laptop")); err != nil {
+		t.Errorf("session: %v, want it kept", err)
+	}
+}
+
+// waitUntilBlocked returns once a query is waiting for a lock, so what a test does next
+// happens while that query waits.
+func waitUntilBlocked(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		var waiting int
+		err := pool.QueryRow(context.Background(), `SELECT count(*) FROM pg_locks WHERE NOT granted`).Scan(&waiting)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if waiting > 0 {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("no query blocked on a lock")
 }
 
 // warm opens the pool's connections, so concurrent queries overlap instead of each waiting

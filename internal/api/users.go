@@ -54,6 +54,36 @@ type createUserOutput struct {
 	}
 }
 
+// targetErrors is how every operation on one User describes its refusals of that User.
+const targetErrors = "Answers 403 `target-is-owner` when the target is the Owner, and a plain 404 when there is no such User."
+
+type updateUserBody struct {
+	// A field left out stays as it is. There is no email: it cannot change
+	// (users-and-access R15), and a body that names one is refused.
+	Name string `json:"name,omitempty" pattern:"\\S" patternDescription:"contain a character that is not a space" doc:"The User's name, in any language."`
+	// users-and-access R9, R35: between these two, never to Owner.
+	Role string `json:"role,omitempty" enum:"admin,staff" doc:"Applies at once to the sessions the User has open."`
+	// users-and-access R16.
+	Status string `json:"status,omitempty" enum:"active,inactive" doc:"Setting a User Inactive ends all their sessions and stops their Setup link. Setting them Active again brings back neither."`
+}
+
+type updateUserInput struct {
+	ID   int64 `path:"id" doc:"The User's id."`
+	Body updateUserBody
+}
+
+type updateUserOutput struct {
+	Body user
+}
+
+type resetPasswordInput struct {
+	ID int64 `path:"id" doc:"The User's id."`
+}
+
+type resetPasswordOutput struct {
+	Body setupLink
+}
+
 func registerUsers(api huma.API, deps Deps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "list-users",
@@ -90,7 +120,7 @@ func registerUsers(api huma.API, deps Deps) {
 		DefaultStatus: http.StatusCreated,
 		Errors:        []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusConflict},
 	}, func(ctx context.Context, input *createUserInput) (*createUserOutput, error) {
-		link := auth.NewSetupLink(deps.Now(), input.Body.Email)
+		link := auth.NewSetupLink(deps.Now())
 		created, err := deps.Store.CreateUser(ctx, store.CreateUserParams{
 			Name:      input.Body.Name,
 			Email:     input.Body.Email,
@@ -113,4 +143,62 @@ func registerUsers(api huma.API, deps Deps) {
 		out.Body.SetupLink = setupLink{Token: link.Token, ExpiresAt: link.ExpiresAt}
 		return out, nil
 	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "update-user",
+		Method:      http.MethodPatch,
+		Path:        "/users/{id}",
+		Summary:     "Change a User's name, Role or status",
+		Description: "Changes the fields the body names and leaves the rest. " + targetErrors + " " + ownerOnlyErrors,
+		Tags:        []string{"Users"},
+		Security:    sessionSecurity,
+		Middlewares: huma.Middlewares{ownerOnly(api, deps)},
+		Errors:      []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound},
+	}, func(ctx context.Context, input *updateUserInput) (*updateUserOutput, error) {
+		updated, err := deps.Store.UpdateUser(ctx, store.ChangeUserParams{
+			ID: input.ID, Name: input.Body.Name, Role: input.Body.Role, Status: input.Body.Status,
+		})
+		if err != nil {
+			return nil, targetError(ctx, "update user", err)
+		}
+		return &updateUserOutput{Body: user(updated)}, nil
+	})
+
+	// One operation for users-and-access R29 and R31: with no password or session to end,
+	// all it does is issue the new link.
+	huma.Register(api, huma.Operation{
+		OperationID: "reset-password",
+		Method:      http.MethodPost,
+		Path:        "/users/{id}/reset-password",
+		Summary:     "Reset a User's password",
+		Description: "Ends the User's password and sessions, cancels any earlier Setup link, and issues a new one, " +
+			"whose token is not shown again. Answers 409 `user-inactive` when the User is Inactive. " +
+			targetErrors + " " + ownerOnlyErrors,
+		Tags:        []string{"Users"},
+		Security:    sessionSecurity,
+		Middlewares: huma.Middlewares{ownerOnly(api, deps)},
+		Errors:      []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict},
+	}, func(ctx context.Context, input *resetPasswordInput) (*resetPasswordOutput, error) {
+		link := auth.NewSetupLink(deps.Now())
+		err := deps.Store.ResetPassword(ctx, store.IssueSetupLinkParams{
+			UserID: input.ID, TokenHash: auth.HashToken(link.Token), ExpiresAt: link.ExpiresAt,
+		})
+		if err != nil {
+			return nil, targetError(ctx, "reset password", err)
+		}
+		return &resetPasswordOutput{Body: setupLink{Token: link.Token, ExpiresAt: link.ExpiresAt}}, nil
+	})
+}
+
+// targetError is the answer of an operation on a User, when it fails.
+func targetError(ctx context.Context, doing string, err error) huma.StatusError {
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return huma.Error404NotFound("There is no such User.")
+	case errors.Is(err, store.ErrTargetIsOwner): // users-and-access R18, R34
+		return domainError(http.StatusForbidden, codeTargetIsOwner, "The Owner's own User cannot be changed.")
+	case errors.Is(err, store.ErrUserInactive): // users-and-access R32
+		return domainError(http.StatusConflict, codeUserInactive, "This User is Inactive. Set them Active first.")
+	}
+	return internalError(ctx, doing, err)
 }

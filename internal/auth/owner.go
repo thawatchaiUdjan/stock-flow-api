@@ -24,16 +24,17 @@ type OwnerStore interface {
 }
 
 // SetupLink is an issued link. Token exists only here: the database keeps its hash.
+// Email is who it is for, when the issuer has to say so.
 type SetupLink struct {
 	Token     string
 	Email     string
 	ExpiresAt time.Time
 }
 
-// NewSetupLink makes a link for the person with email, valid from now for 24 hours
-// (users-and-access R27). Storing the hash of its token is the caller's job.
-func NewSetupLink(now time.Time, email string) SetupLink {
-	return SetupLink{Token: NewToken(), Email: email, ExpiresAt: now.Add(setupLinkLifetime)}
+// NewSetupLink makes a link valid from now for 24 hours (users-and-access R27). Storing
+// the hash of its token is the caller's job.
+func NewSetupLink(now time.Time) SetupLink {
+	return SetupLink{Token: NewToken(), ExpiresAt: now.Add(setupLinkLifetime)}
 }
 
 // IssueOwnerSetupLink creates the Owner when there is none, and issues their Setup link,
@@ -56,7 +57,8 @@ func IssueOwnerSetupLink(ctx context.Context, q OwnerStore, now time.Time, name,
 		return SetupLink{}, fmt.Errorf("get owner: %w", err)
 	}
 
-	link := NewSetupLink(now, owner.Email)
+	link := NewSetupLink(now)
+	link.Email = owner.Email
 	err = q.IssueSetupLink(ctx, store.IssueSetupLinkParams{
 		UserID: owner.ID, TokenHash: HashToken(link.Token), ExpiresAt: link.ExpiresAt,
 	})

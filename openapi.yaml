@@ -136,12 +136,16 @@ components:
             session-ended: The request carried a session cookie that matches no live session.
             setup-link-invalid: The Setup link is used, expired, replaced or was never issued.
             email-taken: A User has this email already, in any letter case.
+            target-is-owner: The operation acts on a User, and that User is the Owner, who cannot be changed here.
+            user-inactive: No Setup link can be issued for an Inactive User.
           enum:
             - about:blank
             - login-failed
             - session-ended
             - setup-link-invalid
             - email-taken
+            - target-is-owner
+            - user-inactive
           type: string
       type: object
     HealthOutputBody:
@@ -259,6 +263,13 @@ components:
     SetupLink:
       additionalProperties: false
       properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/SetupLink.json
+          format: uri
+          readOnly: true
+          type: string
         expiresAt:
           description: When the Setup link stops working.
           format: date-time
@@ -270,9 +281,44 @@ components:
         - token
         - expiresAt
       type: object
+    UpdateUserBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/UpdateUserBody.json
+          format: uri
+          readOnly: true
+          type: string
+        name:
+          description: The User's name, in any language.
+          pattern: \S
+          patternDescription: contain a character that is not a space
+          type: string
+        role:
+          description: Applies at once to the sessions the User has open.
+          enum:
+            - admin
+            - staff
+          type: string
+        status:
+          description: Setting a User Inactive ends all their sessions and stops their Setup link. Setting them Active again brings back neither.
+          enum:
+            - active
+            - inactive
+          type: string
+      type: object
     User:
       additionalProperties: false
       properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/User.json
+          format: uri
+          readOnly: true
+          type: string
         email:
           description: As it was entered when the User was created. It never changes.
           type: string
@@ -609,5 +655,127 @@ paths:
       security:
         - session: []
       summary: Create a User
+      tags:
+        - Users
+  /users/{id}:
+    patch:
+      description: "Changes the fields the body names and leaves the rest. Answers 403 `target-is-owner` when the target is the Owner, and a plain 404 when there is no such User. Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: update-user
+      parameters:
+        - description: The User's id.
+          in: path
+          name: id
+          required: true
+          schema:
+            description: The User's id.
+            format: int64
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Change a User's name, Role or status
+      tags:
+        - Users
+  /users/{id}/reset-password:
+    post:
+      description: "Ends the User's password and sessions, cancels any earlier Setup link, and issues a new one, whose token is not shown again. Answers 409 `user-inactive` when the User is Inactive. Answers 403 `target-is-owner` when the target is the Owner, and a plain 404 when there is no such User. Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: reset-password
+      parameters:
+        - description: The User's id.
+          in: path
+          name: id
+          required: true
+          schema:
+            description: The User's id.
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SetupLink"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Reset a User's password
       tags:
         - Users

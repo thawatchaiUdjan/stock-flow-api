@@ -44,12 +44,18 @@ func (c *fakeClock) Advance(d time.Duration) {
 // a fast test can compare how long two logins took.
 type timedHasher struct {
 	auth.PasswordHasher
-	clock *fakeClock
+	clock     *fakeClock
+	whileSlow *func()
 }
 
 func (p timedHasher) Verify(encoded, password string) bool {
 	p.clock.Advance(100 * time.Millisecond)
-	return p.PasswordHasher.Verify(encoded, password)
+	verified := p.PasswordHasher.Verify(encoded, password)
+	if during := *p.whileSlow; during != nil {
+		*p.whileSlow = nil
+		during()
+	}
+	return verified
 }
 
 // harness is the whole HTTP handler over a fake store and a fake clock.
@@ -59,18 +65,21 @@ type harness struct {
 	contract huma.API
 	store    *storetest.Fake
 	clock    *fakeClock
+	// whileVerifying, when set, runs once during the next password check: what happens
+	// in the time a real hash takes.
+	whileVerifying func()
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
-	fake := storetest.NewFake()
-	clock := &fakeClock{now: time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)}
-	handler, contract := api.New(api.Deps{
-		Store:          fake,
-		PasswordHasher: timedHasher{PasswordHasher: cheap, clock: clock},
-		Now:            clock.Now,
+	h := &harness{t: t, store: storetest.NewFake()}
+	h.clock = &fakeClock{now: time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)}
+	h.handler, h.contract = api.New(api.Deps{
+		Store:          h.store,
+		PasswordHasher: timedHasher{PasswordHasher: cheap, clock: h.clock, whileSlow: &h.whileVerifying},
+		Now:            h.clock.Now,
 	})
-	return &harness{t: t, handler: handler, contract: contract, store: fake, clock: clock}
+	return h
 }
 
 // addUser seeds an Active Staff User with a password, unless change says otherwise.

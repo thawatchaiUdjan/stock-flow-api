@@ -110,7 +110,7 @@ func TestARoleThatDoesNotOwnTheTablesReachesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := q.CreateSession(ctx, store.CreateSessionParams{
+	if _, err := q.CreateSession(ctx, store.CreateSessionParams{
 		TokenHash: []byte("session"), UserID: mustOwner(t, q).ID, ExpiresAt: time.Now().Add(time.Hour),
 	}); err != nil {
 		t.Fatal(err)
@@ -197,7 +197,7 @@ func TestTheAPIWorksAsARoleThatOnlyOwnsTheTables(t *testing.T) {
 	pool := open(t, testdb.URL(t))
 	assertRoleOnlyOwnsTheTables(t, pool)
 	handler, _ := api.New(api.Deps{
-		Store:          store.New(pool),
+		Store:          store.NewStore(pool),
 		PasswordHasher: auth.PasswordHasher{Memory: 8, Time: 1},
 		Now:            time.Now,
 	})

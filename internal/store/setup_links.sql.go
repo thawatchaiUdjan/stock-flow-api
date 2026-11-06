@@ -10,6 +10,15 @@ import (
 	"time"
 )
 
+const deleteSetupLink = `-- name: DeleteSetupLink :exec
+DELETE FROM setup_links WHERE user_id = $1
+`
+
+func (q *Queries) DeleteSetupLink(ctx context.Context, userID int64) error {
+	_, err := q.db.Exec(ctx, deleteSetupLink, userID)
+	return err
+}
+
 const getSetupLinkUser = `-- name: GetSetupLinkUser :one
 SELECT users.name, users.email
 FROM setup_links
