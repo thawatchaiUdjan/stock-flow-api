@@ -10,7 +10,7 @@ import (
 
 var (
 	// ErrTargetIsOwner refuses any change to the Owner's User, which is managed by a
-	// developer and not through the Users pages (users-and-access R18, R34).
+	// developer and not through the Users pages (users-and-access R18, R34, context ADR 0004).
 	ErrTargetIsOwner = errors.New("the target is the Owner")
 	// ErrUserInactive refuses a Setup link for an Inactive User (users-and-access R32).
 	ErrUserInactive = errors.New("the User is Inactive")

@@ -177,7 +177,7 @@ func TestUpdateUserWithNothingToChangeAnswersTheUserUnchanged(t *testing.T) {
 	}
 }
 
-// users-and-access R18, and the ticket: the Owner's own User is refused whatever is asked,
+// users-and-access R18, context ADR 0004: the Owner's own User is refused whatever is asked,
 // so the system can never lose its Owner.
 func TestUpdateUserRefusesTheOwnerAsTarget(t *testing.T) {
 	for name, body := range map[string]map[string]string{
