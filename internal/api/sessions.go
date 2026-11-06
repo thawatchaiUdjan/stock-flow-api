@@ -13,29 +13,35 @@ import (
 )
 
 const (
+	// sessionCookieName also names the contract's security scheme. Keep it in step with
+	// sessionInput's tag, which can only be a literal.
 	sessionCookieName = "session"
-	securityScheme    = "session"
 
 	// sessionLifetime is fixed at login and never extended (users-and-access R21).
 	sessionLifetime = 7 * 24 * time.Hour
 
 	// cookieLifetime outlasts the session, so a request after the session ended still
-	// carries the cookie and hears why it was refused (users-and-access R26).
-	cookieLifetime = 30 * 24 * time.Hour
+	// carries the cookie and hears why it was refused (users-and-access R26). 400 days is
+	// the most a browser keeps a cookie; all it holds by then is a dead token.
+	cookieLifetime = 400 * 24 * time.Hour
 )
 
 // statusActive is the status of a User who may log in.
 const statusActive = "active"
 
-// sessionInput is the input of an operation that needs a live session.
-// The cookie is hidden because the browser sends it, not the generated client: the
-// contract declares it as a security scheme instead.
+// sessionInput is the input of an operation that needs a live session. The cookie is
+// hidden because the browser sends it, not the generated client: the contract declares
+// it as a security scheme instead.
 type sessionInput struct {
 	Session string `cookie:"session" hidden:"true"`
 }
 
 // sessionSecurity marks an operation as needing a live session in the contract.
-var sessionSecurity = []map[string][]string{{securityScheme: {}}}
+var sessionSecurity = []map[string][]string{{sessionCookieName: {}}}
+
+// sessionErrors is how every operation that needs a session describes its 401s.
+const sessionErrors = "Answers a plain 401 with no session cookie, and 401 `session-ended` " +
+	"with a cookie that matches no live session."
 
 type currentUser struct {
 	Name  string `json:"name" doc:"The User's name, in any language."`
@@ -46,7 +52,8 @@ type currentUser struct {
 type logInInput struct {
 	Body struct {
 		// No format or length here: an email or password that couldn't be right must fail
-		// like any other, not with a different answer (users-and-access R5).
+		// like any other, not with a different answer (users-and-access R5). Only a body
+		// missing a field gets a 422, which depends on no User and so tells nothing.
 		Email    string `json:"email" doc:"Compared without regard to letter case."`
 		Password string `json:"password"`
 	}
@@ -70,14 +77,14 @@ func registerSessions(api huma.API, deps Deps) {
 	if components.SecuritySchemes == nil {
 		components.SecuritySchemes = map[string]*huma.SecurityScheme{}
 	}
-	components.SecuritySchemes[securityScheme] = &huma.SecurityScheme{
+	components.SecuritySchemes[sessionCookieName] = &huma.SecurityScheme{
 		Type: "apiKey",
 		In:   "cookie",
 		Name: sessionCookieName,
 	}
 
 	huma.Register(api, huma.Operation{
-		OperationID: "log-in",
+		OperationID: "create-session",
 		Method:      http.MethodPost,
 		Path:        "/login",
 		Summary:     "Log in with an email and a password",
@@ -91,8 +98,8 @@ func registerSessions(api huma.API, deps Deps) {
 		}
 		// Verify runs on every path and before the status is looked at, so an unknown
 		// email, a User with no password and an Inactive User all take as long as a wrong
-		// password (users-and-access R5). The zero User has an empty hash.
-		verified := deps.Passwords.Verify(user.PasswordHash.String, input.Body.Password)
+		// password (users-and-access R5, R16). The zero User has an empty hash.
+		verified := deps.PasswordHasher.Verify(user.PasswordHash.String, input.Body.Password)
 		if !verified || user.Status != statusActive {
 			return nil, domainError(http.StatusUnauthorized, codeLoginFailed, "Email or password is incorrect.")
 		}
@@ -112,11 +119,11 @@ func registerSessions(api huma.API, deps Deps) {
 	})
 
 	huma.Register(api, huma.Operation{
-		OperationID: "log-out",
+		OperationID: "end-session",
 		Method:      http.MethodPost,
 		Path:        "/logout",
 		Summary:     "End this device's session",
-		Description: "The User's sessions on other devices stay live.",
+		Description: "The User's sessions on other devices stay live. " + sessionErrors,
 		Tags:        []string{"Sessions"},
 		Security:    sessionSecurity,
 		Errors:      []int{http.StatusUnauthorized},
@@ -137,6 +144,7 @@ func registerSessions(api huma.API, deps Deps) {
 		Method:      http.MethodGet,
 		Path:        "/me",
 		Summary:     "Get the User who is logged in",
+		Description: sessionErrors,
 		Tags:        []string{"Sessions"},
 		Security:    sessionSecurity,
 		Errors:      []int{http.StatusUnauthorized},

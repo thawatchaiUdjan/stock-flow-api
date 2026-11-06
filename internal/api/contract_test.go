@@ -30,8 +30,8 @@ func TestTheContractPublishesEveryOperationOfLoggingIn(t *testing.T) {
 	ops := operations(t)
 
 	for id, path := range map[string]string{
-		"log-in":           "/login",
-		"log-out":          "/logout",
+		"create-session":   "/login",
+		"end-session":      "/logout",
 		"get-current-user": "/me",
 		"read-setup-link":  "/setup-link/read",
 		"set-password":     "/setup-link/password",
@@ -50,7 +50,7 @@ func TestTheContractPublishesEveryOperationOfLoggingIn(t *testing.T) {
 // users-and-access R4: nobody can sign up. What needs no session is this list and no
 // more, so an operation that makes a User can't be reached without logging in.
 func TestOnlyTheseOperationsNeedNoSession(t *testing.T) {
-	public := []string{"get-health", "log-in", "read-setup-link", "set-password"}
+	public := []string{"create-session", "get-health", "read-setup-link", "set-password"}
 
 	var got []string
 	for id, op := range operations(t) {
@@ -82,7 +82,7 @@ func TestTheContractDeclaresTheSessionCookie(t *testing.T) {
 	if scheme == nil || scheme.Type != "apiKey" || scheme.In != "cookie" || scheme.Name != "session" {
 		t.Errorf("scheme = %+v, want an apiKey in the session cookie", scheme)
 	}
-	for _, id := range []string{"log-out", "get-current-user"} {
+	for _, id := range []string{"end-session", "get-current-user"} {
 		op := operations(t)[id]
 		if len(op.Security) != 1 {
 			t.Errorf("%s: security = %v, want the session scheme", id, op.Security)
@@ -115,8 +115,8 @@ func TestEveryOperationDeclaresItsErrors(t *testing.T) {
 	ops := operations(t)
 
 	for id, statuses := range map[string][]string{
-		"log-in":           {"401"},
-		"log-out":          {"401"},
+		"create-session":   {"401"},
+		"end-session":      {"401"},
 		"get-current-user": {"401"},
 		"read-setup-link":  {"410"},
 		"set-password":     {"410", "422"},
@@ -125,6 +125,23 @@ func TestEveryOperationDeclaresItsErrors(t *testing.T) {
 			if ops[id].Responses[status] == nil {
 				t.Errorf("%s does not declare %s; it has %v", id, status, slices.Sorted(maps.Keys(ops[id].Responses)))
 			}
+		}
+	}
+}
+
+// ADR 0019: each operation says which codes it can answer.
+func TestEveryOperationNamesItsErrorCodes(t *testing.T) {
+	ops := operations(t)
+
+	for id, code := range map[string]string{
+		"create-session":   "login-failed",
+		"end-session":      "session-ended",
+		"get-current-user": "session-ended",
+		"read-setup-link":  "setup-link-invalid",
+		"set-password":     "setup-link-invalid",
+	} {
+		if !strings.Contains(ops[id].Description, "`"+code+"`") {
+			t.Errorf("%s: description %q does not name %s", id, ops[id].Description, code)
 		}
 	}
 }

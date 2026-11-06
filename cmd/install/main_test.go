@@ -100,12 +100,19 @@ func TestInstallTakesNoPassword(t *testing.T) {
 }
 
 func TestInstallTakesNoStrayArguments(t *testing.T) {
+	fake := storetest.NewFake()
 	var out bytes.Buffer
 
-	err := install([]string{"-name", "Malee", "-email", "malee@example.com", "secret123"}, &out, issueWith(storetest.NewFake()))
+	err := install([]string{"-name", "Malee", "-email", "malee@example.com", "secret123"}, &out, issueWith(fake))
 
 	if err == nil {
-		t.Error("err = nil, want the stray argument refused")
+		t.Fatal("err = nil, want the stray argument refused")
+	}
+	if strings.Contains(out.String(), "secret123") {
+		t.Errorf("output repeats the argument:\n%s", out.String())
+	}
+	if _, err := fake.GetOwner(context.Background()); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("an Owner was created anyway: err = %v", err)
 	}
 }
 

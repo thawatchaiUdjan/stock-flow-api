@@ -177,6 +177,28 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}
 	})
 
+	t.Run("refuses a token hash already in use", func(t *testing.T) {
+		s := newSubject(t)
+		user := s.AddUser(t, staff("staff@example.com"))
+		other := s.AddUser(t, staff("other@example.com"))
+		session := store.CreateSessionParams{TokenHash: []byte("h"), UserID: user.ID, ExpiresAt: at}
+		if err := s.Store.CreateSession(ctx, session); err != nil {
+			t.Fatal(err)
+		}
+		link := store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("h"), ExpiresAt: at}
+		if err := s.Store.IssueSetupLink(ctx, link); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := s.Store.CreateSession(ctx, session); err == nil {
+			t.Error("CreateSession: err = nil, want a refusal")
+		}
+		link.UserID = other.ID
+		if err := s.Store.IssueSetupLink(ctx, link); err == nil {
+			t.Error("IssueSetupLink: err = nil, want a refusal")
+		}
+	})
+
 	issue := func(t *testing.T, s Subject, user store.User, hash string) {
 		t.Helper()
 		err := s.Store.IssueSetupLink(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte(hash), ExpiresAt: at})

@@ -48,8 +48,12 @@ func TestLogInMatchesTheEmailInAnyLetterCase(t *testing.T) {
 	h.addUser("Somchai@Example.com")
 
 	for _, email := range []string{"somchai@example.com", "SOMCHAI@EXAMPLE.COM", "Somchai@Example.com"} {
-		if rec := h.logIn(email, password); rec.Code != http.StatusOK {
-			t.Errorf("%s: status = %d, want 200; body %s", email, rec.Code, rec.Body)
+		rec := h.logIn(email, password)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status = %d, want 200; body %s", email, rec.Code, rec.Body)
+		}
+		if got := decode[map[string]any](t, rec)["email"]; got != "Somchai@Example.com" {
+			t.Errorf("%s: email = %v, want it as it was stored", email, got)
 		}
 	}
 }

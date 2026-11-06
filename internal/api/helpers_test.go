@@ -19,7 +19,7 @@ import (
 )
 
 // cheap is the cheapest Argon2id: tests hash a lot (docs/agents/testing.md).
-var cheap = auth.Passwords{Memory: 8, Time: 1}
+var cheap = auth.PasswordHasher{Memory: 8, Time: 1}
 
 const password = "correct horse"
 
@@ -40,16 +40,16 @@ func (c *fakeClock) Advance(d time.Duration) {
 	c.now = c.now.Add(d)
 }
 
-// timedPasswords moves the clock on each verification the way a real hash takes time, so
+// timedHasher moves the clock on each verification the way a real hash takes time, so
 // a fast test can compare how long two logins took.
-type timedPasswords struct {
-	auth.Passwords
+type timedHasher struct {
+	auth.PasswordHasher
 	clock *fakeClock
 }
 
-func (p timedPasswords) Verify(encoded, password string) bool {
+func (p timedHasher) Verify(encoded, password string) bool {
 	p.clock.Advance(100 * time.Millisecond)
-	return p.Passwords.Verify(encoded, password)
+	return p.PasswordHasher.Verify(encoded, password)
 }
 
 // harness is the whole HTTP handler over a fake store and a fake clock.
@@ -66,9 +66,9 @@ func newHarness(t *testing.T) *harness {
 	fake := storetest.NewFake()
 	clock := &fakeClock{now: time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)}
 	handler, contract := api.New(api.Deps{
-		Store:     fake,
-		Passwords: timedPasswords{Passwords: cheap, clock: clock},
-		Now:       clock.Now,
+		Store:          fake,
+		PasswordHasher: timedHasher{PasswordHasher: cheap, clock: clock},
+		Now:            clock.Now,
 	})
 	return &harness{t: t, handler: handler, contract: contract, store: fake, clock: clock}
 }

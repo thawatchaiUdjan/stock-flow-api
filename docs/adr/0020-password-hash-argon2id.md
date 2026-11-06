@@ -11,7 +11,7 @@ Passwords are stored with a slow hash (`users-and-access` spec). The API runs on
 
 Argon2id from `golang.org/x/crypto/argon2`, with OWASP's minimum settings: 19 MiB of memory, 2 passes, 1 thread, a 16-byte random salt and a 32-byte key. A hash is stored as a PHC string (`$argon2id$v=19$m=19456,t=2,p=1$…`), which carries its own settings, so they can change later without touching the hashes already stored.
 
-`auth.Passwords.Verify` does a hash's work even with nothing to verify against, so a login with an unknown email, or for a User with no password yet, takes as long as a wrong password (R5).
+`auth.PasswordHasher.Verify` does a hash's work even with nothing to verify against, so a login with an unknown email, or for a User with no password yet, takes as long as a wrong password (R5).
 
 Setup link and session tokens are not passwords: they have 128 random bits, so they are stored as a plain SHA-256.
 

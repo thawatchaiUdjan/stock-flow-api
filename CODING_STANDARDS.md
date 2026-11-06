@@ -17,7 +17,7 @@
 
 - `cmd/api`: the server's `main`, which reads configuration and wires things together. No logic.
 - `cmd/openapi`: writes `openapi.yaml`.
-- `cmd/install`: the developer command that issues the Owner's Setup link. Flags and printing only.
+- `cmd/install`: the developer command that issues the Owner's Setup link. Wiring, flags and printing; no logic.
 - `internal/api`: HTTP only. Huma operations with their input and output types, grouped one file per business area (`health.go`, later `orders.go`…). It depends on what it needs from the database through small interfaces declared here (`api.Store`), so the fast layer can fake them.
 - `internal/auth`: what logging in rests on outside HTTP: password hashing, tokens, issuing the Owner's Setup link.
 - `internal/store`: the database. SQL in `db/queries/*.sql`, the Go generated from it, and `pool.go`. No HTTP types.

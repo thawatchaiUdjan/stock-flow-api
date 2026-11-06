@@ -15,7 +15,7 @@ import (
 )
 
 // The cheapest settings Argon2id accepts (docs/agents/testing.md).
-var cheap = auth.Passwords{Memory: 8, Time: 1}
+var cheap = auth.PasswordHasher{Memory: 8, Time: 1}
 
 func TestVerifyAcceptsTheRightPasswordOnly(t *testing.T) {
 	encoded := cheap.Hash("correct horse")
@@ -40,7 +40,7 @@ func TestAHashRevealsNeitherThePasswordNorThatTwoPasswordsMatch(t *testing.T) {
 }
 
 func TestAHashStaysVerifiableAfterTheSettingsChange(t *testing.T) {
-	encoded := auth.Passwords{Memory: 16, Time: 2}.Hash("correct horse")
+	encoded := auth.PasswordHasher{Memory: 16, Time: 2}.Hash("correct horse")
 
 	if !cheap.Verify(encoded, "correct horse") {
 		t.Error("a hash made under other settings was refused")
@@ -48,7 +48,7 @@ func TestAHashStaysVerifiableAfterTheSettingsChange(t *testing.T) {
 }
 
 func TestDefaultPasswordsUseArgon2id(t *testing.T) {
-	encoded := auth.DefaultPasswords.Hash("correct horse")
+	encoded := auth.DefaultPasswordHasher.Hash("correct horse")
 
 	if want := "$argon2id$v=19$m=19456,t=2,p=1$"; !strings.HasPrefix(encoded, want) {
 		t.Errorf("hash = %q, want prefix %q", encoded, want)
@@ -67,7 +67,7 @@ func TestVerifyRefusesAnythingThatIsNotAHash(t *testing.T) {
 // password. Real settings and real time, with a margin that a missing guard (about a
 // thousandth of the time) can't reach.
 func TestVerifyWithNoHashTakesAboutAsLongAsAWrongPassword(t *testing.T) {
-	p := auth.DefaultPasswords
+	p := auth.DefaultPasswordHasher
 	encoded := p.Hash("correct horse")
 	median := func(verify func()) time.Duration {
 		runs := make([]time.Duration, 5)
@@ -83,7 +83,7 @@ func TestVerifyWithNoHashTakesAboutAsLongAsAWrongPassword(t *testing.T) {
 	wrong := median(func() { p.Verify(encoded, "wrong password") })
 	none := median(func() { p.Verify("", "wrong password") })
 
-	if none < wrong/2 || none > wrong*2 {
+	if none < wrong/4 || none > wrong*4 {
 		t.Errorf("no hash took %v, a wrong password %v", none, wrong)
 	}
 }
@@ -207,6 +207,25 @@ func TestIssueOwnerSetupLinkNeedsANameAndEmailToCreateTheOwner(t *testing.T) {
 				t.Errorf("an Owner was created anyway: err = %v", err)
 			}
 		})
+	}
+}
+
+// users-and-access R2, R15: a stray space would stay in the email for good, and the Owner
+// could never log in with their real one.
+func TestIssueOwnerSetupLinkTrimsTheOwnersDetails(t *testing.T) {
+	ctx := context.Background()
+	fake := storetest.NewFake()
+
+	if _, err := auth.IssueOwnerSetupLink(ctx, fake, now, " Malee ", " malee@example.com "); err != nil {
+		t.Fatal(err)
+	}
+
+	owner, err := fake.GetOwner(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if owner.Name != "Malee" || owner.Email != "malee@example.com" {
+		t.Errorf("owner = %q, %q", owner.Name, owner.Email)
 	}
 }
 

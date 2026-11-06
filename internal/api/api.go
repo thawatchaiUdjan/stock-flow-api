@@ -25,18 +25,18 @@ type Store interface {
 	SetPassword(ctx context.Context, arg store.SetPasswordParams) (int64, error)
 }
 
-// Passwords hashes and verifies passwords. Verify takes "" for a User with no password,
-// or no User at all, and answers false in the time a wrong password takes.
-type Passwords interface {
+// PasswordHasher hashes and verifies passwords. Verify takes "" for a User with no
+// password, or no User at all, and answers false in the time a wrong password takes.
+type PasswordHasher interface {
 	Hash(password string) string
 	Verify(encoded, password string) bool
 }
 
 // Deps is what the API runs on. The contract needs none of them: no handler runs.
 type Deps struct {
-	Store     Store
-	Passwords Passwords
-	Now       func() time.Time
+	Store          Store
+	PasswordHasher PasswordHasher
+	Now            func() time.Time
 }
 
 // New builds the HTTP handler and the API it serves. The API's OpenAPI document is

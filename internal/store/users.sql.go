@@ -47,6 +47,7 @@ const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, name, email, role, status, password_hash FROM users WHERE lower(email) = lower($1)
 `
 
+// users-and-access R3: emails compare without regard to letter case.
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByEmail, email)
 	var i User

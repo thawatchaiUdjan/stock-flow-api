@@ -35,6 +35,8 @@ type setPasswordInput struct {
 	}
 }
 
+const setupLinkErrors = "Answers 410 `setup-link-invalid` when the Setup link is used, expired or replaced."
+
 func registerSetupLinks(api huma.API, deps Deps) {
 	invalidLink := func() huma.StatusError {
 		return domainError(http.StatusGone, codeSetupLinkInvalid, "This Setup link no longer works. Ask the Owner for a new one.")
@@ -45,6 +47,7 @@ func registerSetupLinks(api huma.API, deps Deps) {
 		Method:      http.MethodPost,
 		Path:        "/setup-link/read",
 		Summary:     "Read who a Setup link is for",
+		Description: setupLinkErrors,
 		Tags:        []string{"Setup links"},
 		Errors:      []int{http.StatusGone},
 	}, func(ctx context.Context, input *readSetupLinkInput) (*readSetupLinkOutput, error) {
@@ -68,13 +71,13 @@ func registerSetupLinks(api huma.API, deps Deps) {
 		Method:        http.MethodPost,
 		Path:          "/setup-link/password",
 		Summary:       "Set a password through a Setup link",
-		Description:   "Uses up the Setup link. It starts no session: the person logs in next (users-and-access R30).",
+		Description:   "Uses up the Setup link. It starts no session: the person logs in next. " + setupLinkErrors,
 		Tags:          []string{"Setup links"},
 		DefaultStatus: http.StatusNoContent,
 		Errors:        []int{http.StatusGone},
 	}, func(ctx context.Context, input *setPasswordInput) (*struct{}, error) {
 		used, err := deps.Store.SetPassword(ctx, store.SetPasswordParams{
-			PasswordHash: deps.Passwords.Hash(input.Body.Password),
+			PasswordHash: deps.PasswordHasher.Hash(input.Body.Password),
 			TokenHash:    auth.HashToken(input.Body.Token),
 			At:           deps.Now(),
 		})
@@ -84,6 +87,7 @@ func registerSetupLinks(api huma.API, deps Deps) {
 		if used == 0 {
 			return nil, invalidLink()
 		}
+		// users-and-access R30: no session starts here, the person goes to Login.
 		return nil, nil
 	})
 }

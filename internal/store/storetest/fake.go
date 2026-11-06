@@ -111,6 +111,9 @@ func (f *Fake) CreateSession(_ context.Context, arg store.CreateSessionParams) e
 	if _, ok := f.user(arg.UserID); !ok {
 		return errors.New("violates sessions_user_id_fkey")
 	}
+	if _, ok := f.sessions[string(arg.TokenHash)]; ok {
+		return errors.New("violates sessions_pkey")
+	}
 	f.sessions[string(arg.TokenHash)] = store.Session(arg)
 	return nil
 }
@@ -147,6 +150,11 @@ func (f *Fake) IssueSetupLink(_ context.Context, arg store.IssueSetupLinkParams)
 	}
 	if _, ok := f.user(arg.UserID); !ok {
 		return errors.New("violates setup_links_user_id_fkey")
+	}
+	for userID, link := range f.links {
+		if userID != arg.UserID && string(link.TokenHash) == string(arg.TokenHash) {
+			return errors.New("violates setup_links_token_hash_key")
+		}
 	}
 	f.links[arg.UserID] = store.SetupLink(arg)
 	return nil

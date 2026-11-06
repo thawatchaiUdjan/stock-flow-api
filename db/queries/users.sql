@@ -1,3 +1,4 @@
+-- users-and-access R3: emails compare without regard to letter case.
 -- name: GetUserByEmail :one
 SELECT * FROM users WHERE lower(email) = lower(sqlc.arg(email));
 

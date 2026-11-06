@@ -19,7 +19,7 @@ ADR 0014 left open whether domain errors get their own codes, to settle before t
 
 - This settles ADR 0014's open question.
 - A new domain error is a new constant and a new line in `errorCodes`. Renaming or removing a code is a breaking contract change.
-- The list says which codes exist, not which operation returns which: the operation's description and its statuses say that.
+- The list says which codes exist, not which operation returns which: each operation's description names its codes, beside its declared statuses.
 
 ## Alternatives considered
 

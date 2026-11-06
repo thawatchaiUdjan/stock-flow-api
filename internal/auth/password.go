@@ -18,17 +18,18 @@ const (
 	threads   = 1
 )
 
-// Passwords hashes and verifies passwords with Argon2id (ADR 0020). Memory is in KiB.
-type Passwords struct {
+// PasswordHasher hashes and verifies passwords with Argon2id (ADR 0020). Memory is in KiB.
+type PasswordHasher struct {
 	Memory uint32
 	Time   uint32
 }
 
-// DefaultPasswords is OWASP's minimum for Argon2id, which fits a Vercel instance (ADR 0020).
-var DefaultPasswords = Passwords{Memory: 19 * 1024, Time: 2}
+// DefaultPasswordHasher has OWASP's minimum for Argon2id, which fits a Vercel instance
+// (ADR 0020).
+var DefaultPasswordHasher = PasswordHasher{Memory: 19 * 1024, Time: 2}
 
 // Hash returns password in the PHC string format, which carries its own settings.
-func (p Passwords) Hash(password string) string {
+func (p PasswordHasher) Hash(password string) string {
 	salt := make([]byte, saltBytes)
 	rand.Read(salt)
 	key := argon2.IDKey([]byte(password), salt, p.Time, p.Memory, threads, keyBytes)
@@ -39,7 +40,7 @@ func (p Passwords) Hash(password string) string {
 // Verify reports whether password is the one encoded. With nothing to verify against (no
 // User, or no password yet) it still does a hash's work and answers false, so the time
 // taken doesn't tell which case it was (users-and-access R5).
-func (p Passwords) Verify(encoded, password string) bool {
+func (p PasswordHasher) Verify(encoded, password string) bool {
 	h, ok := parseHash(encoded)
 	if !ok {
 		argon2.IDKey([]byte(password), make([]byte, saltBytes), p.Time, p.Memory, threads, keyBytes)

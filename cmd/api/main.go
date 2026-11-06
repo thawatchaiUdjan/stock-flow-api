@@ -44,7 +44,7 @@ func run() error {
 	}
 	defer pool.Close()
 
-	handler, _ := api.New(api.Deps{Store: store.New(pool), Passwords: auth.DefaultPasswords, Now: time.Now})
+	handler, _ := api.New(api.Deps{Store: store.New(pool), PasswordHasher: auth.DefaultPasswordHasher, Now: time.Now})
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,

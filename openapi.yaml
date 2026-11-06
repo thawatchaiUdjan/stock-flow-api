@@ -225,7 +225,7 @@ paths:
   /login:
     post:
       description: Starts a session. Every failure answers the same 401 `login-failed`, in the same time.
-      operationId: log-in
+      operationId: create-session
       requestBody:
         content:
           application/json:
@@ -267,8 +267,8 @@ paths:
         - Sessions
   /logout:
     post:
-      description: The User's sessions on other devices stay live.
-      operationId: log-out
+      description: The User's sessions on other devices stay live. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session.
+      operationId: end-session
       responses:
         "204":
           description: No Content
@@ -302,6 +302,7 @@ paths:
         - Sessions
   /me:
     get:
+      description: Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session.
       operationId: get-current-user
       responses:
         "200":
@@ -335,7 +336,7 @@ paths:
         - Sessions
   /setup-link/password:
     post:
-      description: "Uses up the Setup link. It starts no session: the person logs in next (users-and-access R30)."
+      description: "Uses up the Setup link. It starts no session: the person logs in next. Answers 410 `setup-link-invalid` when the Setup link is used, expired or replaced."
       operationId: set-password
       requestBody:
         content:
@@ -369,6 +370,7 @@ paths:
         - Setup links
   /setup-link/read:
     post:
+      description: Answers 410 `setup-link-invalid` when the Setup link is used, expired or replaced.
       operationId: read-setup-link
       requestBody:
         content:
