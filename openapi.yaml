@@ -166,6 +166,31 @@ components:
       required:
         - status
       type: object
+    ListLoginLogOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/ListLoginLogOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        entries:
+          description: Newest first.
+          items:
+            $ref: "#/components/schemas/LoginLogEntryBody"
+          type: array
+        nextBefore:
+          description: Pass as before for the next page. Null on the last page.
+          format: int64
+          type:
+            - integer
+            - "null"
+      required:
+        - entries
+        - nextBefore
+      type: object
     ListUsersOutputBody:
       additionalProperties: false
       properties:
@@ -202,6 +227,59 @@ components:
       required:
         - email
         - password
+      type: object
+    LoginLogEntryBody:
+      additionalProperties: false
+      properties:
+        at:
+          description: When it happened.
+          format: date-time
+          type: string
+        email:
+          description: What was entered, as it was typed, even when it matches no User. For a logout, the email of the User who logged out.
+          type: string
+        id:
+          description: Identifies the entry. Later entries have higher ids.
+          format: int64
+          type: integer
+        ip:
+          description: The visitor's IP address.
+          type: string
+        result:
+          description: A successful login, a failed login, or a logout.
+          enum:
+            - login
+            - failed-login
+            - logout
+          type: string
+        user:
+          $ref: "#/components/schemas/LoginLogUser"
+          description: The User the email matches, or null when it matches none.
+        userAgent:
+          description: The browser or device, as it called itself. Empty when it sent nothing.
+          type: string
+      required:
+        - id
+        - at
+        - email
+        - user
+        - result
+        - ip
+        - userAgent
+      type: object
+    LoginLogUser:
+      additionalProperties: false
+      properties:
+        id:
+          description: Identifies the User.
+          format: int64
+          type: integer
+        name:
+          description: The User's name now.
+          type: string
+      required:
+        - id
+        - name
       type: object
     ReadSetupLinkInputBody:
       additionalProperties: false
@@ -431,6 +509,87 @@ paths:
       summary: Log in with an email and a password
       tags:
         - Sessions
+  /login-log:
+    get:
+      description: "Every login, failed login and logout, newest first, one page at a time. Entries cannot be changed or removed, and no operation does. Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: list-login-log
+      parameters:
+        - description: Only the entries of this User.
+          explode: false
+          in: query
+          name: userId
+          schema:
+            description: Only the entries of this User.
+            format: int64
+            minimum: 1
+            type: integer
+        - description: Only the entries with this result.
+          explode: false
+          in: query
+          name: result
+          schema:
+            description: Only the entries with this result.
+            enum:
+              - login
+              - failed-login
+              - logout
+            type: string
+        - description: "The previous page's nextBefore: only the entries older than that. Leave out for the newest."
+          explode: false
+          in: query
+          name: before
+          schema:
+            description: "The previous page's nextBefore: only the entries older than that. Leave out for the newest."
+            format: int64
+            minimum: 1
+            type: integer
+        - description: The most entries on a page.
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: The most entries on a page.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListLoginLogOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: List the Login log
+      tags:
+        - Login log
   /logout:
     post:
       description: The User's sessions on other devices stay live. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session.

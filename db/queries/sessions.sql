@@ -14,7 +14,7 @@ WHERE users.id = sqlc.arg(user_id)
 FOR SHARE OF users;
 
 -- name: GetSession :one
-SELECT users.name, users.email, users.role, sessions.expires_at
+SELECT sessions.user_id, users.name, users.email, users.role, sessions.expires_at
 FROM sessions
 JOIN users ON users.id = sessions.user_id
 WHERE sessions.token_hash = $1;

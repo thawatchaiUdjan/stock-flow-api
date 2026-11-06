@@ -97,26 +97,36 @@ func registerSessions(api huma.API, deps Deps) {
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			return nil, internalError(ctx, "log in: get user", err)
 		}
+		// users-and-access R36: the email as typed, and the User only if it matches one. An
+		// unknown email leaves the zero User, whose ID is 0.
+		entry := loginLogEntry(ctx, deps, store.ResultFailedLogin, input.Body.Email, user.ID)
 		// Verify runs on every path and before the status is looked at, so an unknown
 		// email, a User with no password and an Inactive User all take as long as a wrong
 		// password (users-and-access R5, R16). The zero User has an empty hash.
 		verified := deps.PasswordHasher.Verify(user.PasswordHash.String, input.Body.Password)
 		if !verified || user.Status != statusActive {
+			if err := deps.Store.AddLoginLogEntry(ctx, entry); err != nil {
+				return nil, internalError(ctx, "log in: add login log entry", err)
+			}
 			return nil, failed
 		}
 
 		token := auth.NewToken()
-		started, err := deps.Store.CreateSession(ctx, store.CreateSessionParams{
-			TokenHash:    auth.HashToken(token),
-			UserID:       user.ID,
-			ExpiresAt:    deps.Now().Add(sessionLifetime),
-			PasswordHash: user.PasswordHash,
+		started, err := deps.Store.StartSession(ctx, store.StartSessionParams{
+			Session: store.CreateSessionParams{
+				TokenHash:    auth.HashToken(token),
+				UserID:       user.ID,
+				ExpiresAt:    deps.Now().Add(sessionLifetime),
+				PasswordHash: user.PasswordHash,
+			},
+			Entry: entry,
 		})
 		if err != nil {
-			return nil, internalError(ctx, "log in: create session", err)
+			return nil, internalError(ctx, "log in: start session", err)
 		}
-		// The User was set Inactive or reset while Verify ran (users-and-access R16, R31).
-		if started == 0 {
+		// The User was set Inactive or reset while Verify ran (users-and-access R16, R31);
+		// StartSession has logged it as a failed login.
+		if !started {
 			return nil, failed
 		}
 		out := &logInOutput{SetCookie: sessionCookie(token, cookieLifetime)}
@@ -134,11 +144,16 @@ func registerSessions(api huma.API, deps Deps) {
 		Security:    sessionSecurity,
 		Errors:      []int{http.StatusUnauthorized},
 	}, func(ctx context.Context, input *sessionInput) (*logOutOutput, error) {
-		if _, err := liveSession(ctx, deps, input.Session); err != nil {
+		session, err := liveSession(ctx, deps, input.Session)
+		if err != nil {
 			return nil, err
 		}
-		if err := deps.Store.DeleteSession(ctx, auth.HashToken(input.Session)); err != nil {
-			return nil, internalError(ctx, "log out: delete session", err)
+		err = deps.Store.EndSession(ctx, store.EndSessionParams{
+			TokenHash: auth.HashToken(input.Session),
+			Entry:     loginLogEntry(ctx, deps, store.ResultLogout, session.Email, session.UserID),
+		})
+		if err != nil {
+			return nil, internalError(ctx, "log out: end session", err)
 		}
 		// users-and-access R7. The cookie goes too: having logged out is not a session
 		// that ended on its own, so the next request must not hear session-ended.

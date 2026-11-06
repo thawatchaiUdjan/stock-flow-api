@@ -19,6 +19,8 @@ import (
 type Store interface {
 	api.Store
 	auth.OwnerStore
+	CreateSession(ctx context.Context, arg store.CreateSessionParams) (int64, error)
+	DeleteSession(ctx context.Context, tokenHash []byte) error
 }
 
 // Subject is one implementation of Store under the contract suite. AddUser seeds a User
@@ -788,4 +790,6 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 			t.Errorf("user = %+v, session live = %v, want %+v and true", got, live(s, "laptop"), user)
 		}
 	})
+
+	runLoginLog(t, newSubject)
 }

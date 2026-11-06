@@ -18,9 +18,11 @@ import (
 type Store interface {
 	Ping(ctx context.Context) error
 	GetUserByEmail(ctx context.Context, email string) (store.User, error)
-	CreateSession(ctx context.Context, arg store.CreateSessionParams) (int64, error)
+	StartSession(ctx context.Context, arg store.StartSessionParams) (bool, error)
 	GetSession(ctx context.Context, tokenHash []byte) (store.GetSessionRow, error)
-	DeleteSession(ctx context.Context, tokenHash []byte) error
+	EndSession(ctx context.Context, arg store.EndSessionParams) error
+	AddLoginLogEntry(ctx context.Context, arg store.AddLoginLogEntryParams) error
+	ListLoginLog(ctx context.Context, arg store.ListLoginLogParams) ([]store.ListLoginLogRow, error)
 	GetSetupLinkUser(ctx context.Context, arg store.GetSetupLinkUserParams) (store.GetSetupLinkUserRow, error)
 	SetPassword(ctx context.Context, arg store.SetPasswordParams) (int64, error)
 	ListUsers(ctx context.Context) ([]store.ListUsersRow, error)
@@ -47,13 +49,14 @@ type Deps struct {
 // the published contract (openapi.yaml).
 func New(deps Deps) (http.Handler, huma.API) {
 	router := chi.NewMux()
-	router.Use(noStore)
+	router.Use(noStore, withRequestInfo)
 
 	api := humachi.New(router, huma.DefaultConfig("stock-flow API", "0.1.0"))
 	registerHealth(api, deps.Store)
 	registerSessions(api, deps)
 	registerSetupLinks(api, deps)
 	registerUsers(api, deps)
+	registerLoginLog(api, deps)
 	publishErrorCodes(api)
 
 	return router, api
