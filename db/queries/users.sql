@@ -31,9 +31,7 @@ WITH new_user AS (
 )
 SELECT id, name, email, role, status FROM new_user;
 
--- Holds the User's row until the transaction ends. Everything that changes a User's status
--- or password takes this first, so two of them run one after the other, and the statements
--- after it see whatever committed while it waited.
+-- Holds the User's row until the transaction ends (store.Store says why).
 -- name: LockUser :one
 SELECT role, status FROM users WHERE id = $1 FOR UPDATE;
 

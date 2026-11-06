@@ -44,15 +44,15 @@ func (c *fakeClock) Advance(d time.Duration) {
 // a fast test can compare how long two logins took.
 type timedHasher struct {
 	auth.PasswordHasher
-	clock     *fakeClock
-	whileSlow *func()
+	clock          *fakeClock
+	whileVerifying *func()
 }
 
 func (p timedHasher) Verify(encoded, password string) bool {
 	p.clock.Advance(100 * time.Millisecond)
 	verified := p.PasswordHasher.Verify(encoded, password)
-	if during := *p.whileSlow; during != nil {
-		*p.whileSlow = nil
+	if during := *p.whileVerifying; during != nil {
+		*p.whileVerifying = nil
 		during()
 	}
 	return verified
@@ -76,7 +76,7 @@ func newHarness(t *testing.T) *harness {
 	h.clock = &fakeClock{now: time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)}
 	h.handler, h.contract = api.New(api.Deps{
 		Store:          h.store,
-		PasswordHasher: timedHasher{PasswordHasher: cheap, clock: h.clock, whileSlow: &h.whileVerifying},
+		PasswordHasher: timedHasher{PasswordHasher: cheap, clock: h.clock, whileVerifying: &h.whileVerifying},
 		Now:            h.clock.Now,
 	})
 	return h

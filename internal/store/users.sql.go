@@ -221,9 +221,7 @@ type LockUserRow struct {
 	Status string
 }
 
-// Holds the User's row until the transaction ends. Everything that changes a User's status
-// or password takes this first, so two of them run one after the other, and the statements
-// after it see whatever committed while it waited.
+// Holds the User's row until the transaction ends (store.Store says why).
 func (q *Queries) LockUser(ctx context.Context, id int64) (LockUserRow, error) {
 	row := q.db.QueryRow(ctx, lockUser, id)
 	var i LockUserRow

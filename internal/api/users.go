@@ -59,7 +59,8 @@ const targetErrors = "Answers 403 `target-is-owner` when the target is the Owner
 
 type updateUserBody struct {
 	// A field left out stays as it is. There is no email: it cannot change
-	// (users-and-access R15), and a body that names one is refused.
+	// (users-and-access R15), and a body that names one is refused. pattern \S: a name of
+	// only spaces is no name (R14).
 	Name string `json:"name,omitempty" pattern:"\\S" patternDescription:"contain a character that is not a space" doc:"The User's name, in any language."`
 	// users-and-access R9, R35: between these two, never to Owner.
 	Role string `json:"role,omitempty" enum:"admin,staff" doc:"Applies at once to the sessions the User has open."`

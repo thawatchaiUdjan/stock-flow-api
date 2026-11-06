@@ -411,6 +411,49 @@ func TestAnInactiveWaitsForAResetUnderWayAndStopsItsSetupLink(t *testing.T) {
 	}
 }
 
+// users-and-access R16, R32: a person sets a password at the moment the Owner acts.
+// SetPassword takes the link and then the User. The Owner's change has to take them in the
+// same order, or each holds what the other wants and Postgres aborts one of them.
+func TestSettingAPasswordAndEndingAccessAtOnceDoNotDeadlock(t *testing.T) {
+	for name, end := range endsAccess {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			pool := open(t, testdb.URL(t))
+			s := store.NewStore(pool)
+			user := addUser(t, pool, store.User{Name: "Somchai", Email: "s@example.com", Role: "staff", Status: "active"})
+			err := s.IssueSetupLink(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("link"), ExpiresAt: time.Now().Add(time.Hour)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// SetPassword's first half: the link is taken, the User is not yet.
+			person, err := pool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer person.Rollback(ctx)
+			q := store.New(person)
+			if err := q.DeleteSetupLink(ctx, user.ID); err != nil {
+				t.Fatal(err)
+			}
+
+			ended := make(chan error, 1)
+			go func() { ended <- end(ctx, s, user.ID) }()
+			waitUntilBlocked(t, pool)
+			// Its second half: this is where the two would deadlock.
+			if err := q.ClearPassword(ctx, user.ID); err != nil {
+				t.Fatalf("the person's half: %v", err)
+			}
+			if err := person.Commit(ctx); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := <-ended; err != nil {
+				t.Errorf("the Owner's half: %v", err)
+			}
+		})
+	}
+}
+
 func setupLinks(t *testing.T, pool *pgxpool.Pool, userID int64) (links int) {
 	t.Helper()
 	err := pool.QueryRow(context.Background(), `SELECT count(*) FROM setup_links WHERE user_id = $1`, userID).Scan(&links)
