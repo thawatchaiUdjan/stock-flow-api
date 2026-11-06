@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"slices"
 	"strings"
 	"sync"
 
@@ -148,20 +149,88 @@ func (f *Fake) ListUsers(context.Context) ([]store.ListUsersRow, error) {
 	return rows, nil
 }
 
-func (f *Fake) CreateSession(_ context.Context, arg store.CreateSessionParams) error {
+func (f *Fake) UpdateUser(_ context.Context, arg store.ChangeUserParams) (store.ChangeUserRow, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return store.ChangeUserRow{}, f.Err
+	}
+	target := f.userRef(arg.ID)
+	if target == nil {
+		return store.ChangeUserRow{}, store.ErrNotFound
+	}
+	if target.Role == "owner" {
+		return store.ChangeUserRow{}, store.ErrTargetIsOwner
+	}
+	changed := *target
+	if arg.Name != "" {
+		changed.Name = arg.Name
+	}
+	if arg.Role != "" {
+		changed.Role = arg.Role
+	}
+	if arg.Status != "" {
+		changed.Status = arg.Status
+	}
+	switch {
+	case strings.TrimSpace(changed.Name) == "":
+		return store.ChangeUserRow{}, errors.New("violates users_name_check")
+	case changed.Role != "admin" && changed.Role != "staff" && changed.Role != "owner":
+		return store.ChangeUserRow{}, errors.New("violates users_role_check")
+	case changed.Status != "active" && changed.Status != "inactive":
+		return store.ChangeUserRow{}, errors.New("violates users_status_check")
+	case changed.Role == "owner" && slices.ContainsFunc(f.users, func(u store.User) bool { return u.Role == "owner" }):
+		return store.ChangeUserRow{}, errors.New("violates users_one_owner_key")
+	}
+	*target = changed
+	if changed.Status == "inactive" {
+		f.endSessions(changed.ID)
+		delete(f.links, changed.ID)
+	}
+	return store.ChangeUserRow{
+		ID: changed.ID, Name: changed.Name, Email: changed.Email, Role: changed.Role, Status: changed.Status,
+		PasswordSet: changed.PasswordHash.Valid,
+	}, nil
+}
+
+func (f *Fake) ResetPassword(_ context.Context, arg store.IssueSetupLinkParams) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
 		return f.Err
 	}
-	if _, ok := f.user(arg.UserID); !ok {
-		return errors.New("violates sessions_user_id_fkey")
+	target := f.userRef(arg.UserID)
+	switch {
+	case target == nil:
+		return store.ErrNotFound
+	case target.Role == "owner":
+		return store.ErrTargetIsOwner
+	case target.Status == "inactive":
+		return store.ErrUserInactive
+	}
+	if err := f.issue(arg); err != nil {
+		return err
+	}
+	target.PasswordHash = pgtype.Text{}
+	f.endSessions(arg.UserID)
+	return nil
+}
+
+func (f *Fake) CreateSession(_ context.Context, arg store.CreateSessionParams) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return 0, f.Err
+	}
+	user, ok := f.user(arg.UserID)
+	if !ok || user.Status != "active" || user.PasswordHash != arg.PasswordHash {
+		return 0, nil
 	}
 	if _, ok := f.sessions[string(arg.TokenHash)]; ok {
-		return errors.New("violates sessions_pkey")
+		return 0, errors.New("violates sessions_pkey")
 	}
-	f.sessions[string(arg.TokenHash)] = store.Session(arg)
-	return nil
+	f.sessions[string(arg.TokenHash)] = store.Session{TokenHash: arg.TokenHash, UserID: arg.UserID, ExpiresAt: arg.ExpiresAt}
+	return 1, nil
 }
 
 func (f *Fake) GetSession(_ context.Context, tokenHash []byte) (store.GetSessionRow, error) {
@@ -197,6 +266,10 @@ func (f *Fake) IssueSetupLink(_ context.Context, arg store.IssueSetupLinkParams)
 	if _, ok := f.user(arg.UserID); !ok {
 		return errors.New("violates setup_links_user_id_fkey")
 	}
+	return f.issue(arg)
+}
+
+func (f *Fake) issue(arg store.IssueSetupLinkParams) error {
 	for userID, link := range f.links {
 		if userID != arg.UserID && string(link.TokenHash) == string(arg.TokenHash) {
 			return errors.New("violates setup_links_token_hash_key")
@@ -236,8 +309,7 @@ func (f *Fake) SetPassword(_ context.Context, arg store.SetPasswordParams) (int6
 				}
 				f.users[i].PasswordHash = pgtype.Text{String: arg.PasswordHash, Valid: true}
 				if f.users[i].Role == "owner" {
-					// users-and-access R34, context ADR 0003.
-					maps.DeleteFunc(f.sessions, func(_ string, session store.Session) bool { return session.UserID == userID })
+					f.endSessions(userID) // users-and-access R34, context ADR 0003.
 				}
 			}
 			return 1, nil
@@ -246,11 +318,22 @@ func (f *Fake) SetPassword(_ context.Context, arg store.SetPasswordParams) (int6
 	return 0, nil
 }
 
+func (f *Fake) endSessions(userID int64) {
+	maps.DeleteFunc(f.sessions, func(_ string, session store.Session) bool { return session.UserID == userID })
+}
+
 func (f *Fake) user(id int64) (store.User, bool) {
-	for _, user := range f.users {
-		if user.ID == id {
-			return user, true
-		}
+	if user := f.userRef(id); user != nil {
+		return *user, true
 	}
 	return store.User{}, false
+}
+
+func (f *Fake) userRef(id int64) *store.User {
+	for i := range f.users {
+		if f.users[i].ID == id {
+			return &f.users[i]
+		}
+	}
+	return nil
 }

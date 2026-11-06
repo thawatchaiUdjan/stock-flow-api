@@ -132,7 +132,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		s := newSubject(t)
 		user := s.AddUser(t, staff("staff@example.com"))
 		hash := []byte("session-hash")
-		if err := s.Store.CreateSession(ctx, store.CreateSessionParams{TokenHash: hash, UserID: user.ID, ExpiresAt: at}); err != nil {
+		if _, err := s.Store.CreateSession(ctx, store.CreateSessionParams{TokenHash: hash, UserID: user.ID, ExpiresAt: at}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -150,7 +150,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		s := newSubject(t)
 		user := s.AddUser(t, staff("staff@example.com"))
 		for _, hash := range []string{"one", "two"} {
-			if err := s.Store.CreateSession(ctx, store.CreateSessionParams{TokenHash: []byte(hash), UserID: user.ID, ExpiresAt: at}); err != nil {
+			if _, err := s.Store.CreateSession(ctx, store.CreateSessionParams{TokenHash: []byte(hash), UserID: user.ID, ExpiresAt: at}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -167,12 +167,47 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}
 	})
 
-	t.Run("refuses a session or a Setup link for no User", func(t *testing.T) {
+	// users-and-access R16, R31: what the password was checked against has to still hold.
+	t.Run("starts no session for no User, an Inactive User or a password that has changed", func(t *testing.T) {
+		s := newSubject(t)
+		hash := pgtype.Text{String: "hash", Valid: true}
+		inactive := staff("inactive@example.com")
+		inactive.Status, inactive.PasswordHash = "inactive", hash
+		inactiveID := s.AddUser(t, inactive).ID
+		changed := staff("changed@example.com")
+		changed.PasswordHash = pgtype.Text{String: "newer-hash", Valid: true}
+		changedID := s.AddUser(t, changed).ID
+		resetID := s.AddUser(t, staff("reset@example.com")).ID
+
+		for name, userID := range map[string]int64{"no User": 404, "Inactive": inactiveID, "changed": changedID, "reset": resetID} {
+			token := []byte(name)
+			started, err := s.Store.CreateSession(ctx, store.CreateSessionParams{TokenHash: token, UserID: userID, ExpiresAt: at, PasswordHash: hash})
+			if err != nil || started != 0 {
+				t.Errorf("%s: started = %d, err = %v, want 0 and nil", name, started, err)
+			}
+			if _, err := s.Store.GetSession(ctx, token); !errors.Is(err, store.ErrNotFound) {
+				t.Errorf("%s: err = %v, want no session", name, err)
+			}
+		}
+	})
+
+	t.Run("starts a session for an Active User with the password that was checked", func(t *testing.T) {
+		s := newSubject(t)
+		hash := pgtype.Text{String: "hash", Valid: true}
+		user := staff("staff@example.com")
+		user.PasswordHash = hash
+		user = s.AddUser(t, user)
+
+		started, err := s.Store.CreateSession(ctx, store.CreateSessionParams{TokenHash: []byte("h"), UserID: user.ID, ExpiresAt: at, PasswordHash: hash})
+
+		if err != nil || started != 1 {
+			t.Errorf("started = %d, err = %v, want 1 and nil", started, err)
+		}
+	})
+
+	t.Run("refuses a Setup link for no User", func(t *testing.T) {
 		s := newSubject(t)
 
-		if err := s.Store.CreateSession(ctx, store.CreateSessionParams{TokenHash: []byte("h"), UserID: 404, ExpiresAt: at}); err == nil {
-			t.Error("CreateSession: err = nil, want a refusal")
-		}
 		if err := s.Store.IssueSetupLink(ctx, store.IssueSetupLinkParams{UserID: 404, TokenHash: []byte("h"), ExpiresAt: at}); err == nil {
 			t.Error("IssueSetupLink: err = nil, want a refusal")
 		}
@@ -183,7 +218,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		user := s.AddUser(t, staff("staff@example.com"))
 		other := s.AddUser(t, staff("other@example.com"))
 		session := store.CreateSessionParams{TokenHash: []byte("h"), UserID: user.ID, ExpiresAt: at}
-		if err := s.Store.CreateSession(ctx, session); err != nil {
+		if _, err := s.Store.CreateSession(ctx, session); err != nil {
 			t.Fatal(err)
 		}
 		link := store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("h"), ExpiresAt: at}
@@ -191,7 +226,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 			t.Fatal(err)
 		}
 
-		if err := s.Store.CreateSession(ctx, session); err == nil {
+		if _, err := s.Store.CreateSession(ctx, session); err == nil {
 			t.Error("CreateSession: err = nil, want a refusal")
 		}
 		link.UserID = other.ID
@@ -306,8 +341,11 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 	}
 	session := func(t *testing.T, s Subject, user store.User, hash string) {
 		t.Helper()
-		if err := s.Store.CreateSession(ctx, store.CreateSessionParams{TokenHash: []byte(hash), UserID: user.ID, ExpiresAt: at}); err != nil {
-			t.Fatal(err)
+		started, err := s.Store.CreateSession(ctx, store.CreateSessionParams{
+			TokenHash: []byte(hash), UserID: user.ID, ExpiresAt: at, PasswordHash: user.PasswordHash,
+		})
+		if err != nil || started != 1 {
+			t.Fatalf("started = %d, err = %v", started, err)
 		}
 	}
 	live := func(s Subject, hash string) bool {
@@ -509,6 +547,245 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 
 		if err != nil || len(got) != 0 {
 			t.Errorf("users = %+v, err = %v", got, err)
+		}
+	})
+
+	withPassword := func(user store.User) store.User {
+		user.PasswordHash = pgtype.Text{String: "hash", Valid: true}
+		return user
+	}
+	linkWorks := func(s Subject, hash string) bool {
+		_, err := s.Store.GetSetupLinkUser(ctx, store.GetSetupLinkUserParams{TokenHash: []byte(hash), At: at.Add(-time.Second)})
+		return err == nil
+	}
+
+	t.Run("updating a User changes what is named and nothing else", func(t *testing.T) {
+		s := newSubject(t)
+		user := s.AddUser(t, withPassword(staff("Somchai@Example.com")))
+
+		name, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Name: "สมชาย"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		role, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Role: "admin"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		status, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Status: "inactive"})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		row := store.ChangeUserRow{ID: user.ID, Name: "สมชาย", Email: "Somchai@Example.com", Role: "staff", Status: "active", PasswordSet: true}
+		if name != row {
+			t.Errorf("after the name: %+v, want %+v", name, row)
+		}
+		row.Role = "admin"
+		if role != row {
+			t.Errorf("after the Role: %+v, want %+v", role, row)
+		}
+		row.Status = "inactive"
+		if status != row {
+			t.Errorf("after the status: %+v, want %+v", status, row)
+		}
+		stored, err := s.Store.GetUserByEmail(ctx, user.Email)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stored.PasswordHash != user.PasswordHash {
+			t.Errorf("password hash = %+v, want it kept", stored.PasswordHash)
+		}
+	})
+
+	t.Run("updating a User with nothing named changes nothing", func(t *testing.T) {
+		s := newSubject(t)
+		user := s.AddUser(t, staff("staff@example.com"))
+
+		got, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID})
+
+		want := store.ChangeUserRow{ID: user.ID, Name: user.Name, Email: user.Email, Role: "staff", Status: "active"}
+		if err != nil || got != want {
+			t.Errorf("got %+v, err = %v, want %+v", got, err, want)
+		}
+	})
+
+	t.Run("updating or resetting no User is not found", func(t *testing.T) {
+		s := newSubject(t)
+
+		if _, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: 404, Name: "Nobody"}); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("update: err = %v, want ErrNotFound", err)
+		}
+		err := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: 404, TokenHash: []byte("h"), ExpiresAt: at})
+		if !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("reset: err = %v, want ErrNotFound", err)
+		}
+	})
+
+	// users-and-access R18, R34.
+	t.Run("the Owner cannot be updated or reset, and stays as they are", func(t *testing.T) {
+		s := newSubject(t)
+		malee := s.AddUser(t, withPassword(owner("malee@example.com")))
+		session(t, s, malee, "laptop")
+
+		_, updateErr := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: malee.ID, Role: "staff", Status: "inactive"})
+		resetErr := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: malee.ID, TokenHash: []byte("h"), ExpiresAt: at})
+
+		if !errors.Is(updateErr, store.ErrTargetIsOwner) || !errors.Is(resetErr, store.ErrTargetIsOwner) {
+			t.Errorf("update: %v, reset: %v, want ErrTargetIsOwner", updateErr, resetErr)
+		}
+		got, err := s.Store.GetOwner(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != malee {
+			t.Errorf("owner = %+v, want %+v", got, malee)
+		}
+		if !live(s, "laptop") || linkWorks(s, "h") {
+			t.Errorf("session live = %v, link works = %v, want true and false", live(s, "laptop"), linkWorks(s, "h"))
+		}
+	})
+
+	// The schema's own refusals: nothing above the store may rely on them, but a fake
+	// that allowed these would hide a handler that stopped checking.
+	t.Run("refuses a blank name, an unknown Role or status and a second Owner", func(t *testing.T) {
+		s := newSubject(t)
+		s.AddUser(t, owner("malee@example.com"))
+		user := s.AddUser(t, staff("staff@example.com"))
+
+		for name, arg := range map[string]store.ChangeUserParams{
+			"blank name":     {ID: user.ID, Name: " "},
+			"unknown Role":   {ID: user.ID, Role: "manager"},
+			"unknown status": {ID: user.ID, Status: "deleted"},
+			"second Owner":   {ID: user.ID, Role: "owner"},
+		} {
+			if _, err := s.Store.UpdateUser(ctx, arg); err == nil {
+				t.Errorf("%s: err = nil, want a refusal", name)
+			}
+		}
+		got, err := s.Store.GetUserByEmail(ctx, user.Email)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != user {
+			t.Errorf("user = %+v, want it unchanged: %+v", got, user)
+		}
+	})
+
+	// users-and-access R16, R32.
+	t.Run("setting a User Inactive ends their sessions and Setup link and no one else's", func(t *testing.T) {
+		s := newSubject(t)
+		user := s.AddUser(t, staff("staff@example.com"))
+		other := s.AddUser(t, staff("other@example.com"))
+		session(t, s, user, "laptop")
+		session(t, s, user, "phone")
+		session(t, s, other, "other-laptop")
+		issue(t, s, user, "link")
+		issue(t, s, other, "other-link")
+
+		if _, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Status: "inactive"}); err != nil {
+			t.Fatal(err)
+		}
+
+		if live(s, "laptop") || live(s, "phone") || linkWorks(s, "link") {
+			t.Error("a session or the Setup link is still live")
+		}
+		if !live(s, "other-laptop") || !linkWorks(s, "other-link") {
+			t.Error("another User's session or Setup link ended")
+		}
+	})
+
+	t.Run("a change that leaves a User Active ends nothing", func(t *testing.T) {
+		s := newSubject(t)
+		user := s.AddUser(t, staff("staff@example.com"))
+		session(t, s, user, "laptop")
+		issue(t, s, user, "link")
+
+		_, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Name: "Napa", Role: "admin", Status: "active"})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !live(s, "laptop") || !linkWorks(s, "link") {
+			t.Error("a session or the Setup link ended")
+		}
+	})
+
+	// users-and-access R29, R31.
+	t.Run("resetting a User ends their password and sessions and replaces their Setup link", func(t *testing.T) {
+		s := newSubject(t)
+		user := s.AddUser(t, withPassword(staff("staff@example.com")))
+		other := s.AddUser(t, withPassword(staff("other@example.com")))
+		session(t, s, user, "laptop")
+		session(t, s, other, "other-laptop")
+		issue(t, s, user, "first")
+		issue(t, s, other, "other-link")
+
+		err := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("second"), ExpiresAt: at})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := s.Store.GetUserByEmail(ctx, user.Email)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.PasswordHash.Valid {
+			t.Errorf("password hash = %+v, want none", got.PasswordHash)
+		}
+		if live(s, "laptop") || linkWorks(s, "first") {
+			t.Error("the session or the earlier Setup link is still live")
+		}
+		if !linkWorks(s, "second") {
+			t.Error("the new Setup link does not work")
+		}
+		untouched, err := s.Store.GetUserByEmail(ctx, other.Email)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if untouched != other || !live(s, "other-laptop") || !linkWorks(s, "other-link") {
+			t.Error("another User changed")
+		}
+	})
+
+	// users-and-access R32.
+	t.Run("resetting an Inactive User changes nothing", func(t *testing.T) {
+		s := newSubject(t)
+		user := withPassword(staff("staff@example.com"))
+		user.Status = "inactive"
+		user = s.AddUser(t, user)
+
+		err := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("link"), ExpiresAt: at})
+
+		if !errors.Is(err, store.ErrUserInactive) {
+			t.Errorf("err = %v, want ErrUserInactive", err)
+		}
+		got, err := s.Store.GetUserByEmail(ctx, user.Email)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != user || linkWorks(s, "link") {
+			t.Errorf("user = %+v, link works = %v, want %+v and false", got, linkWorks(s, "link"), user)
+		}
+	})
+
+	t.Run("a reset whose Setup link cannot be stored changes nothing", func(t *testing.T) {
+		s := newSubject(t)
+		user := s.AddUser(t, withPassword(staff("staff@example.com")))
+		other := s.AddUser(t, staff("other@example.com"))
+		session(t, s, user, "laptop")
+		issue(t, s, other, "taken")
+
+		err := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("taken"), ExpiresAt: at})
+
+		if err == nil {
+			t.Fatal("err = nil, want a refusal")
+		}
+		got, err := s.Store.GetUserByEmail(ctx, user.Email)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != user || !live(s, "laptop") {
+			t.Errorf("user = %+v, session live = %v, want %+v and true", got, live(s, "laptop"), user)
 		}
 	})
 }

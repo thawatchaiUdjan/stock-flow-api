@@ -92,6 +92,7 @@ func registerSessions(api huma.API, deps Deps) {
 		Tags:        []string{"Sessions"},
 		Errors:      []int{http.StatusUnauthorized},
 	}, func(ctx context.Context, input *logInInput) (*logInOutput, error) {
+		failed := domainError(http.StatusUnauthorized, codeLoginFailed, "Email or password is incorrect.")
 		user, err := deps.Store.GetUserByEmail(ctx, input.Body.Email)
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			return nil, internalError(ctx, "log in: get user", err)
@@ -101,17 +102,22 @@ func registerSessions(api huma.API, deps Deps) {
 		// password (users-and-access R5, R16). The zero User has an empty hash.
 		verified := deps.PasswordHasher.Verify(user.PasswordHash.String, input.Body.Password)
 		if !verified || user.Status != statusActive {
-			return nil, domainError(http.StatusUnauthorized, codeLoginFailed, "Email or password is incorrect.")
+			return nil, failed
 		}
 
 		token := auth.NewToken()
-		err = deps.Store.CreateSession(ctx, store.CreateSessionParams{
-			TokenHash: auth.HashToken(token),
-			UserID:    user.ID,
-			ExpiresAt: deps.Now().Add(sessionLifetime),
+		started, err := deps.Store.CreateSession(ctx, store.CreateSessionParams{
+			TokenHash:    auth.HashToken(token),
+			UserID:       user.ID,
+			ExpiresAt:    deps.Now().Add(sessionLifetime),
+			PasswordHash: user.PasswordHash,
 		})
 		if err != nil {
 			return nil, internalError(ctx, "log in: create session", err)
+		}
+		// The User was set Inactive or reset while Verify ran (users-and-access R16, R31).
+		if started == 0 {
+			return nil, failed
 		}
 		out := &logInOutput{SetCookie: sessionCookie(token, cookieLifetime)}
 		out.Body = currentUser{Name: user.Name, Email: user.Email, Role: user.Role}

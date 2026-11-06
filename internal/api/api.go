@@ -18,13 +18,15 @@ import (
 type Store interface {
 	Ping(ctx context.Context) error
 	GetUserByEmail(ctx context.Context, email string) (store.User, error)
-	CreateSession(ctx context.Context, arg store.CreateSessionParams) error
+	CreateSession(ctx context.Context, arg store.CreateSessionParams) (int64, error)
 	GetSession(ctx context.Context, tokenHash []byte) (store.GetSessionRow, error)
 	DeleteSession(ctx context.Context, tokenHash []byte) error
 	GetSetupLinkUser(ctx context.Context, arg store.GetSetupLinkUserParams) (store.GetSetupLinkUserRow, error)
 	SetPassword(ctx context.Context, arg store.SetPasswordParams) (int64, error)
 	ListUsers(ctx context.Context) ([]store.ListUsersRow, error)
 	CreateUser(ctx context.Context, arg store.CreateUserParams) (store.CreateUserRow, error)
+	UpdateUser(ctx context.Context, arg store.ChangeUserParams) (store.ChangeUserRow, error)
+	ResetPassword(ctx context.Context, arg store.IssueSetupLinkParams) error
 }
 
 // PasswordHasher hashes and verifies passwords. Verify takes "" for a User with no

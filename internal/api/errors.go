@@ -17,6 +17,8 @@ const (
 	codeSessionEnded     = "session-ended"
 	codeSetupLinkInvalid = "setup-link-invalid"
 	codeEmailTaken       = "email-taken"
+	codeTargetIsOwner    = "target-is-owner"
+	codeUserInactive     = "user-inactive"
 )
 
 // errorCodes is the published list. Every code above must be in it.
@@ -25,6 +27,8 @@ var errorCodes = []struct{ code, meaning string }{
 	{codeSessionEnded, "The request carried a session cookie that matches no live session."},
 	{codeSetupLinkInvalid, "The Setup link is used, expired, replaced or was never issued."},
 	{codeEmailTaken, "A User has this email already, in any letter case."},
+	{codeTargetIsOwner, "The operation acts on a User, and that User is the Owner, who cannot be changed here."},
+	{codeUserInactive, "No Setup link can be issued for an Inactive User."},
 }
 
 func domainError(status int, code, detail string) huma.StatusError {

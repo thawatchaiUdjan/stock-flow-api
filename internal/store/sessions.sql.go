@@ -8,21 +8,44 @@ package store
 import (
 	"context"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createSession = `-- name: CreateSession :exec
-INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)
+const createSession = `-- name: CreateSession :execrows
+INSERT INTO sessions (token_hash, user_id, expires_at)
+SELECT $1, users.id, $2
+FROM users
+WHERE users.id = $3
+    AND users.status = 'active'
+    AND users.password_hash IS NOT DISTINCT FROM $4
+FOR SHARE OF users
 `
 
 type CreateSessionParams struct {
-	TokenHash []byte
-	UserID    int64
-	ExpiresAt time.Time
+	TokenHash    []byte
+	ExpiresAt    time.Time
+	UserID       int64
+	PasswordHash pgtype.Text
 }
 
-func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
-	_, err := q.db.Exec(ctx, createSession, arg.TokenHash, arg.UserID, arg.ExpiresAt)
-	return err
+// Starts a session only for the User as they were when the password was checked: Active,
+// with that password. A password check takes long enough for the Owner to set them
+// Inactive or reset them in the meantime, and then nothing is inserted (users-and-access
+// R16, R31). FOR SHARE makes it wait for a change under way, and makes store.Store's
+// UpdateUser and ResetPassword wait for this insert, so their later DELETE of the User's
+// sessions finds this one.
+func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createSession,
+		arg.TokenHash,
+		arg.ExpiresAt,
+		arg.UserID,
+		arg.PasswordHash,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteSession = `-- name: DeleteSession :exec
@@ -31,6 +54,15 @@ DELETE FROM sessions WHERE token_hash = $1
 
 func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
 	_, err := q.db.Exec(ctx, deleteSession, tokenHash)
+	return err
+}
+
+const deleteUserSessions = `-- name: DeleteUserSessions :exec
+DELETE FROM sessions WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserSessions(ctx context.Context, userID int64) error {
+	_, err := q.db.Exec(ctx, deleteUserSessions, userID)
 	return err
 }
 

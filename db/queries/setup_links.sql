@@ -3,6 +3,13 @@ INSERT INTO setup_links (user_id, token_hash, expires_at) VALUES ($1, $2, $3)
 ON CONFLICT (user_id) DO UPDATE
 SET token_hash = excluded.token_hash, expires_at = excluded.expires_at;
 
+-- name: DeleteSetupLink :exec
+DELETE FROM setup_links WHERE user_id = $1;
+
+-- Holds the User's Setup link, if any, until the transaction ends (store.Store says why).
+-- name: LockSetupLink :exec
+SELECT user_id FROM setup_links WHERE user_id = $1 FOR UPDATE;
+
 -- name: GetSetupLinkUser :one
 SELECT users.name, users.email
 FROM setup_links

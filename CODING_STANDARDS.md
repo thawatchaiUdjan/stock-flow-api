@@ -20,7 +20,7 @@
 - `cmd/install`: the developer command that issues the Owner's Setup link. Wiring, flags and printing; no logic.
 - `internal/api`: HTTP only. Huma operations with their input and output types, grouped one file per business area (`health.go`, later `orders.go`…). It depends on what it needs from the database through small interfaces declared here (`api.Store`), so the fast layer can fake them.
 - `internal/auth`: what logging in rests on outside HTTP: password hashing, tokens, issuing the Owner's Setup link.
-- `internal/store`: the database. SQL in `db/queries/*.sql`, the Go generated from it, and `pool.go`. No HTTP types.
+- `internal/store`: the database. SQL in `db/queries/*.sql`, the Go generated from it, `pool.go`, and `store.go`: `store.Store`, what the API runs on, with the rules that take several statements. No HTTP types.
 - `internal/store/storetest`: the contract suite of the store ports and the fake that passes it. Imported by tests only.
 - `internal/testdb`: real Postgres for slow tests. Imported only by `//go:build slow` files.
 - `db/migrations`: goose SQL, numbered sequentially, never edited once merged: fix forward with a new migration. A new table enables Row Level Security, with no policy, in the migration that creates it (ADR 0021).

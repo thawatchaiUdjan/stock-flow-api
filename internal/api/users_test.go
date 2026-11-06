@@ -283,15 +283,27 @@ func TestUsersOperationsRefuseEveryoneButTheOwner(t *testing.T) {
 		t.Run(role, func(t *testing.T) {
 			h := newHarness(t)
 			h.addUser(ownerSessionEmail, func(u *store.User) { u.Role = "owner" })
+			target := h.addUser("target@example.com")
+			targetSession := h.session("target@example.com")
 			cookie := h.loggedInAs(role)
 
 			list := h.listUsers(cookie)
 			create := h.createUser(newUser("Napa", "napa@example.com", "staff"), cookie)
+			update := h.updateUser(target.ID, inactive, cookie)
+			reset := h.resetPassword(target.ID, cookie)
 
 			assertProblem(t, list, http.StatusForbidden, "")
 			assertProblem(t, create, http.StatusForbidden, "")
+			assertProblem(t, update, http.StatusForbidden, "")
+			assertProblem(t, reset, http.StatusForbidden, "")
 			if _, err := h.store.GetUserByEmail(t.Context(), "napa@example.com"); err == nil {
 				t.Error("a User was created")
+			}
+			if rec := h.me(targetSession); rec.Code != http.StatusOK {
+				t.Errorf("the target's session: status = %d, want it untouched", rec.Code)
+			}
+			if rec := h.logIn("target@example.com", password); rec.Code != http.StatusOK {
+				t.Errorf("the target's password: status = %d, want it untouched", rec.Code)
 			}
 		})
 	}
@@ -303,6 +315,12 @@ func TestUsersOperationsNeedALiveSession(t *testing.T) {
 		"list users": (*harness).listUsers,
 		"create user": func(h *harness, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 			return h.createUser(newUser("Napa", "napa@example.com", "staff"), cookies...)
+		},
+		"update user": func(h *harness, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+			return h.updateUser(1, inactive, cookies...)
+		},
+		"reset password": func(h *harness, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+			return h.resetPassword(1, cookies...)
 		},
 	}
 	for name, operation := range operations {
@@ -325,6 +343,8 @@ func TestAccessIsCheckedBeforeTheBody(t *testing.T) {
 
 	assertProblem(t, h.createUser(invalid), http.StatusUnauthorized, "")
 	assertProblem(t, h.createUser(invalid, admin), http.StatusForbidden, "")
+	assertProblem(t, h.updateUser(1, invalid), http.StatusUnauthorized, "")
+	assertProblem(t, h.updateUser(1, invalid, admin), http.StatusForbidden, "")
 }
 
 func TestUsersOperationsAnswerAStoreFailureWithoutItsCause(t *testing.T) {

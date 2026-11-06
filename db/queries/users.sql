@@ -30,3 +30,20 @@ WITH new_user AS (
     SELECT id, sqlc.arg(token_hash), sqlc.arg(expires_at) FROM new_user
 )
 SELECT id, name, email, role, status FROM new_user;
+
+-- Holds the User's row until the transaction ends (store.Store says why).
+-- name: LockUser :one
+SELECT role, status FROM users WHERE id = $1 FOR UPDATE;
+
+-- An empty argument leaves its column as it is. The email is not here: it never changes
+-- (users-and-access R15).
+-- name: ChangeUser :one
+UPDATE users
+SET name = coalesce(nullif(sqlc.arg(name)::text, ''), name),
+    role = coalesce(nullif(sqlc.arg(role)::text, ''), role),
+    status = coalesce(nullif(sqlc.arg(status)::text, ''), status)
+WHERE id = sqlc.arg(id)
+RETURNING id, name, email, role, status, (password_hash IS NOT NULL)::boolean AS password_set;
+
+-- name: ClearPassword :exec
+UPDATE users SET password_hash = NULL WHERE id = $1;

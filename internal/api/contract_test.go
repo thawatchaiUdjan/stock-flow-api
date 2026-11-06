@@ -82,7 +82,7 @@ func TestTheContractDeclaresTheSessionCookie(t *testing.T) {
 	if scheme == nil || scheme.Type != "apiKey" || scheme.In != "cookie" || scheme.Name != "session" {
 		t.Errorf("scheme = %+v, want an apiKey in the session cookie", scheme)
 	}
-	for _, id := range []string{"end-session", "get-current-user", "list-users", "create-user"} {
+	for _, id := range []string{"end-session", "get-current-user", "list-users", "create-user", "update-user", "reset-password"} {
 		op := operations(t)[id]
 		if len(op.Security) != 1 {
 			t.Errorf("%s: security = %v, want the session scheme", id, op.Security)
@@ -122,6 +122,8 @@ func TestEveryOperationDeclaresItsErrors(t *testing.T) {
 		"set-password":     {"410", "422"},
 		"list-users":       {"401", "403"},
 		"create-user":      {"401", "403", "409", "422"},
+		"update-user":      {"401", "403", "404", "422"},
+		"reset-password":   {"401", "403", "404", "409"},
 	} {
 		for _, status := range statuses {
 			if ops[id].Responses[status] == nil {
@@ -143,6 +145,8 @@ func TestEveryOperationNamesItsErrorCodes(t *testing.T) {
 		"set-password":     "setup-link-invalid",
 		"list-users":       "session-ended",
 		"create-user":      "email-taken",
+		"update-user":      "target-is-owner",
+		"reset-password":   "user-inactive",
 	} {
 		if !strings.Contains(ops[id].Description, "`"+code+"`") {
 			t.Errorf("%s: description %q does not name %s", id, ops[id].Description, code)
@@ -157,7 +161,7 @@ func TestTheContractPublishesEveryErrorCode(t *testing.T) {
 	model := contract.OpenAPI().Components.Schemas.Map()["ErrorModel"]
 
 	typ := model.Properties["type"]
-	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken"}
+	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive"}
 	if !slices.Equal(typ.Enum, want) {
 		t.Errorf("type enum = %v, want %v", typ.Enum, want)
 	}
@@ -221,6 +225,51 @@ func TestTheContractOffersOnlyAdminAndStaffToCreateAUser(t *testing.T) {
 
 	if want := []any{"admin", "staff"}; !slices.Equal(body.Properties["role"].Enum, want) {
 		t.Errorf("role enum = %v, want %v", body.Properties["role"].Enum, want)
+	}
+}
+
+// users-and-access R16, R29, R31, R35.
+func TestTheContractPublishesUpdateUserAndResetPassword(t *testing.T) {
+	ops := operations(t)
+
+	for id, want := range map[string][2]string{
+		"update-user":    {http.MethodPatch, "/users/{id}"},
+		"reset-password": {http.MethodPost, "/users/{id}/reset-password"},
+	} {
+		op, ok := ops[id]
+		if !ok {
+			t.Errorf("no operation %q", id)
+			continue
+		}
+		if op.Method != want[0] || op.Path != want[1] {
+			t.Errorf("%s: %s %s, want %s %s", id, op.Method, op.Path, want[0], want[1])
+		}
+		for _, says := range []string{"Owner only", "`target-is-owner`", "`session-ended`"} {
+			if !strings.Contains(op.Description, says) {
+				t.Errorf("%s: description %q does not say %s", id, op.Description, says)
+			}
+		}
+	}
+}
+
+// users-and-access R9, R15, R35: the contract offers a name, Admin or Staff and a status,
+// each on its own, and neither an email nor the Role Owner.
+func TestTheContractOffersOnlyWhatUpdateUserCanChange(t *testing.T) {
+	_, contract := api.New(api.Deps{})
+
+	body := contract.OpenAPI().Components.Schemas.Map()["UpdateUserBody"]
+
+	if got, want := slices.Sorted(maps.Keys(body.Properties)), []string{"$schema", "name", "role", "status"}; !slices.Equal(got, want) {
+		t.Errorf("properties = %v, want %v", got, want)
+	}
+	if len(body.Required) != 0 {
+		t.Errorf("required = %v, want none: any of them will do", body.Required)
+	}
+	if want := []any{"admin", "staff"}; !slices.Equal(body.Properties["role"].Enum, want) {
+		t.Errorf("role enum = %v, want %v", body.Properties["role"].Enum, want)
+	}
+	if want := []any{"active", "inactive"}; !slices.Equal(body.Properties["status"].Enum, want) {
+		t.Errorf("status enum = %v, want %v", body.Properties["status"].Enum, want)
 	}
 }
 

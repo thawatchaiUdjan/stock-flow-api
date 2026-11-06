@@ -10,6 +10,61 @@ import (
 	"time"
 )
 
+const changeUser = `-- name: ChangeUser :one
+UPDATE users
+SET name = coalesce(nullif($1::text, ''), name),
+    role = coalesce(nullif($2::text, ''), role),
+    status = coalesce(nullif($3::text, ''), status)
+WHERE id = $4
+RETURNING id, name, email, role, status, (password_hash IS NOT NULL)::boolean AS password_set
+`
+
+type ChangeUserParams struct {
+	Name   string
+	Role   string
+	Status string
+	ID     int64
+}
+
+type ChangeUserRow struct {
+	ID          int64
+	Name        string
+	Email       string
+	Role        string
+	Status      string
+	PasswordSet bool
+}
+
+// An empty argument leaves its column as it is. The email is not here: it never changes
+// (users-and-access R15).
+func (q *Queries) ChangeUser(ctx context.Context, arg ChangeUserParams) (ChangeUserRow, error) {
+	row := q.db.QueryRow(ctx, changeUser,
+		arg.Name,
+		arg.Role,
+		arg.Status,
+		arg.ID,
+	)
+	var i ChangeUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.Role,
+		&i.Status,
+		&i.PasswordSet,
+	)
+	return i, err
+}
+
+const clearPassword = `-- name: ClearPassword :exec
+UPDATE users SET password_hash = NULL WHERE id = $1
+`
+
+func (q *Queries) ClearPassword(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, clearPassword, id)
+	return err
+}
+
 const createOwner = `-- name: CreateOwner :exec
 INSERT INTO users (name, email, role) VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING
 `
@@ -155,4 +210,21 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockUser = `-- name: LockUser :one
+SELECT role, status FROM users WHERE id = $1 FOR UPDATE
+`
+
+type LockUserRow struct {
+	Role   string
+	Status string
+}
+
+// Holds the User's row until the transaction ends (store.Store says why).
+func (q *Queries) LockUser(ctx context.Context, id int64) (LockUserRow, error) {
+	row := q.db.QueryRow(ctx, lockUser, id)
+	var i LockUserRow
+	err := row.Scan(&i.Role, &i.Status)
+	return i, err
 }

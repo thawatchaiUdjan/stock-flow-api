@@ -10,6 +10,15 @@ import (
 	"time"
 )
 
+const deleteSetupLink = `-- name: DeleteSetupLink :exec
+DELETE FROM setup_links WHERE user_id = $1
+`
+
+func (q *Queries) DeleteSetupLink(ctx context.Context, userID int64) error {
+	_, err := q.db.Exec(ctx, deleteSetupLink, userID)
+	return err
+}
+
 const getSetupLinkUser = `-- name: GetSetupLinkUser :one
 SELECT users.name, users.email
 FROM setup_links
@@ -48,6 +57,16 @@ type IssueSetupLinkParams struct {
 
 func (q *Queries) IssueSetupLink(ctx context.Context, arg IssueSetupLinkParams) error {
 	_, err := q.db.Exec(ctx, issueSetupLink, arg.UserID, arg.TokenHash, arg.ExpiresAt)
+	return err
+}
+
+const lockSetupLink = `-- name: LockSetupLink :exec
+SELECT user_id FROM setup_links WHERE user_id = $1 FOR UPDATE
+`
+
+// Holds the User's Setup link, if any, until the transaction ends (store.Store says why).
+func (q *Queries) LockSetupLink(ctx context.Context, userID int64) error {
+	_, err := q.db.Exec(ctx, lockSetupLink, userID)
 	return err
 }
 
