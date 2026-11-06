@@ -124,8 +124,8 @@ func registerSessions(api huma.API, deps Deps) {
 		if err != nil {
 			return nil, internalError(ctx, "log in: start session", err)
 		}
-		// The User was set Inactive or reset while Verify ran (users-and-access R16, R31);
-		// StartSession has logged it as a failed login.
+		// The User was set Inactive or reset, or the Owner's password was set, while Verify
+		// ran (users-and-access R16, R31, R34); StartSession has logged it as a failed login.
 		if !started {
 			return nil, failed
 		}

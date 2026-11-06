@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -37,7 +38,7 @@ type StartSessionParams struct {
 
 // StartSession starts the session and writes the entry in one transaction, so a login is
 // never in one without the other (users-and-access R36). When the User changed while the
-// password was checked (R16, R31) no session starts and the entry is a failed login
+// password was checked (R16, R31, R34) no session starts and the entry is a failed login
 // instead. It reports whether a session started.
 func (s *Store) StartSession(ctx context.Context, arg StartSessionParams) (started bool, err error) {
 	err = InTx(ctx, s.pool, func(q *Queries) error {
@@ -166,4 +167,48 @@ func (s *Store) ResetPassword(ctx context.Context, arg IssueSetupLinkParams) err
 		}
 		return nil
 	})
+}
+
+// SetPasswordParams is a password being set through the Setup link of TokenHash, at At.
+type SetPasswordParams struct {
+	PasswordHash string
+	TokenHash    []byte
+	At           time.Time
+}
+
+// SetPassword uses up the Setup link and sets its User's password, in one transaction.
+// Setting the Owner's password also ends all the Owner's sessions (users-and-access R34,
+// context ADR 0003); no one else's password-set ends any. It returns how many passwords
+// were set: 1, or 0 when the link doesn't work.
+//
+// No session of the Owner survives, however a login overlaps this. The password goes before
+// the sessions: it waits for every login holding the User (CreateSession's FOR SHARE), and a
+// login that comes later waits for this transaction and then finds the password changed.
+// The sessions go in a statement of their own, after that wait: its snapshot holds what
+// those logins committed, which one statement's snapshot, older than the wait, would miss.
+func (s *Store) SetPassword(ctx context.Context, arg SetPasswordParams) (used int64, err error) {
+	err = InTx(ctx, s.pool, func(q *Queries) error {
+		userID, err := q.UseSetupLink(ctx, UseSetupLinkParams{TokenHash: arg.TokenHash, At: arg.At})
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("use setup link: %w", err)
+		}
+		role, err := q.SetUserPassword(ctx, SetUserPasswordParams{PasswordHash: arg.PasswordHash, ID: userID})
+		if err != nil {
+			return fmt.Errorf("set user password: %w", err)
+		}
+		if role == roleOwner {
+			if err := q.DeleteUserSessions(ctx, userID); err != nil {
+				return fmt.Errorf("delete sessions: %w", err)
+			}
+		}
+		used = 1
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return used, nil
 }

@@ -31,10 +31,10 @@ type CreateSessionParams struct {
 
 // Starts a session only for the User as they were when the password was checked: Active,
 // with that password. A password check takes long enough for the Owner to set them
-// Inactive or reset them in the meantime, and then nothing is inserted (users-and-access
-// R16, R31). FOR SHARE makes it wait for a change under way, and makes store.Store's
-// UpdateUser and ResetPassword wait for this insert, so their later DELETE of the User's
-// sessions finds this one.
+// Inactive or reset them, or for the Owner's own password to be set, in the meantime, and
+// then nothing is inserted (users-and-access R16, R31, R34). FOR SHARE makes it wait for a
+// change under way, and makes store.Store's UpdateUser, ResetPassword and SetPassword wait
+// for this insert, so their later DELETE of the User's sessions finds this one.
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (int64, error) {
 	result, err := q.db.Exec(ctx, createSession,
 		arg.TokenHash,

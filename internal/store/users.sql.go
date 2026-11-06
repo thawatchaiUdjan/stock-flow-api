@@ -228,3 +228,21 @@ func (q *Queries) LockUser(ctx context.Context, id int64) (LockUserRow, error) {
 	err := row.Scan(&i.Role, &i.Status)
 	return i, err
 }
+
+const setUserPassword = `-- name: SetUserPassword :one
+UPDATE users SET password_hash = $1::text
+WHERE id = $2
+RETURNING role
+`
+
+type SetUserPasswordParams struct {
+	PasswordHash string
+	ID           int64
+}
+
+func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams) (string, error) {
+	row := q.db.QueryRow(ctx, setUserPassword, arg.PasswordHash, arg.ID)
+	var role string
+	err := row.Scan(&role)
+	return role, err
+}

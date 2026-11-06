@@ -355,6 +355,32 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}
 	})
 
+	// users-and-access R34, context ADR 0003: a login that checked the earlier password
+	// comes too late. How the two overlap only Postgres can show: see the slow tests.
+	t.Run("a login that checked the Owner's earlier password starts no session once a new one is set", func(t *testing.T) {
+		s := newSubject(t)
+		earlier := pgtype.Text{String: "earlier-hash", Valid: true}
+		user := owner("malee@example.com")
+		user.PasswordHash = earlier
+		malee := s.AddUser(t, user)
+		issue(t, s, malee, "link")
+		if used := setPassword(t, s, "link", at.Add(-time.Second)); used != 1 {
+			t.Fatalf("used = %d, want 1", used)
+		}
+
+		started, err := s.Store.StartSession(ctx, store.StartSessionParams{
+			Session: store.CreateSessionParams{TokenHash: []byte("laptop"), UserID: malee.ID, ExpiresAt: at, PasswordHash: earlier},
+			Entry:   entry(malee.Email, malee, "203.0.113.7"),
+		})
+
+		if err != nil || started {
+			t.Errorf("started = %v, err = %v, want false and nil", started, err)
+		}
+		if live(s, "laptop") {
+			t.Error("the login has a session")
+		}
+	})
+
 	t.Run("setting a password the Owner has no session for still works", func(t *testing.T) {
 		s := newSubject(t)
 		malee := s.AddUser(t, owner("malee@example.com"))
