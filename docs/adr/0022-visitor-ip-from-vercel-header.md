@@ -1,6 +1,6 @@
 # 0022: The visitor's IP address comes from X-Vercel-Forwarded-For
 
-Status: Proposed
+Status: Accepted
 Date: 2026-11-06
 
 ## Context
