@@ -1,5 +1,54 @@
 components:
   schemas:
+    CreateUserBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/CreateUserBody.json
+          format: uri
+          readOnly: true
+          type: string
+        email:
+          description: Compared without regard to letter case; it cannot change afterwards.
+          format: email
+          type: string
+        name:
+          description: The User's name, in any language.
+          pattern: \S
+          patternDescription: contain a character that is not a space
+          type: string
+        role:
+          description: The Role of the new User. There is one Owner, and it is not made here.
+          enum:
+            - admin
+            - staff
+          type: string
+      required:
+        - name
+        - email
+        - role
+      type: object
+    CreateUserOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/CreateUserOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        setupLink:
+          $ref: "#/components/schemas/SetupLink"
+          description: How the new User sets their password (users-and-access R20, R28).
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - user
+        - setupLink
+      type: object
     CurrentUser:
       additionalProperties: false
       properties:
@@ -86,11 +135,13 @@ components:
             login-failed: The email and password did not log anyone in. Identical for every cause.
             session-ended: The request carried a session cookie that matches no live session.
             setup-link-invalid: The Setup link is used, expired, replaced or was never issued.
+            email-taken: A User has this email already, in any letter case.
           enum:
             - about:blank
             - login-failed
             - session-ended
             - setup-link-invalid
+            - email-taken
           type: string
       type: object
     HealthOutputBody:
@@ -110,6 +161,24 @@ components:
           type: string
       required:
         - status
+      type: object
+    ListUsersOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/ListUsersOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        users:
+          description: Every User, in the order they were created.
+          items:
+            $ref: "#/components/schemas/User"
+          type: array
+      required:
+        - users
       type: object
     LogInInputBody:
       additionalProperties: false
@@ -186,6 +255,57 @@ components:
       required:
         - token
         - password
+      type: object
+    SetupLink:
+      additionalProperties: false
+      properties:
+        expiresAt:
+          description: When the Setup link stops working.
+          format: date-time
+          type: string
+        token:
+          description: "The Setup link's token. It is shown only this once: the API keeps a hash."
+          type: string
+      required:
+        - token
+        - expiresAt
+      type: object
+    User:
+      additionalProperties: false
+      properties:
+        email:
+          description: As it was entered when the User was created. It never changes.
+          type: string
+        id:
+          description: Identifies the User. It never changes.
+          format: int64
+          type: integer
+        name:
+          description: The User's name, in any language.
+          type: string
+        passwordSet:
+          description: False until the person sets a password through a Setup link.
+          type: boolean
+        role:
+          description: The User's Role.
+          enum:
+            - owner
+            - admin
+            - staff
+          type: string
+        status:
+          description: An Inactive User cannot log in.
+          enum:
+            - active
+            - inactive
+          type: string
+      required:
+        - id
+        - name
+        - email
+        - role
+        - status
+        - passwordSet
       type: object
   securitySchemes:
     session:
@@ -406,3 +526,88 @@ paths:
       summary: Read who a Setup link is for
       tags:
         - Setup links
+  /users:
+    get:
+      description: "Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: list-users
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListUsersOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: List the Users
+      tags:
+        - Users
+    post:
+      description: "Issues the new User's Setup link and answers its token, which is not shown again. Answers 409 `email-taken` when a User has the email already, in any letter case. Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: create-user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateUserOutputBody"
+          description: Created
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Create a User
+      tags:
+        - Users

@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"time"
 )
 
 const createOwner = `-- name: CreateOwner :exec
@@ -23,6 +24,58 @@ type CreateOwnerParams struct {
 func (q *Queries) CreateOwner(ctx context.Context, arg CreateOwnerParams) error {
 	_, err := q.db.Exec(ctx, createOwner, arg.Name, arg.Email)
 	return err
+}
+
+const createUser = `-- name: CreateUser :one
+WITH new_user AS (
+    INSERT INTO users (name, email, role)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (lower(email)) DO NOTHING
+    RETURNING id, name, email, role, status
+), link AS (
+    INSERT INTO setup_links (user_id, token_hash, expires_at)
+    SELECT id, $4, $5 FROM new_user
+)
+SELECT id, name, email, role, status FROM new_user
+`
+
+type CreateUserParams struct {
+	Name      string
+	Email     string
+	Role      string
+	TokenHash []byte
+	ExpiresAt time.Time
+}
+
+type CreateUserRow struct {
+	ID     int64
+	Name   string
+	Email  string
+	Role   string
+	Status string
+}
+
+// The User and their Setup link are one statement, so there is never a User nobody can
+// give a password. An email already in use (compared without regard to letter case,
+// users-and-access R3) inserts nothing, issues no link and returns no row: pgx.ErrNoRows,
+// which is store.ErrNotFound.
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
+	row := q.db.QueryRow(ctx, createUser,
+		arg.Name,
+		arg.Email,
+		arg.Role,
+		arg.TokenHash,
+		arg.ExpiresAt,
+	)
+	var i CreateUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.Role,
+		&i.Status,
+	)
+	return i, err
 }
 
 const getOwner = `-- name: GetOwner :one
@@ -60,4 +113,46 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.PasswordHash,
 	)
 	return i, err
+}
+
+const listUsers = `-- name: ListUsers :many
+SELECT id, name, email, role, status, (password_hash IS NOT NULL)::boolean AS password_set
+FROM users
+ORDER BY id
+`
+
+type ListUsersRow struct {
+	ID          int64
+	Name        string
+	Email       string
+	Role        string
+	Status      string
+	PasswordSet bool
+}
+
+func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
+	rows, err := q.db.Query(ctx, listUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsersRow
+	for rows.Next() {
+		var i ListUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Email,
+			&i.Role,
+			&i.Status,
+			&i.PasswordSet,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

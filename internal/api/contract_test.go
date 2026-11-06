@@ -82,7 +82,7 @@ func TestTheContractDeclaresTheSessionCookie(t *testing.T) {
 	if scheme == nil || scheme.Type != "apiKey" || scheme.In != "cookie" || scheme.Name != "session" {
 		t.Errorf("scheme = %+v, want an apiKey in the session cookie", scheme)
 	}
-	for _, id := range []string{"end-session", "get-current-user"} {
+	for _, id := range []string{"end-session", "get-current-user", "list-users", "create-user"} {
 		op := operations(t)[id]
 		if len(op.Security) != 1 {
 			t.Errorf("%s: security = %v, want the session scheme", id, op.Security)
@@ -120,6 +120,8 @@ func TestEveryOperationDeclaresItsErrors(t *testing.T) {
 		"get-current-user": {"401"},
 		"read-setup-link":  {"410"},
 		"set-password":     {"410", "422"},
+		"list-users":       {"401", "403"},
+		"create-user":      {"401", "403", "409", "422"},
 	} {
 		for _, status := range statuses {
 			if ops[id].Responses[status] == nil {
@@ -139,6 +141,8 @@ func TestEveryOperationNamesItsErrorCodes(t *testing.T) {
 		"get-current-user": "session-ended",
 		"read-setup-link":  "setup-link-invalid",
 		"set-password":     "setup-link-invalid",
+		"list-users":       "session-ended",
+		"create-user":      "email-taken",
 	} {
 		if !strings.Contains(ops[id].Description, "`"+code+"`") {
 			t.Errorf("%s: description %q does not name %s", id, ops[id].Description, code)
@@ -153,7 +157,7 @@ func TestTheContractPublishesEveryErrorCode(t *testing.T) {
 	model := contract.OpenAPI().Components.Schemas.Map()["ErrorModel"]
 
 	typ := model.Properties["type"]
-	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid"}
+	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken"}
 	if !slices.Equal(typ.Enum, want) {
 		t.Errorf("type enum = %v, want %v", typ.Enum, want)
 	}
@@ -183,5 +187,50 @@ func TestTheContractListsTheThreeRoles(t *testing.T) {
 
 	if want := []any{"owner", "admin", "staff"}; !slices.Equal(role.Enum, want) {
 		t.Errorf("role enum = %v, want %v", role.Enum, want)
+	}
+}
+
+// users-and-access R10, R33.
+func TestTheContractPublishesListUsersAndCreateUser(t *testing.T) {
+	ops := operations(t)
+
+	for id, want := range map[string][2]string{
+		"list-users":  {http.MethodGet, "/users"},
+		"create-user": {http.MethodPost, "/users"},
+	} {
+		op, ok := ops[id]
+		if !ok {
+			t.Errorf("no operation %q", id)
+			continue
+		}
+		if op.Method != want[0] || op.Path != want[1] {
+			t.Errorf("%s: %s %s, want %s %s", id, op.Method, op.Path, want[0], want[1])
+		}
+		// users-and-access R10: the contract says who may call it.
+		if !strings.Contains(op.Description, "Owner") {
+			t.Errorf("%s: description %q does not say it is for the Owner", id, op.Description)
+		}
+	}
+}
+
+// users-and-access R9, R10: the contract offers Admin and Staff to create, never Owner.
+func TestTheContractOffersOnlyAdminAndStaffToCreateAUser(t *testing.T) {
+	_, contract := api.New(api.Deps{})
+
+	body := contract.OpenAPI().Components.Schemas.Map()["CreateUserBody"]
+
+	if want := []any{"admin", "staff"}; !slices.Equal(body.Properties["role"].Enum, want) {
+		t.Errorf("role enum = %v, want %v", body.Properties["role"].Enum, want)
+	}
+}
+
+// An empty list is [], never null, so the web client types it as an array.
+func TestTheContractListsUsersAsAnArrayThatIsNeverNull(t *testing.T) {
+	_, contract := api.New(api.Deps{})
+
+	users := contract.OpenAPI().Components.Schemas.Map()["ListUsersOutputBody"].Properties["users"]
+
+	if users.Type != "array" || users.Nullable {
+		t.Errorf("users: type %q, nullable %v, want a plain array", users.Type, users.Nullable)
 	}
 }

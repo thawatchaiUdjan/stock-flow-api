@@ -30,6 +30,12 @@ type SetupLink struct {
 	ExpiresAt time.Time
 }
 
+// NewSetupLink makes a link for the person with email, valid from now for 24 hours
+// (users-and-access R27). Storing the hash of its token is the caller's job.
+func NewSetupLink(now time.Time, email string) SetupLink {
+	return SetupLink{Token: NewToken(), Email: email, ExpiresAt: now.Add(setupLinkLifetime)}
+}
+
 // IssueOwnerSetupLink creates the Owner when there is none, and issues their Setup link,
 // which replaces any earlier one (users-and-access R9, R34). name and email are used only
 // when creating: an existing Owner keeps theirs. Run it in one transaction.
@@ -50,7 +56,7 @@ func IssueOwnerSetupLink(ctx context.Context, q OwnerStore, now time.Time, name,
 		return SetupLink{}, fmt.Errorf("get owner: %w", err)
 	}
 
-	link := SetupLink{Token: NewToken(), Email: owner.Email, ExpiresAt: now.Add(setupLinkLifetime)}
+	link := NewSetupLink(now, owner.Email)
 	err = q.IssueSetupLink(ctx, store.IssueSetupLinkParams{
 		UserID: owner.ID, TokenHash: HashToken(link.Token), ExpiresAt: link.ExpiresAt,
 	})
