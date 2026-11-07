@@ -20,6 +20,29 @@ type LoginLog struct {
 	UserAgent string
 }
 
+type Order struct {
+	ID          int64
+	Number      int64
+	Customer    string
+	Note        string
+	Total       int64
+	Status      string
+	CreatedBy   int64
+	CreatedAt   time.Time
+	CompletedBy pgtype.Int8
+	CompletedAt pgtype.Timestamptz
+	CancelledBy pgtype.Int8
+	CancelledAt pgtype.Timestamptz
+}
+
+type OrderLine struct {
+	ID        int64
+	OrderID   int64
+	ProductID int64
+	Quantity  int32
+	Price     int64
+}
+
 type Product struct {
 	ID           int64
 	Name         string
@@ -53,6 +76,7 @@ type StockMovement struct {
 	At         time.Time
 	UserID     int64
 	Note       string
+	OrderID    pgtype.Int8
 }
 
 type User struct {

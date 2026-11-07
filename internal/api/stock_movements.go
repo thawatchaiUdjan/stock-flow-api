@@ -39,8 +39,7 @@ type stockMovement struct {
 	StockAfter int32                `json:"stockAfter" doc:"The Product's stock just after this movement. Never below 0."`
 	User       stockMovementUser    `json:"user" doc:"The User who made it."`
 	Note       string               `json:"note" doc:"Why, in up to 200 characters. Empty when there is none; an adjustment always has one."`
-	// stock-movements R11: one made by an Order links to it. Orders do not exist yet, so it
-	// is always null until they do.
+	// stock-movements R11: one made by an Order links to it.
 	Order *stockMovementOrder `json:"order" doc:"The Order that made it, or null for receive and adjustment."`
 }
 
@@ -56,13 +55,17 @@ func (stockMovement) TransformSchema(_ huma.Registry, s *huma.Schema) *huma.Sche
 }
 
 func stockMovementOf(row store.ListStockMovementsRow) stockMovement {
-	return stockMovement{
+	m := stockMovement{
 		ID: row.ID, At: row.At, Kind: row.Kind,
 		Product: stockMovementProduct{ID: row.ProductID, Name: row.ProductName, SKU: row.ProductSku},
 		Change:  row.Change, StockAfter: row.StockAfter,
 		User: stockMovementUser{ID: row.UserID, Name: row.UserName},
 		Note: row.Note,
 	}
+	if row.OrderID.Valid {
+		m.Order = &stockMovementOrder{ID: row.OrderID.Int64, Number: row.OrderNumber.Int64}
+	}
+	return m
 }
 
 type listStockMovementsInput struct {
