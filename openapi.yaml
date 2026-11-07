@@ -1478,7 +1478,7 @@ paths:
         - Orders
   /orders/{number}/cancel:
     post:
-      description: "Records who cancelled it and when, and gives each line's quantity back to its Product's stock as one cancellation movement per line, even to a Product Archived since. Answers 409 `order-not-pending` when it is completed or cancelled already. Answers a plain 404 when there is no such Order. Owner and Admins only: answers 403 to Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      description: "Records who cancelled it and when, and gives each line's quantity back to its Product's stock as one cancellation movement per line, even to a Product Archived since. Answers 409 `order-not-pending` when it is completed or cancelled already, and a plain 409 when giving the stock back would take it past 2147483647. Answers a plain 404 when there is no such Order. Owner and Admins only: answers 403 to Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
       operationId: cancel-order
       parameters:
         - description: The Order's number.

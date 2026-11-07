@@ -239,7 +239,8 @@ func TestAnOrderKeepsThePriceItWasCreatedWith(t *testing.T) {
 	}
 }
 
-// orders R2: numbers count up from 1, and one used by a refused Order is never used again.
+// orders R2: numbers count up from 1 in the order Orders are created, each used once,
+// even after a refused Order.
 func TestOrderNumbersCountUpAndAreNeverReused(t *testing.T) {
 	h := newHarness(t)
 	s := h.shop()
@@ -478,6 +479,22 @@ func TestACompletedOrCancelledOrderIsFinal(t *testing.T) {
 	}
 	if stock := h.stockOf(tea.ID, s.staff); stock != 9 {
 		t.Errorf("stock = %d, want 9", stock)
+	}
+}
+
+// A Cancel whose stock would not fit is refused as a conflict, not a server error.
+func TestACancelThatWouldTakeStockPastItsLimitIsRefused(t *testing.T) {
+	h := newHarness(t)
+	s := h.shop()
+	tea := h.seed(store.Product{Name: "Thai tea", Sku: "TEA-01", Price: 100, Stock: math.MaxInt32})
+	h.mustCreateOrder(s.staff, lineIn{tea.ID, 1})
+	h.receive(map[string]any{"productId": tea.ID, "quantity": 1}, s.staff)
+
+	rec := h.cancelOrder(1, s.owner)
+
+	assertProblem(t, rec, http.StatusConflict, "")
+	if got := decode[orderBody](t, h.getOrder(1, s.staff)); got.Status != "pending" {
+		t.Errorf("status = %q, want pending", got.Status)
 	}
 }
 

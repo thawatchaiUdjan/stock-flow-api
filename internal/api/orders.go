@@ -154,7 +154,7 @@ func (in *createOrderInput) Resolve(huma.Context) []error {
 	return errs
 }
 
-const orderNotFound = "Answers a plain 404 when there is no such Order"
+const orderNotFoundErrors = "Answers a plain 404 when there is no such Order."
 
 func registerOrders(api huma.API, deps Deps) {
 	huma.Register(api, huma.Operation{
@@ -200,7 +200,7 @@ func registerOrders(api huma.API, deps Deps) {
 		Method:      http.MethodGet,
 		Path:        "/orders/{number}",
 		Summary:     "Get an Order",
-		Description: "Every Role sees every Order, with its lines. " + orderNotFound + ". " + sessionErrors,
+		Description: "Every Role sees every Order, with its lines. " + orderNotFoundErrors + " " + sessionErrors,
 		Tags:        []string{"Orders"},
 		Security:    sessionSecurity,
 		Middlewares: huma.Middlewares{anyRole(api, deps)},
@@ -227,7 +227,7 @@ func registerOrders(api huma.API, deps Deps) {
 		Security:      sessionSecurity,
 		Middlewares:   huma.Middlewares{anyRole(api, deps)},
 		DefaultStatus: http.StatusCreated,
-		Errors:        []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusConflict},
+		Errors:        []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusConflict, http.StatusUnprocessableEntity},
 	}, func(ctx context.Context, input *createOrderInput) (*orderOutput, error) {
 		lines := make([]store.OrderLineParams, 0, len(input.Body.Lines))
 		for _, l := range input.Body.Lines {
@@ -260,17 +260,17 @@ func registerOrders(api huma.API, deps Deps) {
 		Summary:     "Complete an Order",
 		Description: "Every Role may, once the customer has paid and has the goods. Records who completed it and when; " +
 			"no stock changes. Answers 409 `order-not-pending` when it is completed or cancelled already. " +
-			orderNotFound + ". " + sessionErrors,
+			orderNotFoundErrors + " " + sessionErrors,
 		Tags:        []string{"Orders"},
 		Security:    sessionSecurity,
 		Middlewares: huma.Middlewares{anyRole(api, deps)},
 		Errors:      []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusConflict},
 	}, func(ctx context.Context, input *orderNumberInput) (*orderOutput, error) {
-		done, err := deps.Store.CompleteOrder(ctx, store.FinishOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, Now: deps.Now})
+		completed, err := deps.Store.CompleteOrder(ctx, store.FinishOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, Now: deps.Now})
 		if err != nil {
 			return nil, orderError(ctx, "complete order", err)
 		}
-		return &orderOutput{Body: orderOf(done)}, nil
+		return &orderOutput{Body: orderOf(completed)}, nil
 	})
 
 	huma.Register(api, huma.Operation{
@@ -280,18 +280,19 @@ func registerOrders(api huma.API, deps Deps) {
 		Summary:     "Cancel an Order",
 		Description: "Records who cancelled it and when, and gives each line's quantity back to its Product's stock " +
 			"as one cancellation movement per line, even to a Product Archived since. " +
-			"Answers 409 `order-not-pending` when it is completed or cancelled already. " +
-			orderNotFound + ". " + ownerOrAdminErrors,
+			"Answers 409 `order-not-pending` when it is completed or cancelled already, " +
+			"and a plain 409 when giving the stock back would take it past 2147483647. " +
+			orderNotFoundErrors + " " + ownerOrAdminErrors,
 		Tags:        []string{"Orders"},
 		Security:    sessionSecurity,
 		Middlewares: huma.Middlewares{ownerOrAdmin(api, deps)},
 		Errors:      []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict},
 	}, func(ctx context.Context, input *orderNumberInput) (*orderOutput, error) {
-		done, err := deps.Store.CancelOrder(ctx, store.FinishOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, Now: deps.Now})
+		cancelled, err := deps.Store.CancelOrder(ctx, store.FinishOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, Now: deps.Now})
 		if err != nil {
 			return nil, orderError(ctx, "cancel order", err)
 		}
-		return &orderOutput{Body: orderOf(done)}, nil
+		return &orderOutput{Body: orderOf(cancelled)}, nil
 	})
 }
 
@@ -302,6 +303,8 @@ func orderError(ctx context.Context, doing string, err error) huma.StatusError {
 		return huma.Error404NotFound("There is no such Order.")
 	case errors.Is(err, store.ErrOrderNotPending): // orders R13
 		return domainError(http.StatusConflict, codeOrderNotPending, "This Order is completed or cancelled already.")
+	case errors.Is(err, store.ErrStockTooLarge): // a Cancel's stock coming back
+		return huma.Error409Conflict("Giving this Order's stock back would take a Product's stock past 2147483647.")
 	}
 	return internalError(ctx, doing, err)
 }

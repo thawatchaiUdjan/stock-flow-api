@@ -155,7 +155,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}
 	})
 
-	t.Run("Order numbers count up and a refused Order's number is never used", func(t *testing.T) {
+	t.Run("Order numbers count up from 1, one per Order, even after a refused one", func(t *testing.T) {
 		s := newSubject(t)
 		user := s.AddUser(t, staff("somchai@example.com"))
 		tea := s.AddProduct(t, priced("Thai tea", "TEA-01", 100, 10))
@@ -351,6 +351,25 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 				!m.At.Equal(at.Add(3600e9)) || m.OrderID != link || m.OrderNumber.Int64 != 1 {
 				t.Errorf("cancellation %d = %+v, want %+v by the Admin, linked to Order 1", i, m, want)
 			}
+		}
+	})
+
+	t.Run("a Cancel that would take stock past what it can hold is refused and changes nothing", func(t *testing.T) {
+		s := newSubject(t)
+		user := s.AddUser(t, staff("somchai@example.com"))
+		tea := s.AddProduct(t, priced("Thai tea", "TEA-01", 100, math.MaxInt32))
+		createOrder(t, s, newOrder(user, "", line(tea, 1)))
+		if _, err := s.Store.MoveStock(ctx, move(store.KindReceive, user, "", change(tea, 1))); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := s.Store.CancelOrder(ctx, finish(1, user))
+
+		if !errors.Is(err, store.ErrStockTooLarge) {
+			t.Errorf("err = %v, want ErrStockTooLarge", err)
+		}
+		if got, _ := s.Store.GetOrder(ctx, 1); got.Status != "pending" || stockOf(t, s, tea.ID) != math.MaxInt32 {
+			t.Errorf("order %s, stock %d; want it Pending and the stock as it was", got.Status, stockOf(t, s, tea.ID))
 		}
 	})
 
