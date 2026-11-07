@@ -802,4 +802,5 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 	runProducts(t, newSubject)
 	runStockMovements(t, newSubject)
 	runOrders(t, newSubject)
+	runReports(t, newSubject)
 }

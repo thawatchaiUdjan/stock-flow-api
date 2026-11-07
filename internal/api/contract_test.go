@@ -632,3 +632,37 @@ func TestTheContractDescribesAnOrder(t *testing.T) {
 		t.Errorf("quantity = %+v, want an integer of at least 1", q)
 	}
 }
+
+// dashboard-and-reports R3-R8, users-and-access R11: Get Dashboard and Get Sales report
+// are for the Owner and Admins, and the report's range can be refused.
+func TestTheContractPublishesTheDashboardAndTheSalesReport(t *testing.T) {
+	ops := operations(t)
+
+	for id, want := range map[string]struct {
+		path     string
+		statuses []string
+	}{
+		"get-dashboard":    {"/dashboard", []string{"200", "401", "403"}},
+		"get-sales-report": {"/reports/sales", []string{"200", "401", "403", "422"}},
+	} {
+		op, ok := ops[id]
+		if !ok {
+			t.Errorf("no operation %q", id)
+			continue
+		}
+		if op.Method != http.MethodGet || op.Path != want.path || len(op.Security) != 1 {
+			t.Errorf("%s: %s %s with security %v, want GET %s with the session scheme", id, op.Method, op.Path, op.Security, want.path)
+		}
+		for _, status := range want.statuses {
+			if op.Responses[status] == nil {
+				t.Errorf("%s does not declare %s; it has %v", id, status, slices.Sorted(maps.Keys(op.Responses)))
+			}
+		}
+		if !strings.Contains(op.Description, "Staff") || !strings.Contains(op.Description, "`session-ended`") {
+			t.Errorf("%s: description %q does not say Staff are refused and a session is needed", id, op.Description)
+		}
+	}
+	if ops["get-dashboard"].Responses["422"] != nil {
+		t.Errorf("get-dashboard takes no input, but declares 422")
+	}
+}

@@ -42,6 +42,9 @@ type Store interface {
 	CreateOrder(ctx context.Context, arg store.CreateOrderParams) (store.OrderDetail, error)
 	CompleteOrder(ctx context.Context, arg store.FinishOrderParams) (store.OrderDetail, error)
 	CancelOrder(ctx context.Context, arg store.FinishOrderParams) (store.OrderDetail, error)
+	SalesByDay(ctx context.Context, arg store.SalesByDayParams) ([]store.SalesByDayRow, error)
+	TopSellingProducts(ctx context.Context, arg store.TopSellingProductsParams) ([]store.TopSellingProductsRow, error)
+	ListProductsToRestock(ctx context.Context, rowLimit int32) ([]store.Product, error)
 }
 
 // PasswordHasher hashes and verifies passwords. Verify takes "" for a User with no
@@ -73,6 +76,7 @@ func New(deps Deps) (http.Handler, huma.API) {
 	registerProducts(api, deps)
 	registerStockMovements(api, deps)
 	registerOrders(api, deps)
+	registerReports(api, deps)
 	publishErrorCodes(api)
 
 	return router, api
