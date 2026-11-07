@@ -29,6 +29,7 @@ type Fake struct {
 	sessions map[string]store.Session
 	links    map[int64]store.SetupLink
 	log      []store.ListLoginLogRow
+	products []store.Product
 }
 
 var _ Store = (*Fake)(nil)

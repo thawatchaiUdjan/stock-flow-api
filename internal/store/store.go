@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -15,6 +16,8 @@ var (
 	ErrTargetIsOwner = errors.New("the target is the Owner")
 	// ErrUserInactive refuses a Setup link for an Inactive User (users-and-access R32).
 	ErrUserInactive = errors.New("the User is Inactive")
+	// ErrSKUTaken refuses a SKU another Product has, in any letter case (products R3).
+	ErrSKUTaken = errors.New("the SKU is taken")
 )
 
 const (
@@ -211,4 +214,28 @@ func (s *Store) SetPassword(ctx context.Context, arg SetPasswordParams) (used in
 		return 0, err
 	}
 	return used, nil
+}
+
+// CreateProduct adds a Product with stock 0, Active (products R7, R11). It answers
+// ErrSKUTaken when another Product has the SKU, in any letter case (products R3).
+func (s *Store) CreateProduct(ctx context.Context, arg InsertProductParams) (Product, error) {
+	created, err := s.Queries.InsertProduct(ctx, arg)
+	return created, skuTaken(err)
+}
+
+// UpdateProduct changes what arg names and leaves the rest, never the stock. It answers
+// ErrNotFound for no such Product and ErrSKUTaken when another Product has the new SKU, in
+// any letter case (products R3).
+func (s *Store) UpdateProduct(ctx context.Context, arg ChangeProductParams) (Product, error) {
+	updated, err := s.Queries.ChangeProduct(ctx, arg)
+	return updated, skuTaken(err)
+}
+
+// skuTaken turns the database's refusal of a second SKU into ErrSKUTaken.
+func skuTaken(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.ConstraintName == "products_sku_key" {
+		return ErrSKUTaken
+	}
+	return err
 }

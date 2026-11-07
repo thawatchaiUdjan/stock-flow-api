@@ -28,6 +28,9 @@ type Store interface {
 type Subject struct {
 	Store   Store
 	AddUser func(t *testing.T, user store.User) store.User
+	// AddProduct seeds a Product with any stock and Minimum stock, because the port has no
+	// operation that sets stock (context ADR 0006).
+	AddProduct func(t *testing.T, product store.Product) store.Product
 }
 
 // at is a fixed instant with Postgres's microsecond precision, so it survives a round trip.
@@ -796,4 +799,5 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 	})
 
 	runLoginLog(t, newSubject)
+	runProducts(t, newSubject)
 }

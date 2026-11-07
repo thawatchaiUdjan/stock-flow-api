@@ -161,7 +161,7 @@ func TestTheContractPublishesEveryErrorCode(t *testing.T) {
 	model := contract.OpenAPI().Components.Schemas.Map()["ErrorModel"]
 
 	typ := model.Properties["type"]
-	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive"}
+	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken"}
 	if !slices.Equal(typ.Enum, want) {
 		t.Errorf("type enum = %v, want %v", typ.Enum, want)
 	}
@@ -281,5 +281,144 @@ func TestTheContractListsUsersAsAnArrayThatIsNeverNull(t *testing.T) {
 
 	if users.Type != "array" || users.Nullable {
 		t.Errorf("users: type %q, nullable %v, want a plain array", users.Type, users.Nullable)
+	}
+}
+
+// The ticket's four operations, and who may call them (users-and-access R11).
+func TestTheContractPublishesTheFourProductOperations(t *testing.T) {
+	ops := operations(t)
+
+	for id, want := range map[string][2]string{
+		"list-products":  {http.MethodGet, "/products"},
+		"get-product":    {http.MethodGet, "/products/{id}"},
+		"create-product": {http.MethodPost, "/products"},
+		"update-product": {http.MethodPatch, "/products/{id}"},
+	} {
+		op, ok := ops[id]
+		if !ok {
+			t.Errorf("no operation %q", id)
+			continue
+		}
+		if op.Method != want[0] || op.Path != want[1] {
+			t.Errorf("%s: %s %s, want %s %s", id, op.Method, op.Path, want[0], want[1])
+		}
+		if len(op.Security) != 1 {
+			t.Errorf("%s: security = %v, want the session scheme", id, op.Security)
+		}
+		for _, says := range []string{"`session-ended`"} {
+			if !strings.Contains(op.Description, says) {
+				t.Errorf("%s: description %q does not say %s", id, op.Description, says)
+			}
+		}
+	}
+	for _, id := range []string{"create-product", "update-product"} {
+		if !strings.Contains(ops[id].Description, "Staff") || !strings.Contains(ops[id].Description, "`sku-taken`") {
+			t.Errorf("%s: description %q does not say Staff are refused and when sku-taken", id, ops[id].Description)
+		}
+		for _, status := range []string{"401", "403", "409", "422"} {
+			if ops[id].Responses[status] == nil {
+				t.Errorf("%s does not declare %s", id, status)
+			}
+		}
+	}
+	for id, statuses := range map[string][]string{"list-products": {"401", "422"}, "get-product": {"401", "404", "422"}} {
+		for _, status := range statuses {
+			if ops[id].Responses[status] == nil {
+				t.Errorf("%s does not declare %s", id, status)
+			}
+		}
+		if ops[id].Responses["403"] != nil {
+			t.Errorf("%s declares 403, but every Role may call it", id)
+		}
+	}
+}
+
+// Money is whole satang (context spec, Money): the contract has no floating-point amount.
+func TestTheContractHasPricesInWholeSatang(t *testing.T) {
+	_, contract := api.New(api.Deps{})
+	schemas := contract.OpenAPI().Components.Schemas.Map()
+
+	for name, price := range map[string]*huma.Schema{
+		"Product":           schemas["Product"].Properties["price"],
+		"CreateProductBody": schemas["CreateProductBody"].Properties["price"],
+		"UpdateProductBody": schemas["UpdateProductBody"].Properties["price"],
+	} {
+		if price.Type != "integer" || price.Format != "int64" {
+			t.Errorf("%s.price: type %q, format %q, want an int64 integer", name, price.Type, price.Format)
+		}
+	}
+	if p := schemas["CreateProductBody"].Properties["price"]; *p.Minimum != 0 || *p.Maximum != 999999999 {
+		t.Errorf("price bounds = %v to %v, want 0 to 999999999", *p.Minimum, *p.Maximum)
+	}
+}
+
+// products R6, R7, R11: the contract offers no way to set stock; a new Product is Active
+// and its status is changed by Update.
+func TestTheContractOffersOnlyWhatCreateAndUpdateProductCanSet(t *testing.T) {
+	_, contract := api.New(api.Deps{})
+	schemas := contract.OpenAPI().Components.Schemas.Map()
+
+	create, update := schemas["CreateProductBody"], schemas["UpdateProductBody"]
+
+	if got, want := slices.Sorted(maps.Keys(create.Properties)), []string{"$schema", "minimumStock", "name", "price", "sku", "unit"}; !slices.Equal(got, want) {
+		t.Errorf("create properties = %v, want %v", got, want)
+	}
+	if want := []string{"name", "price", "sku", "unit"}; !slices.Equal(slices.Sorted(slices.Values(create.Required)), want) {
+		t.Errorf("create requires %v, want %v: the Minimum stock is 0 when left out", create.Required, want)
+	}
+	if got, want := slices.Sorted(maps.Keys(update.Properties)), []string{"$schema", "minimumStock", "name", "price", "sku", "status", "unit"}; !slices.Equal(got, want) {
+		t.Errorf("update properties = %v, want %v", got, want)
+	}
+	if len(update.Required) != 0 {
+		t.Errorf("update requires %v, want none: any of them will do", update.Required)
+	}
+	if want := []any{"active", "archived"}; !slices.Equal(update.Properties["status"].Enum, want) {
+		t.Errorf("status enum = %v, want %v", update.Properties["status"].Enum, want)
+	}
+}
+
+// products R9: the contract names the three states, and every Product carries one.
+func TestTheContractListsTheThreeStockStates(t *testing.T) {
+	_, contract := api.New(api.Deps{})
+	schemas := contract.OpenAPI().Components.Schemas.Map()
+
+	state := schemas["Product"].Properties["stockState"]
+
+	if want := []any{"in-stock", "low", "out-of-stock"}; !slices.Equal(state.Enum, want) {
+		t.Errorf("stockState enum = %v, want %v", state.Enum, want)
+	}
+	if !slices.Contains(schemas["Product"].Required, "stockState") {
+		t.Errorf("stockState is not required in %v", schemas["Product"].Required)
+	}
+	var stock *huma.Param
+	for _, param := range operations(t)["list-products"].Parameters {
+		if param.Name == "stock" {
+			stock = param
+		}
+	}
+	if stock == nil || stock.Schema.Type != "array" || !slices.Equal(stock.Schema.Items.Enum, []any{"in-stock", "low", "out-of-stock"}) {
+		t.Errorf("list-products stock parameter = %+v, want an array of the three states", stock)
+	}
+	if stock != nil && (stock.Explode == nil || !*stock.Explode) {
+		t.Errorf("stock parameter explode = %v, want true: stock=low&stock=out-of-stock", stock.Explode)
+	}
+}
+
+// Active unless asked otherwise (products R14), and an empty list is [] (never null).
+func TestTheContractListsActiveProductsByDefaultAndNeverNull(t *testing.T) {
+	_, contract := api.New(api.Deps{})
+	var status *huma.Param
+	for _, param := range operations(t)["list-products"].Parameters {
+		if param.Name == "status" {
+			status = param
+		}
+	}
+
+	if status == nil || status.Schema.Default != "active" {
+		t.Errorf("status parameter = %+v, want a default of active", status)
+	}
+	products := contract.OpenAPI().Components.Schemas.Map()["ListProductsOutputBody"].Properties["products"]
+	if products.Type != "array" || products.Nullable {
+		t.Errorf("products: type %q, nullable %v, want a plain array", products.Type, products.Nullable)
 	}
 }

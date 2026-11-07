@@ -20,6 +20,18 @@ type LoginLog struct {
 	UserAgent string
 }
 
+type Product struct {
+	ID           int64
+	Name         string
+	Sku          string
+	Unit         string
+	Price        int64
+	MinimumStock int32
+	Stock        int32
+	Status       string
+	StockState   string
+}
+
 type Session struct {
 	TokenHash []byte
 	UserID    int64

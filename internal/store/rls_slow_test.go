@@ -40,7 +40,7 @@ func assertRoleOnlyOwnsTheTables(t *testing.T, pool *pgxpool.Pool) {
 	if super || bypass {
 		t.Fatalf("role %s: superuser = %v, BYPASSRLS = %v, want neither", role, super, bypass)
 	}
-	for _, table := range []string{"users", "sessions", "setup_links", "login_log"} {
+	for _, table := range []string{"users", "sessions", "setup_links", "login_log", "products"} {
 		var owner string
 		err := pool.QueryRow(ctx, `SELECT tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename = $1`, table).Scan(&owner)
 		if err != nil {
@@ -82,7 +82,7 @@ func TestEveryTableHasRowLevelSecurityAndNoPolicy(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"users", "sessions", "setup_links", "login_log"} {
+	for _, want := range []string{"users", "sessions", "setup_links", "login_log", "products"} {
 		if !slices.Contains(tables, want) {
 			t.Errorf("no table %s in %v", want, tables)
 		}
@@ -141,7 +141,7 @@ func TestARoleThatDoesNotOwnTheTablesReachesNothing(t *testing.T) {
 		})
 	}
 
-	for _, table := range []string{"users", "sessions", "setup_links", "login_log"} {
+	for _, table := range []string{"users", "sessions", "setup_links", "login_log", "products"} {
 		var rows int
 		err := asAnon(func(tx pgx.Tx) error {
 			return tx.QueryRow(ctx, `SELECT count(*) FROM `+table).Scan(&rows)

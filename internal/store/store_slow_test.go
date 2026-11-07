@@ -46,6 +46,20 @@ func addUser(t *testing.T, pool *pgxpool.Pool, user store.User) store.User {
 	return user
 }
 
+// addProduct seeds a Product with a stock, which the port has no operation to set.
+func addProduct(t *testing.T, pool *pgxpool.Pool, product store.Product) store.Product {
+	t.Helper()
+	err := pool.QueryRow(context.Background(),
+		`INSERT INTO products (name, sku, unit, price, minimum_stock, stock, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, stock_state`,
+		product.Name, product.Sku, product.Unit, product.Price, product.MinimumStock, product.Stock, product.Status,
+	).Scan(&product.ID, &product.StockState)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return product
+}
+
 func assertViolates(t *testing.T, err error, constraint string) {
 	t.Helper()
 	var pgErr *pgconn.PgError
@@ -59,8 +73,9 @@ func TestRealStoreKeepsTheStoreContract(t *testing.T) {
 	storetest.Run(t, func(t *testing.T) storetest.Subject {
 		pool := open(t, testdb.URL(t))
 		return storetest.Subject{
-			Store:   store.NewStore(pool),
-			AddUser: func(t *testing.T, user store.User) store.User { return addUser(t, pool, user) },
+			Store:      store.NewStore(pool),
+			AddUser:    func(t *testing.T, user store.User) store.User { return addUser(t, pool, user) },
+			AddProduct: func(t *testing.T, product store.Product) store.Product { return addProduct(t, pool, product) },
 		}
 	})
 }
@@ -77,6 +92,66 @@ func TestAnEmailIsUniqueWhateverItsLetterCase(t *testing.T) {
 	_, err := pool.Exec(ctx, insert, "SomChai@Example.COM")
 
 	assertViolates(t, err, "users_email_key")
+}
+
+// products R3.
+func TestASKUIsUniqueWhateverItsLetterCase(t *testing.T) {
+	ctx := context.Background()
+	pool := open(t, testdb.URL(t))
+	insert := `INSERT INTO products (name, sku, unit, price) VALUES ('Thai tea', $1, 'box', 100)`
+	if _, err := pool.Exec(ctx, insert, "tea-01"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := pool.Exec(ctx, insert, "TeA-01")
+
+	assertViolates(t, err, "products_sku_key")
+}
+
+// products R3: two Products created with one SKU at the same moment make one Product and
+// refuse the other, whatever the letter case.
+func TestTwoProductsCreatedAtOnceWithOneSKUMakeOne(t *testing.T) {
+	ctx := context.Background()
+	s := store.NewStore(open(t, testdb.URL(t)))
+	skus := []string{"tea-01", "TEA-01", "Tea-01", "tEA-01", "teA-01", "TEa-01"}
+	errs := make(chan error, len(skus))
+
+	var wg sync.WaitGroup
+	for _, sku := range skus {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := s.CreateProduct(ctx, store.InsertProductParams{Name: "Thai tea", Sku: sku, Unit: "box"})
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	made, taken := 0, 0
+	for err := range errs {
+		switch {
+		case err == nil:
+			made++
+		case errors.Is(err, store.ErrSKUTaken):
+			taken++
+		default:
+			t.Errorf("err = %v, want nil or ErrSKUTaken", err)
+		}
+	}
+	if made != 1 || taken != len(skus)-1 {
+		t.Errorf("made %d and refused %d, want 1 and %d", made, taken, len(skus)-1)
+	}
+}
+
+// products R6: stock never goes below 0, whatever the code above does.
+func TestTheSchemaRefusesNegativeStock(t *testing.T) {
+	ctx := context.Background()
+	pool := open(t, testdb.URL(t))
+
+	_, err := pool.Exec(ctx, `INSERT INTO products (name, sku, unit, price, stock) VALUES ('Tea', 'T', 'box', 1, -1)`)
+
+	assertViolates(t, err, "products_stock_check")
 }
 
 // users-and-access R9: the schema refuses, whatever the code does.
