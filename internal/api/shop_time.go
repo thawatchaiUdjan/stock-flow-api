@@ -10,6 +10,12 @@ import (
 // zone, so it needs no time zone database on the server.
 var shopTime = time.FixedZone("Asia/Bangkok", 7*60*60)
 
+// shopDay is the instant the Shop's day begins that holds t (dashboard-and-reports R1).
+func shopDay(t time.Time) time.Time {
+	year, month, day := t.In(shopTime).Date()
+	return time.Date(year, month, day, 0, 0, 0, 0, shopTime)
+}
+
 // startOfShopDay is the instant the Shop's day starts, in Bangkok, days after date: a
 // YYYY-MM-DD whose format Huma has checked. An empty date is no bound.
 func startOfShopDay(date string, days int) pgtype.Timestamptz {
