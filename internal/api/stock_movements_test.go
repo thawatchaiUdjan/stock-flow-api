@@ -348,6 +348,11 @@ func TestEveryRoleListsEveryMovementNewestFirstAPageAtATime(t *testing.T) {
 	if !slices.Equal(got, made) {
 		t.Errorf("ids = %v, want %v", got, made)
 	}
+	for _, cookie := range []*http.Cookie{s.owner, s.admin} {
+		if page := h.listMovements("", cookie); len(page.Movements) != len(made) {
+			t.Errorf("listed %d movements, want all %d", len(page.Movements), len(made))
+		}
+	}
 	if last := h.listMovements("limit=2&before="+fmt.Sprint(made[3]), s.staff); last.NextBefore != nil {
 		t.Errorf("last page nextBefore = %v, want null", *last.NextBefore)
 	}

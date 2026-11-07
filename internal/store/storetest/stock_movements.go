@@ -40,8 +40,11 @@ func listMovements(t *testing.T, s Subject, arg store.ListStockMovementsParams) 
 }
 
 func move(kind string, user store.User, note string, changes ...store.StockChange) store.MoveStockParams {
-	return store.MoveStockParams{Kind: kind, UserID: user.ID, At: at, Note: note, Changes: changes}
+	return store.MoveStockParams{Kind: kind, UserID: user.ID, Now: clock(at), Note: note, Changes: changes}
 }
+
+// clock is a Now that always answers t.
+func clock(t time.Time) func() time.Time { return func() time.Time { return t } }
 
 func change(p store.Product, by int32) store.StockChange {
 	return store.StockChange{ProductID: p.ID, Change: by}
@@ -294,11 +297,11 @@ func runStockMovements(t *testing.T, newSubject func(t *testing.T) Subject) {
 		cup := s.AddProduct(t, stocked("Cup", "CUP-01", 50))
 		made := map[string]int64{}
 		for name, arg := range map[string]store.MoveStockParams{
-			"tea receive early": {Kind: store.KindReceive, UserID: user.ID, At: at.Add(-time.Hour), Changes: []store.StockChange{change(tea, 1)}},
-			"tea receive":       {Kind: store.KindReceive, UserID: user.ID, At: at, Changes: []store.StockChange{change(tea, 1)}},
-			"tea adjustment":    {Kind: store.KindAdjustment, UserID: user.ID, At: at, Note: "why", Changes: []store.StockChange{change(tea, -1)}},
-			"cup receive":       {Kind: store.KindReceive, UserID: user.ID, At: at, Changes: []store.StockChange{change(cup, 1)}},
-			"tea receive late":  {Kind: store.KindReceive, UserID: user.ID, At: at.Add(time.Hour), Changes: []store.StockChange{change(tea, 1)}},
+			"tea receive early": {Kind: store.KindReceive, UserID: user.ID, Now: clock(at.Add(-time.Hour)), Changes: []store.StockChange{change(tea, 1)}},
+			"tea receive":       {Kind: store.KindReceive, UserID: user.ID, Now: clock(at), Changes: []store.StockChange{change(tea, 1)}},
+			"tea adjustment":    {Kind: store.KindAdjustment, UserID: user.ID, Now: clock(at), Note: "why", Changes: []store.StockChange{change(tea, -1)}},
+			"cup receive":       {Kind: store.KindReceive, UserID: user.ID, Now: clock(at), Changes: []store.StockChange{change(cup, 1)}},
+			"tea receive late":  {Kind: store.KindReceive, UserID: user.ID, Now: clock(at.Add(time.Hour)), Changes: []store.StockChange{change(tea, 1)}},
 		} {
 			moved, err := s.Store.MoveStock(ctx, arg)
 			if err != nil {

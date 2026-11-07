@@ -18,8 +18,6 @@ const (
 	KindCancellation = "cancellation"
 )
 
-const statusArchived = "archived"
-
 var (
 	// ErrProductArchived refuses a movement for an Archived Product (stock-movements R9,
 	// products R12). A Cancellation is never refused it (orders R12).
@@ -56,10 +54,12 @@ type StockChange struct {
 }
 
 // MoveStockParams is one or more Stock movements of one kind, made at once by one User.
+// Now gives their time. It is called once the Products are held, so a movement that waited
+// for another is never timed before it, and newest first by id is newest first by time.
 type MoveStockParams struct {
 	Kind    string
 	UserID  int64
-	At      time.Time
+	Now     func() time.Time
 	Note    string
 	Changes []StockChange
 }
@@ -129,11 +129,12 @@ func moveStock(ctx context.Context, q *Queries, arg MoveStockParams) ([]ListStoc
 		}
 	}
 
+	at := arg.Now()
 	moved := make([]ListStockMovementsRow, 0, len(arg.Changes))
 	for i, c := range arg.Changes {
 		id, err := q.InsertStockMovement(ctx, InsertStockMovementParams{
 			Kind: arg.Kind, ProductID: c.ProductID, Change: c.Change, StockAfter: int32(after[i]),
-			At: arg.At, UserID: arg.UserID, Note: arg.Note,
+			At: at, UserID: arg.UserID, Note: arg.Note,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("insert stock movement: %w", err)

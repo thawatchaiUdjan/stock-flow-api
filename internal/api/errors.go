@@ -13,15 +13,15 @@ import (
 // The domain error codes, carried in Problem Details' type (ADR 0019). They are a
 // contract: stock-flow-web checks against them, so renaming one breaks it.
 const (
-	codeLoginFailed      = "login-failed"
-	codeSessionEnded     = "session-ended"
-	codeSetupLinkInvalid = "setup-link-invalid"
-	codeEmailTaken       = "email-taken"
-	codeTargetIsOwner    = "target-is-owner"
-	codeUserInactive     = "user-inactive"
-	codeSKUTaken         = "sku-taken"
-	codeInsufficient     = "insufficient-stock"
-	codeProductArchived  = "product-archived"
+	codeLoginFailed       = "login-failed"
+	codeSessionEnded      = "session-ended"
+	codeSetupLinkInvalid  = "setup-link-invalid"
+	codeEmailTaken        = "email-taken"
+	codeTargetIsOwner     = "target-is-owner"
+	codeUserInactive      = "user-inactive"
+	codeSKUTaken          = "sku-taken"
+	codeInsufficientStock = "insufficient-stock"
+	codeProductArchived   = "product-archived"
 )
 
 // errorCodes is the published list. Every code above must be in it.
@@ -33,11 +33,11 @@ var errorCodes = []struct{ code, meaning string }{
 	{codeTargetIsOwner, "The operation acts on a User, and that User is the Owner, who cannot be changed here."},
 	{codeUserInactive, "No Setup link can be issued for an Inactive User."},
 	{codeSKUTaken, "Another Product has this SKU, in any letter case."},
-	{codeInsufficient, "The stock change would take a Product's stock below 0. products names each such Product with its stock."},
+	{codeInsufficientStock, "The stock change would take a Product's stock below 0. The error's products member names each such Product with its stock."},
 	{codeProductArchived, "The Product is Archived: its stock cannot be received or adjusted."},
 }
 
-func domainError(status int, code, detail string) huma.StatusError {
+func domainError(status int, code, detail string) *huma.ErrorModel {
 	return &huma.ErrorModel{Type: code, Title: http.StatusText(status), Status: status, Detail: detail}
 }
 
@@ -86,6 +86,6 @@ func publishErrorCodes(api huma.API) {
 	// stockProblem's member. ErrorModel allows no property it does not list.
 	products := registry.Schema(reflect.TypeFor[[]productStock](), true, "")
 	products.Nullable = false
-	products.Description = "Only with " + codeInsufficient + ": each Product whose stock is too low for the change, with its stock."
+	products.Description = "Only with " + codeInsufficientStock + ": each Product whose stock is too low for the change, with its stock."
 	model.Properties["products"] = products
 }

@@ -27,7 +27,7 @@ func TestMovementsOnOneProductAtOnceAreNeitherLostNorTakeStockBelowZero(t *testi
 
 	const n = 40
 	errs := atTheSameTime(n, func(i int) error {
-		arg := store.MoveStockParams{UserID: user.ID, At: time.Now(), Changes: []store.StockChange{{ProductID: tea.ID}}}
+		arg := store.MoveStockParams{UserID: user.ID, Now: time.Now, Changes: []store.StockChange{{ProductID: tea.ID}}}
 		if i%2 == 0 {
 			arg.Kind, arg.Changes[0].Change = store.KindReceive, 3
 		} else {
@@ -55,13 +55,18 @@ func TestMovementsOnOneProductAtOnceAreNeitherLostNorTakeStockBelowZero(t *testi
 	if len(movements) != n-refused {
 		t.Fatalf("%d movements, want %d made and %d refused", len(movements), n-refused, refused)
 	}
-	// Oldest first, each must start from the stock the one before left.
+	// Oldest first, each must start from the stock the one before left, and be no earlier
+	// than it: newest first by id is newest first by time, so a range of days never takes a
+	// movement without the ones it built on.
 	stock := int32(10)
 	for i := len(movements) - 1; i >= 0; i-- {
 		m := movements[i]
 		stock += m.Change
 		if m.StockAfter != stock || m.StockAfter < 0 {
 			t.Fatalf("movement %d: change %d, stock after %d, want %d and never below 0", m.ID, m.Change, m.StockAfter, stock)
+		}
+		if i < len(movements)-1 && m.At.Before(movements[i+1].At) {
+			t.Errorf("movement %d at %v is earlier than movement %d before it, at %v", m.ID, m.At, movements[i+1].ID, movements[i+1].At)
 		}
 	}
 	got, err := s.GetProduct(ctx, tea.ID)
@@ -95,7 +100,7 @@ func TestMovingSeveralProductsWaitsInsteadOfDeadlocking(t *testing.T) {
 
 	moved := make(chan error, 1)
 	go func() {
-		_, err := s.MoveStock(ctx, store.MoveStockParams{Kind: store.KindOrder, UserID: user.ID, At: time.Now(), Changes: []store.StockChange{
+		_, err := s.MoveStock(ctx, store.MoveStockParams{Kind: store.KindOrder, UserID: user.ID, Now: time.Now, Changes: []store.StockChange{
 			{ProductID: second.ID, Change: -1}, {ProductID: first.ID, Change: -1},
 		}})
 		moved <- err
@@ -122,7 +127,7 @@ func TestTheSchemaRefusesToChangeOrRemoveAStockMovement(t *testing.T) {
 	user := addUser(t, pool, store.User{Name: "Somchai", Email: "s@example.com", Role: "staff", Status: "active"})
 	tea := addProduct(t, pool, store.Product{Name: "Thai tea", Sku: "TEA-01", Unit: "pcs", Status: "active"})
 	if _, err := s.MoveStock(ctx, store.MoveStockParams{
-		Kind: store.KindReceive, UserID: user.ID, At: time.Now(), Changes: []store.StockChange{{ProductID: tea.ID, Change: 4}},
+		Kind: store.KindReceive, UserID: user.ID, Now: time.Now, Changes: []store.StockChange{{ProductID: tea.ID, Change: 4}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -141,5 +146,44 @@ func TestTheSchemaRefusesToChangeOrRemoveAStockMovement(t *testing.T) {
 	var change int32
 	if err := pool.QueryRow(ctx, `SELECT change FROM stock_movements`).Scan(&change); err != nil || change != 4 {
 		t.Errorf("change = %d, %v, want it untouched", change, err)
+	}
+}
+
+// A movement's time is when it applied, after any wait for the Product: otherwise one
+// that waited would be older than the movement it built on, and newest first by id would
+// not be newest first by time.
+func TestAMovementThatWaitsForItsProductIsTimedWhenItApplies(t *testing.T) {
+	ctx := context.Background()
+	pool := open(t, testdb.URL(t))
+	s := store.NewStore(pool)
+	user := addUser(t, pool, store.User{Name: "Somchai", Email: "s@example.com", Role: "staff", Status: "active"})
+	tea := addProduct(t, pool, store.Product{Name: "Thai tea", Sku: "TEA-01", Unit: "pcs", Status: "active"})
+	other, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Rollback(ctx)
+	if _, err := store.New(other).LockProducts(ctx, []int64{tea.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	moved := make(chan []store.ListStockMovementsRow, 1)
+	go func() {
+		m, err := s.MoveStock(ctx, store.MoveStockParams{
+			Kind: store.KindReceive, UserID: user.ID, Now: time.Now, Changes: []store.StockChange{{ProductID: tea.ID, Change: 1}},
+		})
+		if err != nil {
+			t.Error(err)
+		}
+		moved <- m
+	}()
+	waitUntilBlocked(t, pool)
+	released := time.Now()
+	if err := other.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if m := <-moved; len(m) != 1 || m[0].At.Before(released.Truncate(time.Microsecond)) {
+		t.Errorf("moved = %+v, want it timed no earlier than %v, when the Product was released", m, released)
 	}
 }

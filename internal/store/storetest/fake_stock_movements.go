@@ -42,33 +42,34 @@ func (f *Fake) MoveStock(_ context.Context, arg store.MoveStockParams) ([]store.
 	stock := map[int64]int64{}
 	var touched []int64
 	for _, c := range arg.Changes {
-		i := slices.IndexFunc(f.products, func(p store.Product) bool { return p.ID == c.ProductID })
-		if i < 0 {
+		p := f.product(c.ProductID)
+		if p == nil {
 			return nil, store.ErrNotFound
 		}
 		if _, seen := stock[c.ProductID]; !seen {
-			stock[c.ProductID] = int64(f.products[i].Stock)
+			stock[c.ProductID] = int64(p.Stock)
 			touched = append(touched, c.ProductID)
 		}
 	}
 	slices.Sort(touched)
 	for _, id := range touched {
-		if f.products[id-1].Status == "archived" && arg.Kind != store.KindCancellation {
+		if f.product(id).Status == "archived" && arg.Kind != store.KindCancellation {
 			return nil, store.ErrProductArchived
 		}
 	}
+	at := arg.Now()
 	movements := make([]store.StockMovement, 0, len(arg.Changes))
 	for _, c := range arg.Changes {
 		stock[c.ProductID] += int64(c.Change)
 		movements = append(movements, store.StockMovement{
 			Kind: arg.Kind, ProductID: c.ProductID, Change: c.Change, StockAfter: int32(stock[c.ProductID]),
-			At: arg.At, UserID: arg.UserID, Note: arg.Note,
+			At: at, UserID: arg.UserID, Note: arg.Note,
 		})
 	}
 	var short []store.ProductStock
 	for _, id := range touched {
 		if stock[id] < 0 {
-			short = append(short, store.ProductStock{ProductID: id, Stock: f.products[id-1].Stock})
+			short = append(short, store.ProductStock{ProductID: id, Stock: f.product(id).Stock})
 		}
 	}
 	if short != nil {
@@ -92,17 +93,26 @@ func (f *Fake) MoveStock(_ context.Context, arg store.MoveStockParams) ([]store.
 		moved = append(moved, f.entry(m))
 	}
 	for _, id := range touched {
-		p := &f.products[id-1]
+		p := f.product(id)
 		p.Stock = int32(stock[id])
 		p.StockState = stockState(*p)
 	}
 	return moved, nil
 }
 
+// product is the Product with id, to change in place, or nil when there is none.
+func (f *Fake) product(id int64) *store.Product {
+	i := slices.IndexFunc(f.products, func(p store.Product) bool { return p.ID == id })
+	if i < 0 {
+		return nil
+	}
+	return &f.products[i]
+}
+
 // entry is the movement with its Product and User as they are now, as the real query joins
 // them.
 func (f *Fake) entry(m store.StockMovement) store.ListStockMovementsRow {
-	p := f.products[m.ProductID-1]
+	p := f.product(m.ProductID)
 	var userName string
 	for _, u := range f.users {
 		if u.ID == m.UserID {

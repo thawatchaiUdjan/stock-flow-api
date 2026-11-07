@@ -14,10 +14,6 @@ import (
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
 )
 
-// shopTime is the Shop's time: Bangkok, UTC+7 all year (dashboard-and-reports R1). A fixed
-// zone, so it needs no time zone database on the server.
-var shopTime = time.FixedZone("Asia/Bangkok", 7*60*60)
-
 type stockMovementProduct struct {
 	ID   int64  `json:"id" doc:"Identifies the Product."`
 	Name string `json:"name" doc:"The Product's name now."`
@@ -85,15 +81,6 @@ func (in *listStockMovementsInput) Resolve(huma.Context) []error {
 		return []error{&huma.ErrorDetail{Location: "query.to", Message: "must not be before from", Value: in.To}}
 	}
 	return nil
-}
-
-// startOfShopDay is the instant the Shop's day starts, in Bangkok, days after date.
-func startOfShopDay(date string, days int) pgtype.Timestamptz {
-	if date == "" {
-		return pgtype.Timestamptz{}
-	}
-	day, _ := time.ParseInLocation(time.DateOnly, date, shopTime) // its format is checked
-	return pgtype.Timestamptz{Time: day.AddDate(0, 0, days), Valid: true}
 }
 
 type listStockMovementsOutput struct {
@@ -193,7 +180,8 @@ func registerStockMovements(api huma.API, deps Deps) {
 		DefaultStatus: http.StatusCreated,
 		Errors:        []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusConflict},
 	}, func(ctx context.Context, input *receiveStockInput) (*stockMovementOutput, error) {
-		return moveStock(ctx, deps, store.KindReceive, input.Body.ProductID, input.Body.Quantity, input.Body.Note, "body.quantity")
+		received := store.StockChange{ProductID: input.Body.ProductID, Change: input.Body.Quantity}
+		return makeMovement(ctx, deps, store.KindReceive, received, input.Body.Note, "body.quantity")
 	})
 
 	huma.Register(api, huma.Operation{
@@ -210,16 +198,16 @@ func registerStockMovements(api huma.API, deps Deps) {
 		DefaultStatus: http.StatusCreated,
 		Errors:        []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict},
 	}, func(ctx context.Context, input *adjustStockInput) (*stockMovementOutput, error) {
-		return moveStock(ctx, deps, store.KindAdjustment, input.Body.ProductID, input.Body.Change, input.Body.Note, "body.change")
+		adjusted := store.StockChange{ProductID: input.Body.ProductID, Change: input.Body.Change}
+		return makeMovement(ctx, deps, store.KindAdjustment, adjusted, input.Body.Note, "body.change")
 	})
 }
 
-// moveStock makes one movement of kind for the User acting, and answers with it. field is
-// where the change came from, for the error when it is too large.
-func moveStock(ctx context.Context, deps Deps, kind string, productID int64, change int32, note, field string) (*stockMovementOutput, error) {
+// makeMovement makes one movement of kind for the User acting, and answers with it. field
+// is where the change came from, for the error when it is too large.
+func makeMovement(ctx context.Context, deps Deps, kind string, change store.StockChange, note, field string) (*stockMovementOutput, error) {
 	moved, err := deps.Store.MoveStock(ctx, store.MoveStockParams{
-		Kind: kind, UserID: sessionOf(ctx).UserID, At: deps.Now(), Note: note,
-		Changes: []store.StockChange{{ProductID: productID, Change: change}},
+		Kind: kind, UserID: sessionOf(ctx).UserID, Now: deps.Now, Note: note, Changes: []store.StockChange{change},
 	})
 	var short *store.InsufficientStockError
 	switch {
@@ -233,20 +221,21 @@ func moveStock(ctx context.Context, deps Deps, kind string, productID int64, cha
 		return nil, insufficientStock(short)
 	case errors.Is(err, store.ErrStockTooLarge):
 		return nil, huma.Error422UnprocessableEntity("The stock would be too large.",
-			&huma.ErrorDetail{Location: field, Message: "would take the stock past 2147483647", Value: change})
+			&huma.ErrorDetail{Location: field, Message: "would take the stock past 2147483647", Value: change.Change})
 	}
 	return nil, internalError(ctx, "move stock", err)
 }
 
 func insufficientStock(err *store.InsufficientStockError) huma.StatusError {
-	problem := &stockProblem{}
+	var products []productStock
 	var each []string
 	for _, p := range err.Products {
-		problem.Products = append(problem.Products, productStock{ID: p.ProductID, Stock: p.Stock})
+		products = append(products, productStock{ID: p.ProductID, Stock: p.Stock})
 		each = append(each, fmt.Sprintf("Only %d in stock.", p.Stock))
 	}
-	problem.ErrorModel = huma.ErrorModel{
-		Type: codeInsufficient, Title: http.StatusText(http.StatusConflict), Status: http.StatusConflict, Detail: strings.Join(each, " "),
+	problem := &stockProblem{
+		ErrorModel: *domainError(http.StatusConflict, codeInsufficientStock, strings.Join(each, " ")),
+		Products:   products,
 	}
 	return problem
 }
