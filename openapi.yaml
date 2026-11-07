@@ -1,5 +1,38 @@
 components:
   schemas:
+    AdjustStockBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/AdjustStockBody.json
+          format: uri
+          readOnly: true
+          type: string
+        change:
+          description: "How many units to add (above 0) or take (below 0): a whole number other than 0."
+          format: int32
+          not:
+            enum:
+              - 0
+            type: integer
+          type: integer
+        note:
+          description: Why the stock is wrong, up to 200 characters.
+          maxLength: 200
+          pattern: \S
+          patternDescription: contain a character that is not a space
+          type: string
+        productId:
+          description: The Product whose stock is wrong. It must be Active.
+          format: int64
+          type: integer
+      required:
+        - productId
+        - change
+        - note
+      type: object
     CreateProductBody:
       additionalProperties: false
       properties:
@@ -163,6 +196,11 @@ components:
             - https://example.com/error-log/abc123
           format: uri
           type: string
+        products:
+          description: "Only with insufficient-stock: each Product whose stock is too low for the change, with its stock."
+          items:
+            $ref: "#/components/schemas/ProductStock"
+          type: array
         status:
           description: HTTP status code
           examples:
@@ -185,6 +223,8 @@ components:
             target-is-owner: The operation acts on a User, and that User is the Owner, who cannot be changed here.
             user-inactive: No Setup link can be issued for an Inactive User.
             sku-taken: Another Product has this SKU, in any letter case.
+            insufficient-stock: The stock change would take a Product's stock below 0. The error's products member names each such Product with its stock.
+            product-archived: The Product is Archived: its stock cannot be received or adjusted.
           enum:
             - about:blank
             - login-failed
@@ -194,6 +234,8 @@ components:
             - target-is-owner
             - user-inactive
             - sku-taken
+            - insufficient-stock
+            - product-archived
           type: string
       type: object
     HealthOutputBody:
@@ -261,6 +303,31 @@ components:
       required:
         - products
         - total
+      type: object
+    ListStockMovementsOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/ListStockMovementsOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        movements:
+          description: Newest first.
+          items:
+            $ref: "#/components/schemas/StockMovement"
+          type: array
+        nextBefore:
+          description: Pass as before for the next page. Null on the last page.
+          format: int64
+          type:
+            - integer
+            - "null"
+      required:
+        - movements
+        - nextBefore
       type: object
     ListUsersOutputBody:
       additionalProperties: false
@@ -413,6 +480,21 @@ components:
         - stockState
         - status
       type: object
+    ProductStock:
+      additionalProperties: false
+      properties:
+        id:
+          description: Identifies the Product.
+          format: int64
+          type: integer
+        stock:
+          description: "The Product's stock: how many units there are."
+          format: int32
+          type: integer
+      required:
+        - id
+        - stock
+      type: object
     ReadSetupLinkInputBody:
       additionalProperties: false
       properties:
@@ -448,6 +530,33 @@ components:
       required:
         - name
         - email
+      type: object
+    ReceiveStockBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/ReceiveStockBody.json
+          format: uri
+          readOnly: true
+          type: string
+        note:
+          description: Anything worth keeping about the delivery, up to 200 characters.
+          maxLength: 200
+          type: string
+        productId:
+          description: The Product received. It must be Active.
+          format: int64
+          type: integer
+        quantity:
+          description: "How many units arrived: a whole number, at least 1."
+          format: int32
+          minimum: 1
+          type: integer
+      required:
+        - productId
+        - quantity
       type: object
     SetPasswordInputBody:
       additionalProperties: false
@@ -490,6 +599,112 @@ components:
       required:
         - token
         - expiresAt
+      type: object
+    StockMovement:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/StockMovement.json
+          format: uri
+          readOnly: true
+          type: string
+        at:
+          description: When it was made.
+          format: date-time
+          type: string
+        change:
+          description: "The change in stock: above 0 adds units, below 0 takes them. Never 0."
+          format: int32
+          type: integer
+        id:
+          description: Identifies the movement. Later movements have higher ids.
+          format: int64
+          type: integer
+        kind:
+          description: receive and adjustment are made on the Stock Movements page; order and cancellation by Orders.
+          enum:
+            - receive
+            - adjustment
+            - order
+            - cancellation
+          type: string
+        note:
+          description: Why, in up to 200 characters. Empty when there is none; an adjustment always has one.
+          type: string
+        order:
+          description: The Order that made it, or null for receive and adjustment.
+          oneOf:
+            - $ref: "#/components/schemas/StockMovementOrder"
+            - type: "null"
+        product:
+          $ref: "#/components/schemas/StockMovementProduct"
+          description: The Product whose stock changed.
+        stockAfter:
+          description: The Product's stock just after this movement. Never below 0.
+          format: int32
+          type: integer
+        user:
+          $ref: "#/components/schemas/StockMovementUser"
+          description: The User who made it.
+      required:
+        - id
+        - at
+        - kind
+        - product
+        - change
+        - stockAfter
+        - user
+        - note
+        - order
+      type: object
+    StockMovementOrder:
+      additionalProperties: false
+      properties:
+        id:
+          description: Identifies the Order.
+          format: int64
+          type: integer
+        number:
+          description: The Order's number.
+          format: int64
+          type: integer
+      required:
+        - id
+        - number
+      type: object
+    StockMovementProduct:
+      additionalProperties: false
+      properties:
+        id:
+          description: Identifies the Product.
+          format: int64
+          type: integer
+        name:
+          description: The Product's name now.
+          type: string
+        sku:
+          description: The Product's SKU now.
+          type: string
+      required:
+        - id
+        - name
+        - sku
+      type: object
+    StockMovementUser:
+      additionalProperties: false
+      properties:
+        id:
+          description: Identifies the User.
+          format: int64
+          type: integer
+        name:
+          description: The User's name now.
+          type: string
+      required:
+        - id
+        - name
       type: object
     UpdateProductBody:
       additionalProperties: false
@@ -1164,6 +1379,208 @@ paths:
       summary: Read who a Setup link is for
       tags:
         - Setup links
+  /stock-movements:
+    get:
+      description: Every Role sees every Stock movement, newest first, one page at a time. No operation changes or removes one. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session.
+      operationId: list-stock-movements
+      parameters:
+        - description: Only the movements of this Product.
+          explode: false
+          in: query
+          name: productId
+          schema:
+            description: Only the movements of this Product.
+            format: int64
+            minimum: 1
+            type: integer
+        - description: Only the movements of this kind.
+          explode: false
+          in: query
+          name: kind
+          schema:
+            description: Only the movements of this kind.
+            enum:
+              - receive
+              - adjustment
+              - order
+              - cancellation
+            type: string
+        - description: Only the movements on or after this day of the Shop, in Bangkok time (YYYY-MM-DD).
+          explode: false
+          in: query
+          name: from
+          schema:
+            description: Only the movements on or after this day of the Shop, in Bangkok time (YYYY-MM-DD).
+            format: date
+            type: string
+        - description: Only the movements on or before this day of the Shop, in Bangkok time (YYYY-MM-DD).
+          explode: false
+          in: query
+          name: to
+          schema:
+            description: Only the movements on or before this day of the Shop, in Bangkok time (YYYY-MM-DD).
+            format: date
+            type: string
+        - description: "The previous page's nextBefore: only the movements older than that. Leave out for the newest."
+          explode: false
+          in: query
+          name: before
+          schema:
+            description: "The previous page's nextBefore: only the movements older than that. Leave out for the newest."
+            format: int64
+            minimum: 1
+            type: integer
+        - description: The most movements on a page.
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: The most movements on a page.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListStockMovementsOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: List the Stock movements
+      tags:
+        - Stock movements
+  /stock-movements/adjust:
+    post:
+      description: "Corrects a Product's stock up or down, as an adjustment movement with a note saying why. Answers 409 `insufficient-stock` when it would take the stock below 0, naming the stock there is. Answers a plain 404 when there is no such Product, 409 `product-archived` when it is Archived, and 422 when the stock would grow past 2147483647. Owner and Admins only: answers 403 to Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: adjust-stock
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdjustStockBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockMovement"
+          description: Created
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Adjust stock
+      tags:
+        - Stock movements
+  /stock-movements/receive:
+    post:
+      description: Adds a delivery to a Product's stock, as a receive movement. Every Role may. Answers a plain 404 when there is no such Product, 409 `product-archived` when it is Archived, and 422 when the stock would grow past 2147483647. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session.
+      operationId: receive-stock
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceiveStockBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockMovement"
+          description: Created
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Receive stock
+      tags:
+        - Stock movements
   /users:
     get:
       description: "Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."

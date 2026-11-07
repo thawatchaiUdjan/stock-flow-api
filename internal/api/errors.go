@@ -13,13 +13,15 @@ import (
 // The domain error codes, carried in Problem Details' type (ADR 0019). They are a
 // contract: stock-flow-web checks against them, so renaming one breaks it.
 const (
-	codeLoginFailed      = "login-failed"
-	codeSessionEnded     = "session-ended"
-	codeSetupLinkInvalid = "setup-link-invalid"
-	codeEmailTaken       = "email-taken"
-	codeTargetIsOwner    = "target-is-owner"
-	codeUserInactive     = "user-inactive"
-	codeSKUTaken         = "sku-taken"
+	codeLoginFailed       = "login-failed"
+	codeSessionEnded      = "session-ended"
+	codeSetupLinkInvalid  = "setup-link-invalid"
+	codeEmailTaken        = "email-taken"
+	codeTargetIsOwner     = "target-is-owner"
+	codeUserInactive      = "user-inactive"
+	codeSKUTaken          = "sku-taken"
+	codeInsufficientStock = "insufficient-stock"
+	codeProductArchived   = "product-archived"
 )
 
 // errorCodes is the published list. Every code above must be in it.
@@ -31,10 +33,26 @@ var errorCodes = []struct{ code, meaning string }{
 	{codeTargetIsOwner, "The operation acts on a User, and that User is the Owner, who cannot be changed here."},
 	{codeUserInactive, "No Setup link can be issued for an Inactive User."},
 	{codeSKUTaken, "Another Product has this SKU, in any letter case."},
+	{codeInsufficientStock, "The stock change would take a Product's stock below 0. The error's products member names each such Product with its stock."},
+	{codeProductArchived, "The Product is Archived: its stock cannot be received or adjusted."},
 }
 
-func domainError(status int, code, detail string) huma.StatusError {
+func domainError(status int, code, detail string) *huma.ErrorModel {
 	return &huma.ErrorModel{Type: code, Title: http.StatusText(status), Status: status, Detail: detail}
+}
+
+// productStock is a Product named by an insufficient-stock error, with its stock.
+type productStock struct {
+	ID    int64 `json:"id" doc:"Identifies the Product."`
+	Stock int32 `json:"stock" doc:"The Product's stock: how many units there are."`
+}
+
+// stockProblem is the insufficient-stock error. It names every Product that falls short,
+// with its stock, so the web can say "Only 18 in stock." beside each (stock-movements R6,
+// orders R8). RFC 9457 lets a problem carry members of its own.
+type stockProblem struct {
+	huma.ErrorModel
+	Products []productStock `json:"products"`
 }
 
 // internalError logs what went wrong and answers without it (CODING_STANDARDS.md, Errors).
@@ -65,4 +83,9 @@ func publishErrorCodes(api huma.API) {
 		Default:     "about:blank",
 		Description: strings.Join(meanings, "\n"),
 	}
+	// stockProblem's member. ErrorModel allows no property it does not list.
+	products := registry.Schema(reflect.TypeFor[[]productStock](), true, "")
+	products.Nullable = false
+	products.Description = "Only with " + codeInsufficientStock + ": each Product whose stock is too low for the change, with its stock."
+	model.Properties["products"] = products
 }

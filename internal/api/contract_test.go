@@ -161,7 +161,7 @@ func TestTheContractPublishesEveryErrorCode(t *testing.T) {
 	model := contract.OpenAPI().Components.Schemas.Map()["ErrorModel"]
 
 	typ := model.Properties["type"]
-	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken"}
+	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken", "insufficient-stock", "product-archived"}
 	if !slices.Equal(typ.Enum, want) {
 		t.Errorf("type enum = %v, want %v", typ.Enum, want)
 	}
@@ -420,5 +420,118 @@ func TestTheContractListsActiveProductsByDefaultAndNeverNull(t *testing.T) {
 	products := contract.OpenAPI().Components.Schemas.Map()["ListProductsOutputBody"].Properties["products"]
 	if products.Type != "array" || products.Nullable {
 		t.Errorf("products: type %q, nullable %v, want a plain array", products.Type, products.Nullable)
+	}
+}
+
+func TestTheContractPublishesTheThreeStockMovementOperations(t *testing.T) {
+	ops := operations(t)
+
+	for id, want := range map[string]struct {
+		method, path string
+		statuses     []string
+		codes        []string
+	}{
+		"list-stock-movements": {http.MethodGet, "/stock-movements", []string{"401", "422"}, nil},
+		"receive-stock":        {http.MethodPost, "/stock-movements/receive", []string{"201", "401", "404", "409", "422"}, []string{"product-archived"}},
+		"adjust-stock":         {http.MethodPost, "/stock-movements/adjust", []string{"201", "401", "403", "404", "409", "422"}, []string{"product-archived", "insufficient-stock"}},
+	} {
+		op, ok := ops[id]
+		if !ok {
+			t.Errorf("no operation %q", id)
+			continue
+		}
+		if op.Method != want.method || op.Path != want.path || len(op.Security) != 1 {
+			t.Errorf("%s: %s %s with security %v, want %s %s with the session scheme", id, op.Method, op.Path, op.Security, want.method, want.path)
+		}
+		for _, status := range want.statuses {
+			if op.Responses[status] == nil {
+				t.Errorf("%s does not declare %s; it has %v", id, status, slices.Sorted(maps.Keys(op.Responses)))
+			}
+		}
+		for _, code := range append(want.codes, "session-ended") {
+			if !strings.Contains(op.Description, "`"+code+"`") {
+				t.Errorf("%s: description %q does not name %s", id, op.Description, code)
+			}
+		}
+	}
+	// stock-movements R4, R5: every Role receives; only the Owner and Admins adjust.
+	if ops["receive-stock"].Responses["403"] != nil || ops["list-stock-movements"].Responses["403"] != nil {
+		t.Error("receive-stock or list-stock-movements declares 403, but every Role may call them")
+	}
+	if !strings.Contains(ops["adjust-stock"].Description, "Staff") {
+		t.Errorf("adjust-stock: description %q does not say Staff are refused", ops["adjust-stock"].Description)
+	}
+}
+
+// stock-movements R8: a movement is never edited or deleted, so only GET and POST reach
+// one, and the POSTs only make new ones.
+func TestNoOperationEditsOrDeletesAStockMovement(t *testing.T) {
+	for id, op := range operations(t) {
+		if strings.HasPrefix(op.Path, "/stock-movements") && op.Method != http.MethodGet && op.Method != http.MethodPost {
+			t.Errorf("%s is a %s on %s", id, op.Method, op.Path)
+		}
+	}
+}
+
+// stock-movements R3: all four kinds are published, though only two are made until Orders.
+func TestTheContractListsTheFourKindsOfStockMovement(t *testing.T) {
+	_, contract := api.New(api.Deps{})
+	want := []any{"receive", "adjustment", "order", "cancellation"}
+
+	movement := contract.OpenAPI().Components.Schemas.Map()["StockMovement"]
+
+	if !slices.Equal(movement.Properties["kind"].Enum, want) {
+		t.Errorf("kind enum = %v, want %v", movement.Properties["kind"].Enum, want)
+	}
+	for _, param := range operations(t)["list-stock-movements"].Parameters {
+		if param.Name == "kind" && !slices.Equal(param.Schema.Enum, want) {
+			t.Errorf("kind parameter enum = %v, want %v", param.Schema.Enum, want)
+		}
+	}
+	// stock-movements R11: the Order, or null.
+	order := movement.Properties["order"]
+	if len(order.OneOf) != 2 || order.OneOf[1].Type != "null" || !slices.Contains(movement.Required, "order") {
+		t.Errorf("order = %+v, required %v, want a required Order or null", order, movement.Required)
+	}
+}
+
+// stock-movements R4, R5: the contract says a Receive is at least 1, an Adjustment is not
+// 0 and has a note.
+func TestTheContractStatesWhatEachStockChangeNeeds(t *testing.T) {
+	_, contract := api.New(api.Deps{})
+	schemas := contract.OpenAPI().Components.Schemas.Map()
+
+	receive, adjust := schemas["ReceiveStockBody"], schemas["AdjustStockBody"]
+
+	if q := receive.Properties["quantity"]; q.Type != "integer" || q.Minimum == nil || *q.Minimum != 1 {
+		t.Errorf("quantity = %+v, want an integer of at least 1", q)
+	}
+	if slices.Contains(receive.Required, "note") || !slices.Contains(adjust.Required, "note") {
+		t.Errorf("required: receive %v, adjust %v; want a note only for adjust", receive.Required, adjust.Required)
+	}
+	if c := adjust.Properties["change"]; c.Type != "integer" || c.Not == nil || !slices.Equal(c.Not.Enum, []any{0}) {
+		t.Errorf("change = %+v, want an integer that is not 0", c)
+	}
+}
+
+// stock-movements R6: insufficient-stock carries each Product's id and stock.
+func TestTheContractCarriesTheStockOfInsufficientStock(t *testing.T) {
+	_, contract := api.New(api.Deps{})
+	schemas := contract.OpenAPI().Components.Schemas
+
+	products := schemas.Map()["ErrorModel"].Properties["products"]
+
+	if products == nil || products.Type != "array" || products.Items == nil {
+		t.Fatalf("ErrorModel.products = %+v, want an array", products)
+	}
+	item := products.Items
+	if item.Ref != "" {
+		item = schemas.SchemaFromRef(item.Ref)
+	}
+	if got := slices.Sorted(maps.Keys(item.Properties)); !slices.Equal(got, []string{"id", "stock"}) {
+		t.Errorf("products items = %v, want id and stock", got)
+	}
+	if !strings.Contains(products.Description, "insufficient-stock") {
+		t.Errorf("description %q does not say when it is there", products.Description)
 	}
 }

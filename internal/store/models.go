@@ -44,6 +44,17 @@ type SetupLink struct {
 	ExpiresAt time.Time
 }
 
+type StockMovement struct {
+	ID         int64
+	Kind       string
+	ProductID  int64
+	Change     int32
+	StockAfter int32
+	At         time.Time
+	UserID     int64
+	Note       string
+}
+
 type User struct {
 	ID           int64
 	Name         string

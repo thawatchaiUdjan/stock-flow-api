@@ -23,6 +23,7 @@ var (
 const (
 	roleOwner      = "owner"
 	statusInactive = "inactive"
+	statusArchived = "archived" // a Product's (products R11)
 )
 
 // The results a Login log entry records (users-and-access R36).
