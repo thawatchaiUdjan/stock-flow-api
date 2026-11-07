@@ -32,6 +32,8 @@ type Store interface {
 	GetProduct(ctx context.Context, id int64) (store.Product, error)
 	ListProducts(ctx context.Context, arg store.ListProductsParams) ([]store.Product, error)
 	CountProducts(ctx context.Context, arg store.CountProductsParams) (int64, error)
+	MoveStock(ctx context.Context, arg store.MoveStockParams) ([]store.ListStockMovementsRow, error)
+	ListStockMovements(ctx context.Context, arg store.ListStockMovementsParams) ([]store.ListStockMovementsRow, error)
 	CreateProduct(ctx context.Context, arg store.InsertProductParams) (store.Product, error)
 	UpdateProduct(ctx context.Context, arg store.ChangeProductParams) (store.Product, error)
 }
@@ -63,6 +65,7 @@ func New(deps Deps) (http.Handler, huma.API) {
 	registerUsers(api, deps)
 	registerLoginLog(api, deps)
 	registerProducts(api, deps)
+	registerStockMovements(api, deps)
 	publishErrorCodes(api)
 
 	return router, api

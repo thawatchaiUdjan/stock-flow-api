@@ -1,12 +1,24 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"slices"
 
 	"github.com/danielgtaylor/huma/v2"
+
+	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
 )
+
+type sessionKey struct{}
+
+// sessionOf is the live session requireRole let through, for a handler that needs to know
+// who is acting.
+func sessionOf(ctx context.Context) store.GetSessionRow {
+	session, _ := ctx.Value(sessionKey{}).(store.GetSessionRow)
+	return session
+}
 
 // The Roles an operation can be limited to (users-and-access R8).
 const (
@@ -54,7 +66,7 @@ func requireRole(api huma.API, deps Deps, forbidden string, roles ...string) fun
 			err = huma.Error403Forbidden(forbidden)
 		}
 		if err == nil {
-			next(ctx)
+			next(huma.WithValue(ctx, sessionKey{}, session))
 			return
 		}
 		var problem huma.StatusError

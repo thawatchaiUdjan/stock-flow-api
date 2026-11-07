@@ -24,12 +24,13 @@ type Fake struct {
 	// a database that can read but not write.
 	LogErr error
 
-	mu       sync.Mutex
-	users    []store.User
-	sessions map[string]store.Session
-	links    map[int64]store.SetupLink
-	log      []store.ListLoginLogRow
-	products []store.Product
+	mu        sync.Mutex
+	users     []store.User
+	sessions  map[string]store.Session
+	links     map[int64]store.SetupLink
+	log       []store.ListLoginLogRow
+	products  []store.Product
+	movements []store.StockMovement
 }
 
 var _ Store = (*Fake)(nil)

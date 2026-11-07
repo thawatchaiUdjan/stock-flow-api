@@ -800,4 +800,5 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 
 	runLoginLog(t, newSubject)
 	runProducts(t, newSubject)
+	runStockMovements(t, newSubject)
 }
