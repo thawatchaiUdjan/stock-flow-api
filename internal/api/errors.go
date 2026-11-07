@@ -22,6 +22,7 @@ const (
 	codeSKUTaken          = "sku-taken"
 	codeInsufficientStock = "insufficient-stock"
 	codeProductArchived   = "product-archived"
+	codeOrderNotPending   = "order-not-pending"
 )
 
 // errorCodes is the published list. Every code above must be in it.
@@ -33,8 +34,9 @@ var errorCodes = []struct{ code, meaning string }{
 	{codeTargetIsOwner, "The operation acts on a User, and that User is the Owner, who cannot be changed here."},
 	{codeUserInactive, "No Setup link can be issued for an Inactive User."},
 	{codeSKUTaken, "Another Product has this SKU, in any letter case."},
-	{codeInsufficientStock, "The stock change would take a Product's stock below 0. The error's products member names each such Product with its stock."},
-	{codeProductArchived, "The Product is Archived: its stock cannot be received or adjusted."},
+	{codeInsufficientStock, "The stock change, or the Order, would take a Product's stock below 0. The error's products member names each such Product with its stock."},
+	{codeProductArchived, "The Product is Archived: its stock cannot be received or adjusted, and it cannot be ordered."},
+	{codeOrderNotPending, "The Order is completed or cancelled already, and neither can change."},
 }
 
 func domainError(status int, code, detail string) *huma.ErrorModel {

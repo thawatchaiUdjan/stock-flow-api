@@ -16,10 +16,12 @@ const getStockMovement = `-- name: GetStockMovement :one
 SELECT stock_movements.id, stock_movements.kind, stock_movements.product_id,
     products.name AS product_name, products.sku AS product_sku,
     stock_movements.change, stock_movements.stock_after, stock_movements.at,
-    stock_movements.user_id, users.name AS user_name, stock_movements.note
+    stock_movements.user_id, users.name AS user_name, stock_movements.note,
+    stock_movements.order_id, orders.number AS order_number
 FROM stock_movements
 JOIN products ON products.id = stock_movements.product_id
 JOIN users ON users.id = stock_movements.user_id
+LEFT JOIN orders ON orders.id = stock_movements.order_id
 WHERE stock_movements.id = $1
 `
 
@@ -35,6 +37,8 @@ type GetStockMovementRow struct {
 	UserID      int64
 	UserName    string
 	Note        string
+	OrderID     pgtype.Int8
+	OrderNumber pgtype.Int8
 }
 
 // The columns of ListStockMovements, so a row of one converts to a row of the other.
@@ -53,14 +57,16 @@ func (q *Queries) GetStockMovement(ctx context.Context, id int64) (GetStockMovem
 		&i.UserID,
 		&i.UserName,
 		&i.Note,
+		&i.OrderID,
+		&i.OrderNumber,
 	)
 	return i, err
 }
 
 const insertStockMovement = `-- name: InsertStockMovement :one
-INSERT INTO stock_movements (kind, product_id, change, stock_after, at, user_id, note)
+INSERT INTO stock_movements (kind, product_id, change, stock_after, at, user_id, note, order_id)
 VALUES ($1, $2, $3, $4, $5,
-    $6, $7)
+    $6, $7, $8)
 RETURNING id
 `
 
@@ -72,6 +78,7 @@ type InsertStockMovementParams struct {
 	At         time.Time
 	UserID     int64
 	Note       string
+	OrderID    pgtype.Int8
 }
 
 func (q *Queries) InsertStockMovement(ctx context.Context, arg InsertStockMovementParams) (int64, error) {
@@ -83,6 +90,7 @@ func (q *Queries) InsertStockMovement(ctx context.Context, arg InsertStockMoveme
 		arg.At,
 		arg.UserID,
 		arg.Note,
+		arg.OrderID,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -93,10 +101,12 @@ const listStockMovements = `-- name: ListStockMovements :many
 SELECT stock_movements.id, stock_movements.kind, stock_movements.product_id,
     products.name AS product_name, products.sku AS product_sku,
     stock_movements.change, stock_movements.stock_after, stock_movements.at,
-    stock_movements.user_id, users.name AS user_name, stock_movements.note
+    stock_movements.user_id, users.name AS user_name, stock_movements.note,
+    stock_movements.order_id, orders.number AS order_number
 FROM stock_movements
 JOIN products ON products.id = stock_movements.product_id
 JOIN users ON users.id = stock_movements.user_id
+LEFT JOIN orders ON orders.id = stock_movements.order_id
 WHERE ($1::bigint IS NULL OR stock_movements.product_id = $1)
     AND ($2::text IS NULL OR stock_movements.kind = $2)
     AND ($3::timestamptz IS NULL OR stock_movements.at >= $3)
@@ -127,6 +137,8 @@ type ListStockMovementsRow struct {
 	UserID      int64
 	UserName    string
 	Note        string
+	OrderID     pgtype.Int8
+	OrderNumber pgtype.Int8
 }
 
 // Newest first by id, which follows the order the movements were made: the cursor
@@ -161,6 +173,8 @@ func (q *Queries) ListStockMovements(ctx context.Context, arg ListStockMovements
 			&i.UserID,
 			&i.UserName,
 			&i.Note,
+			&i.OrderID,
+			&i.OrderNumber,
 		); err != nil {
 			return nil, err
 		}
@@ -173,7 +187,7 @@ func (q *Queries) ListStockMovements(ctx context.Context, arg ListStockMovements
 }
 
 const lockProducts = `-- name: LockProducts :many
-SELECT id, stock, status FROM products
+SELECT id, stock, status, price FROM products
 WHERE id = ANY($1::bigint[])
 ORDER BY id
 FOR UPDATE
@@ -183,6 +197,7 @@ type LockProductsRow struct {
 	ID     int64
 	Stock  int32
 	Status string
+	Price  int64
 }
 
 // Holds each Product until the transaction ends, so movements for one Product run one
@@ -198,7 +213,12 @@ func (q *Queries) LockProducts(ctx context.Context, ids []int64) ([]LockProducts
 	var items []LockProductsRow
 	for rows.Next() {
 		var i LockProductsRow
-		if err := rows.Scan(&i.ID, &i.Stock, &i.Status); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Stock,
+			&i.Status,
+			&i.Price,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

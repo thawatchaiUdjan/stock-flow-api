@@ -100,7 +100,7 @@ func TestMovingSeveralProductsWaitsInsteadOfDeadlocking(t *testing.T) {
 
 	moved := make(chan error, 1)
 	go func() {
-		_, err := s.MoveStock(ctx, store.MoveStockParams{Kind: store.KindOrder, UserID: user.ID, Now: time.Now, Changes: []store.StockChange{
+		_, err := s.MoveStock(ctx, store.MoveStockParams{Kind: store.KindAdjustment, Note: "count", UserID: user.ID, Now: time.Now, Changes: []store.StockChange{
 			{ProductID: second.ID, Change: -1}, {ProductID: first.ID, Change: -1},
 		}})
 		moved <- err

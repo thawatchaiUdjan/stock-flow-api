@@ -33,6 +33,49 @@ components:
         - change
         - note
       type: object
+    CreateOrderBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/CreateOrderBody.json
+          format: uri
+          readOnly: true
+          type: string
+        customer:
+          description: The customer's name, up to 120 characters.
+          maxLength: 120
+          type: string
+        lines:
+          description: One or more lines, each a different Product. Each line's price is the Product's now.
+          items:
+            $ref: "#/components/schemas/CreateOrderLine"
+          minItems: 1
+          type: array
+        note:
+          description: Anything worth keeping about the Order, up to 200 characters.
+          maxLength: 200
+          type: string
+      required:
+        - lines
+      type: object
+    CreateOrderLine:
+      additionalProperties: false
+      properties:
+        productId:
+          description: The Product. It must be Active, and on no other line.
+          format: int64
+          type: integer
+        quantity:
+          description: "How many units: a whole number, at least 1."
+          format: int32
+          minimum: 1
+          type: integer
+      required:
+        - productId
+        - quantity
+      type: object
     CreateProductBody:
       additionalProperties: false
       properties:
@@ -223,8 +266,9 @@ components:
             target-is-owner: The operation acts on a User, and that User is the Owner, who cannot be changed here.
             user-inactive: No Setup link can be issued for an Inactive User.
             sku-taken: Another Product has this SKU, in any letter case.
-            insufficient-stock: The stock change would take a Product's stock below 0. The error's products member names each such Product with its stock.
-            product-archived: The Product is Archived: its stock cannot be received or adjusted.
+            insufficient-stock: The stock change, or the Order, would take a Product's stock below 0. The error's products member names each such Product with its stock.
+            product-archived: The Product is Archived: its stock cannot be received or adjusted, and it cannot be ordered.
+            order-not-pending: The Order is completed or cancelled already, and neither can change.
           enum:
             - about:blank
             - login-failed
@@ -236,6 +280,7 @@ components:
             - sku-taken
             - insufficient-stock
             - product-archived
+            - order-not-pending
           type: string
       type: object
     HealthOutputBody:
@@ -280,6 +325,29 @@ components:
       required:
         - entries
         - nextBefore
+      type: object
+    ListOrdersOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/ListOrdersOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        orders:
+          description: This page's Orders, newest first.
+          items:
+            $ref: "#/components/schemas/OrderSummary"
+          type: array
+        total:
+          description: How many Orders match, whatever the page.
+          format: int64
+          type: integer
+      required:
+        - orders
+        - total
       type: object
     ListProductsOutputBody:
       additionalProperties: false
@@ -408,6 +476,188 @@ components:
         - userAgent
       type: object
     LoginLogUser:
+      additionalProperties: false
+      properties:
+        id:
+          description: Identifies the User.
+          format: int64
+          type: integer
+        name:
+          description: The User's name now.
+          type: string
+      required:
+        - id
+        - name
+      type: object
+    Order:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/Order.json
+          format: uri
+          readOnly: true
+          type: string
+        cancelled:
+          description: When and by whom it was cancelled, or null.
+          oneOf:
+            - $ref: "#/components/schemas/OrderFinish"
+            - type: "null"
+        completed:
+          description: When and by whom it was completed, or null.
+          oneOf:
+            - $ref: "#/components/schemas/OrderFinish"
+            - type: "null"
+        createdAt:
+          description: When it was created.
+          format: date-time
+          type: string
+        createdBy:
+          $ref: "#/components/schemas/OrderUser"
+          description: The User who created it.
+        customer:
+          description: The customer's name, up to 120 characters. Empty when there is none.
+          type: string
+        id:
+          description: Identifies the Order. A Stock movement made by it carries this id.
+          format: int64
+          type: integer
+        lines:
+          description: In the order they were given. A Product is on one line at most.
+          items:
+            $ref: "#/components/schemas/OrderLine"
+          type: array
+        note:
+          description: Up to 200 characters. Empty when there is none.
+          type: string
+        number:
+          description: "The Order's number: counting up from 1 in the order Orders are created, never reused. A refused Order may leave a gap."
+          format: int64
+          type: integer
+        status:
+          description: Pending until completed or cancelled; completed and cancelled are final.
+          enum:
+            - pending
+            - completed
+            - cancelled
+          type: string
+        total:
+          description: The sum of the lines' amounts, in whole satang. There is no tax, discount or delivery charge.
+          format: int64
+          type: integer
+      required:
+        - id
+        - number
+        - createdAt
+        - createdBy
+        - customer
+        - note
+        - lines
+        - total
+        - status
+        - completed
+        - cancelled
+      type: object
+    OrderFinish:
+      additionalProperties: false
+      properties:
+        at:
+          description: When.
+          format: date-time
+          type: string
+        by:
+          $ref: "#/components/schemas/OrderUser"
+          description: Who.
+      required:
+        - at
+        - by
+      type: object
+    OrderLine:
+      additionalProperties: false
+      properties:
+        amount:
+          description: The quantity times the price, in whole satang.
+          format: int64
+          type: integer
+        price:
+          description: "What one unit sold for, in whole satang: the Product's price when the Order was created, which never changes after."
+          format: int64
+          type: integer
+        product:
+          $ref: "#/components/schemas/OrderLineProduct"
+          description: The Product sold.
+        quantity:
+          description: "How many units: a whole number, at least 1."
+          format: int32
+          type: integer
+      required:
+        - product
+        - quantity
+        - price
+        - amount
+      type: object
+    OrderLineProduct:
+      additionalProperties: false
+      properties:
+        id:
+          description: Identifies the Product.
+          format: int64
+          type: integer
+        name:
+          description: The Product's name now.
+          type: string
+        sku:
+          description: The Product's SKU now.
+          type: string
+      required:
+        - id
+        - name
+        - sku
+      type: object
+    OrderSummary:
+      additionalProperties: false
+      properties:
+        createdAt:
+          description: When it was created.
+          format: date-time
+          type: string
+        customer:
+          description: The customer's name. Empty when there is none.
+          type: string
+        id:
+          description: Identifies the Order.
+          format: int64
+          type: integer
+        lineCount:
+          description: How many lines it has.
+          format: int32
+          type: integer
+        number:
+          description: The Order's number.
+          format: int64
+          type: integer
+        status:
+          description: Pending, completed or cancelled.
+          enum:
+            - pending
+            - completed
+            - cancelled
+          type: string
+        total:
+          description: The sum of its lines' amounts, in whole satang.
+          format: int64
+          type: integer
+      required:
+        - id
+        - number
+        - createdAt
+        - customer
+        - lineCount
+        - total
+        - status
+      type: object
+    OrderUser:
       additionalProperties: false
       properties:
         id:
@@ -1052,6 +1302,296 @@ paths:
       summary: Get the User who is logged in
       tags:
         - Sessions
+  /orders:
+    get:
+      description: Every Role sees every Order, newest first, one page at a time. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session.
+      operationId: list-orders
+      parameters:
+        - description: Only the Order with this number, and the Orders whose customer contains this text in any letter case. Leave out, or leave blank, for all.
+          explode: false
+          in: query
+          name: search
+          schema:
+            description: Only the Order with this number, and the Orders whose customer contains this text in any letter case. Leave out, or leave blank, for all.
+            type: string
+        - description: Only the Orders with this status. Leave out for all.
+          explode: false
+          in: query
+          name: status
+          schema:
+            description: Only the Orders with this status. Leave out for all.
+            enum:
+              - pending
+              - completed
+              - cancelled
+            type: string
+        - description: The most Orders on a page.
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: The most Orders on a page.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - description: How many matching Orders to skip, to reach a later page.
+          explode: false
+          in: query
+          name: offset
+          schema:
+            default: 0
+            description: How many matching Orders to skip, to reach a later page.
+            format: int64
+            minimum: 0
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListOrdersOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: List the Orders
+      tags:
+        - Orders
+    post:
+      description: "Every Role may. The Order starts pending, and each line's quantity leaves its Product's stock at once, as one order movement per line. It is created whole or not at all: 409 `insufficient-stock` when any line asks for more than its Product's stock, naming each such Product with its stock; 409 `product-archived` when a Product is Archived; a plain 404 when there is no such Product; and 422 for a Product on two lines or a total past 9223372036854775807. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: create-order
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+          description: Created
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Create an Order
+      tags:
+        - Orders
+  /orders/{number}:
+    get:
+      description: Every Role sees every Order, with its lines. Answers a plain 404 when there is no such Order. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session.
+      operationId: get-order
+      parameters:
+        - description: The Order's number.
+          in: path
+          name: number
+          required: true
+          schema:
+            description: The Order's number.
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Get an Order
+      tags:
+        - Orders
+  /orders/{number}/cancel:
+    post:
+      description: "Records who cancelled it and when, and gives each line's quantity back to its Product's stock as one cancellation movement per line, even to a Product Archived since. Answers 409 `order-not-pending` when it is completed or cancelled already, and a plain 409 when giving the stock back would take it past 2147483647. Answers a plain 404 when there is no such Order. Owner and Admins only: answers 403 to Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: cancel-order
+      parameters:
+        - description: The Order's number.
+          in: path
+          name: number
+          required: true
+          schema:
+            description: The Order's number.
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Cancel an Order
+      tags:
+        - Orders
+  /orders/{number}/complete:
+    post:
+      description: Every Role may, once the customer has paid and has the goods. Records who completed it and when; no stock changes. Answers 409 `order-not-pending` when it is completed or cancelled already. Answers a plain 404 when there is no such Order. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session.
+      operationId: complete-order
+      parameters:
+        - description: The Order's number.
+          in: path
+          name: number
+          required: true
+          schema:
+            description: The Order's number.
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Complete an Order
+      tags:
+        - Orders
   /products:
     get:
       description: Every Role sees the same list, prices included. Sorted by name, one page at a time. Shows the Active Products unless `status` asks for the Archived ones. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session.

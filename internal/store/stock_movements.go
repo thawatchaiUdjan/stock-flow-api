@@ -71,7 +71,7 @@ type MoveStockParams struct {
 // movements, with their Product and User, in the order of arg.Changes.
 func (s *Store) MoveStock(ctx context.Context, arg MoveStockParams) (moved []ListStockMovementsRow, err error) {
 	err = InTx(ctx, s.pool, func(q *Queries) error {
-		moved, err = moveStock(ctx, q, arg)
+		moved, err = moveStock(ctx, q, arg, 0)
 		return err
 	})
 	if err != nil {
@@ -81,8 +81,10 @@ func (s *Store) MoveStock(ctx context.Context, arg MoveStockParams) (moved []Lis
 }
 
 // moveStock is the one path every stock change takes, inside a transaction the caller
-// holds, so an Order can make its movements in the transaction that creates it.
-func moveStock(ctx context.Context, q *Queries, arg MoveStockParams) ([]ListStockMovementsRow, error) {
+// holds, so an Order can make its movements in the transaction that creates or cancels it.
+// orderID is that Order, which every Order and Cancellation movement links to
+// (stock-movements R11), or 0 for none.
+func moveStock(ctx context.Context, q *Queries, arg MoveStockParams, orderID int64) ([]ListStockMovementsRow, error) {
 	ids := make([]int64, 0, len(arg.Changes))
 	for _, c := range arg.Changes {
 		ids = append(ids, c.ProductID)
@@ -134,7 +136,7 @@ func moveStock(ctx context.Context, q *Queries, arg MoveStockParams) ([]ListStoc
 	for i, c := range arg.Changes {
 		id, err := q.InsertStockMovement(ctx, InsertStockMovementParams{
 			Kind: arg.Kind, ProductID: c.ProductID, Change: c.Change, StockAfter: int32(after[i]),
-			At: at, UserID: arg.UserID, Note: arg.Note,
+			At: at, UserID: arg.UserID, Note: arg.Note, OrderID: orderLink(orderID),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("insert stock movement: %w", err)

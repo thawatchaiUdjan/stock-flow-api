@@ -147,7 +147,7 @@ func runStockMovements(t *testing.T, newSubject func(t *testing.T) Subject) {
 		tea := s.AddProduct(t, stocked("Thai tea", "TEA-01", 10))
 		cup := s.AddProduct(t, stocked("Cup", "CUP-01", 3))
 
-		moved, err := s.Store.MoveStock(ctx, move(store.KindOrder, user, "", change(cup, -1), change(tea, -4)))
+		moved, err := s.Store.MoveStock(ctx, move(store.KindAdjustment, user, "count", change(cup, -1), change(tea, -4)))
 
 		if err != nil {
 			t.Fatal(err)
@@ -168,7 +168,7 @@ func runStockMovements(t *testing.T, newSubject func(t *testing.T) Subject) {
 		cup := s.AddProduct(t, stocked("Cup", "CUP-01", 3))
 		lid := s.AddProduct(t, stocked("Lid", "LID-01", 1))
 
-		_, err := s.Store.MoveStock(ctx, move(store.KindOrder, user, "", change(tea, -4), change(lid, -2), change(cup, -5)))
+		_, err := s.Store.MoveStock(ctx, move(store.KindAdjustment, user, "count", change(tea, -4), change(lid, -2), change(cup, -5)))
 
 		var short *store.InsufficientStockError
 		if !errors.As(err, &short) {
@@ -199,6 +199,8 @@ func runStockMovements(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}
 	})
 
+	// A Cancellation gives stock back even to an Archived Product (orders R12): the Orders
+	// part of the contract shows it, as only an Order makes one.
 	t.Run("refuses an Archived Product for every kind but Cancellation", func(t *testing.T) {
 		s := newSubject(t)
 		user := s.AddUser(t, staff("somchai@example.com"))
@@ -213,10 +215,6 @@ func runStockMovements(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}
 		if got := stockOf(t, s, old.ID); got != 10 {
 			t.Errorf("stock = %d, want 10", got)
-		}
-		moved, err := s.Store.MoveStock(ctx, move(store.KindCancellation, user, "", change(old, 2)))
-		if err != nil || moved[0].StockAfter != 12 {
-			t.Errorf("cancellation: moved = %+v, err = %v, want stock after 12", moved, err)
 		}
 	})
 
@@ -244,12 +242,15 @@ func runStockMovements(t *testing.T, newSubject func(t *testing.T) Subject) {
 			"a Receive that takes stock":      move(store.KindReceive, user, "", change(tea, -1)),
 			"a Cancellation that takes stock": move(store.KindCancellation, user, "", change(tea, -1)),
 			"an Order that adds stock":        move(store.KindOrder, user, "", change(tea, 1)),
-			"an Adjustment with no note":      move(store.KindAdjustment, user, "", change(tea, 1)),
-			"an Adjustment with a blank note": move(store.KindAdjustment, user, "  ", change(tea, 1)),
-			"a note of more than 200 letters": move(store.KindReceive, user, strings.Repeat("ก", 201), change(tea, 1)),
-			"an unknown kind":                 move("stocktake", user, "why", change(tea, 1)),
-			"an unknown User":                 move(store.KindReceive, store.User{ID: 404}, "", change(tea, 1)),
-			"a valid change before a bad one": move(store.KindAdjustment, user, "why", change(tea, 1), change(tea, 0)),
+			// stock-movements R3, R11: only an Order makes these, and they link to it.
+			"an Order movement with no Order":       move(store.KindOrder, user, "", change(tea, -1)),
+			"a Cancellation movement with no Order": move(store.KindCancellation, user, "", change(tea, 1)),
+			"an Adjustment with no note":            move(store.KindAdjustment, user, "", change(tea, 1)),
+			"an Adjustment with a blank note":       move(store.KindAdjustment, user, "  ", change(tea, 1)),
+			"a note of more than 200 letters":       move(store.KindReceive, user, strings.Repeat("ก", 201), change(tea, 1)),
+			"an unknown kind":                       move("stocktake", user, "why", change(tea, 1)),
+			"an unknown User":                       move(store.KindReceive, store.User{ID: 404}, "", change(tea, 1)),
+			"a valid change before a bad one":       move(store.KindAdjustment, user, "why", change(tea, 1), change(tea, 0)),
 		} {
 			if _, err := s.Store.MoveStock(ctx, arg); err == nil {
 				t.Errorf("%s: err = nil, want a refusal", name)

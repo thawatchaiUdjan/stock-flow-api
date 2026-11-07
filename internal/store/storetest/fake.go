@@ -31,6 +31,10 @@ type Fake struct {
 	log       []store.ListLoginLogRow
 	products  []store.Product
 	movements []store.StockMovement
+	orders    []store.Order
+	lines     []store.OrderLine
+	// numbered is the last Order number handed out, as the order_numbers sequence keeps it.
+	numbered int64
 }
 
 var _ Store = (*Fake)(nil)

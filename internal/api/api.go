@@ -36,6 +36,12 @@ type Store interface {
 	ListStockMovements(ctx context.Context, arg store.ListStockMovementsParams) ([]store.ListStockMovementsRow, error)
 	CreateProduct(ctx context.Context, arg store.InsertProductParams) (store.Product, error)
 	UpdateProduct(ctx context.Context, arg store.ChangeProductParams) (store.Product, error)
+	ListOrders(ctx context.Context, arg store.ListOrdersParams) ([]store.ListOrdersRow, error)
+	CountOrders(ctx context.Context, arg store.CountOrdersParams) (int64, error)
+	GetOrder(ctx context.Context, number int64) (store.OrderDetail, error)
+	CreateOrder(ctx context.Context, arg store.CreateOrderParams) (store.OrderDetail, error)
+	CompleteOrder(ctx context.Context, arg store.FinishOrderParams) (store.OrderDetail, error)
+	CancelOrder(ctx context.Context, arg store.FinishOrderParams) (store.OrderDetail, error)
 }
 
 // PasswordHasher hashes and verifies passwords. Verify takes "" for a User with no
@@ -66,6 +72,7 @@ func New(deps Deps) (http.Handler, huma.API) {
 	registerLoginLog(api, deps)
 	registerProducts(api, deps)
 	registerStockMovements(api, deps)
+	registerOrders(api, deps)
 	publishErrorCodes(api)
 
 	return router, api

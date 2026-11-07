@@ -161,7 +161,7 @@ func TestTheContractPublishesEveryErrorCode(t *testing.T) {
 	model := contract.OpenAPI().Components.Schemas.Map()["ErrorModel"]
 
 	typ := model.Properties["type"]
-	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken", "insufficient-stock", "product-archived"}
+	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken", "insufficient-stock", "product-archived", "order-not-pending"}
 	if !slices.Equal(typ.Enum, want) {
 		t.Errorf("type enum = %v, want %v", typ.Enum, want)
 	}
@@ -533,5 +533,102 @@ func TestTheContractCarriesTheStockOfInsufficientStock(t *testing.T) {
 	}
 	if !strings.Contains(products.Description, "insufficient-stock") {
 		t.Errorf("description %q does not say when it is there", products.Description)
+	}
+}
+
+// The ticket's five operations, who may call them, and what each can answer (orders R5,
+// R11, R12, R17, users-and-access R11).
+func TestTheContractPublishesTheFiveOrderOperations(t *testing.T) {
+	ops := operations(t)
+
+	for id, want := range map[string]struct {
+		method, path string
+		statuses     []string
+		codes        []string
+	}{
+		"list-orders":    {http.MethodGet, "/orders", []string{"200", "401", "422"}, nil},
+		"get-order":      {http.MethodGet, "/orders/{number}", []string{"200", "401", "404", "422"}, nil},
+		"create-order":   {http.MethodPost, "/orders", []string{"201", "401", "404", "409", "422"}, []string{"insufficient-stock", "product-archived"}},
+		"complete-order": {http.MethodPost, "/orders/{number}/complete", []string{"200", "401", "404", "409", "422"}, []string{"order-not-pending"}},
+		"cancel-order":   {http.MethodPost, "/orders/{number}/cancel", []string{"200", "401", "403", "404", "409", "422"}, []string{"order-not-pending"}},
+	} {
+		op, ok := ops[id]
+		if !ok {
+			t.Errorf("no operation %q", id)
+			continue
+		}
+		if op.Method != want.method || op.Path != want.path || len(op.Security) != 1 {
+			t.Errorf("%s: %s %s with security %v, want %s %s with the session scheme", id, op.Method, op.Path, op.Security, want.method, want.path)
+		}
+		for _, status := range want.statuses {
+			if op.Responses[status] == nil {
+				t.Errorf("%s does not declare %s; it has %v", id, status, slices.Sorted(maps.Keys(op.Responses)))
+			}
+		}
+		for _, code := range append(want.codes, "session-ended") {
+			if !strings.Contains(op.Description, "`"+code+"`") {
+				t.Errorf("%s: description %q does not name %s", id, op.Description, code)
+			}
+		}
+		// orders R5, R11, R18: only Cancel is refused to anyone.
+		if id != "cancel-order" && op.Responses["403"] != nil {
+			t.Errorf("%s declares 403, but every Role may call it", id)
+		}
+	}
+	if !strings.Contains(ops["cancel-order"].Description, "Staff") {
+		t.Errorf("cancel-order: description %q does not say Staff are refused", ops["cancel-order"].Description)
+	}
+}
+
+// orders R14: an Order is never edited, so nothing but its own Complete and Cancel
+// changes one, and nothing deletes one.
+func TestNoOperationEditsAnOrder(t *testing.T) {
+	for id, op := range operations(t) {
+		if !strings.HasPrefix(op.Path, "/orders") || op.Method == http.MethodGet {
+			continue
+		}
+		if op.Method != http.MethodPost || op.Path != "/orders" && !strings.HasSuffix(op.Path, "/complete") && !strings.HasSuffix(op.Path, "/cancel") {
+			t.Errorf("%s is a %s on %s", id, op.Method, op.Path)
+		}
+	}
+}
+
+// orders R1, R3, R4, R10: the contract says what an Order holds, in whole satang, and
+// what Create Order takes.
+func TestTheContractDescribesAnOrder(t *testing.T) {
+	_, contract := api.New(api.Deps{})
+	schemas := contract.OpenAPI().Components.Schemas.Map()
+
+	o, body := schemas["Order"], schemas["CreateOrderBody"]
+
+	if o == nil || body == nil {
+		t.Fatalf("Order = %v, CreateOrderBody = %v", o, body)
+	}
+	if want := []any{"pending", "completed", "cancelled"}; !slices.Equal(o.Properties["status"].Enum, want) {
+		t.Errorf("status enum = %v, want %v", o.Properties["status"].Enum, want)
+	}
+	for _, name := range []string{"completed", "cancelled"} {
+		f := o.Properties[name]
+		if len(f.OneOf) != 2 || f.OneOf[1].Type != "null" || !slices.Contains(o.Required, name) {
+			t.Errorf("%s = %+v, want a required object or null", name, f)
+		}
+	}
+	line := schemas["OrderLine"]
+	for name, s := range map[string]*huma.Schema{"total": o.Properties["total"], "price": line.Properties["price"], "amount": line.Properties["amount"]} {
+		if s.Type != "integer" || s.Format != "int64" {
+			t.Errorf("%s: type %q, format %q, want whole satang as an int64", name, s.Type, s.Format)
+		}
+	}
+	if got, want := slices.Sorted(maps.Keys(body.Properties)), []string{"$schema", "customer", "lines", "note"}; !slices.Equal(got, want) {
+		t.Errorf("create properties = %v, want %v", got, want)
+	}
+	if !slices.Equal(body.Required, []string{"lines"}) || *body.Properties["lines"].MinItems != 1 {
+		t.Errorf("create requires %v, lines min %v; want only lines, at least one", body.Required, body.Properties["lines"].MinItems)
+	}
+	if *body.Properties["customer"].MaxLength != 120 || *body.Properties["note"].MaxLength != 200 {
+		t.Error("customer and note are not limited to 120 and 200")
+	}
+	if q := schemas["CreateOrderLine"].Properties["quantity"]; q.Type != "integer" || *q.Minimum != 1 {
+		t.Errorf("quantity = %+v, want an integer of at least 1", q)
 	}
 }
