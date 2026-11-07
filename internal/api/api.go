@@ -29,6 +29,11 @@ type Store interface {
 	CreateUser(ctx context.Context, arg store.CreateUserParams) (store.CreateUserRow, error)
 	UpdateUser(ctx context.Context, arg store.ChangeUserParams) (store.ChangeUserRow, error)
 	ResetPassword(ctx context.Context, arg store.IssueSetupLinkParams) error
+	GetProduct(ctx context.Context, id int64) (store.Product, error)
+	ListProducts(ctx context.Context, arg store.ListProductsParams) ([]store.Product, error)
+	CountProducts(ctx context.Context, arg store.CountProductsParams) (int64, error)
+	CreateProduct(ctx context.Context, arg store.InsertProductParams) (store.Product, error)
+	UpdateProduct(ctx context.Context, arg store.ChangeProductParams) (store.Product, error)
 }
 
 // PasswordHasher hashes and verifies passwords. Verify takes "" for a User with no
@@ -57,6 +62,7 @@ func New(deps Deps) (http.Handler, huma.API) {
 	registerSetupLinks(api, deps)
 	registerUsers(api, deps)
 	registerLoginLog(api, deps)
+	registerProducts(api, deps)
 	publishErrorCodes(api)
 
 	return router, api
