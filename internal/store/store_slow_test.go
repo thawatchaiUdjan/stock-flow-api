@@ -4,6 +4,7 @@ package store_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pressly/goose/v3"
 
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/auth"
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
@@ -901,4 +903,69 @@ func TestTheSchemaRefusesToChangeOrRemoveALoginLogEntry(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT email FROM login_log`).Scan(&email); err != nil || email != "nobody@example.com" {
 		t.Errorf("entry = %q, %v, want it untouched", email, err)
 	}
+}
+
+// products R2, R4: a name or unit of only whitespace in any script is refused by the
+// schema itself, and the Sales queries have an index on completed_at. The migration that
+// adds both applies over data already stored, and its down puts the schema back.
+func TestTheBlankProductAndSalesIndexMigrationAppliesAndReverses(t *testing.T) {
+	ctx := context.Background()
+	url := testdb.URL(t)
+	pool := open(t, url)
+	db, err := sql.Open("pgx", url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../db/migrations"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const insert = `INSERT INTO products (name, sku, unit, price) VALUES ($1, $2, $3, 0)`
+	const hasIndex = `SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'orders_completed_at_idx')`
+
+	// Back to the schema before the migration, holding a valid Product.
+	if _, err := provider.DownTo(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, insert, "Thai tea", "TEA-01", "pcs"); err != nil {
+		t.Fatal(err)
+	}
+	var indexed bool
+	if err := pool.QueryRow(ctx, hasIndex).Scan(&indexed); err != nil || indexed {
+		t.Fatalf("before the migration: indexed = %v, err = %v, want no index", indexed, err)
+	}
+
+	// Up: the stored Product stays, blank names and units in any script are refused.
+	if _, err := provider.UpByOne(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, blank := range []string{"\u00a0", "\u3000", "\u0085", "\v", " \u2003\u2028 ", ""} {
+		_, err := pool.Exec(ctx, insert, blank, "BLANK-1", "pcs")
+		assertViolates(t, err, "products_name_check")
+		_, err = pool.Exec(ctx, insert, "Tea", "BLANK-2", blank)
+		assertViolates(t, err, "products_unit_check")
+	}
+	if _, err := pool.Exec(ctx, insert, "ชาไทย", "TEA-02", "ชิ้น"); err != nil {
+		t.Errorf("a name and unit in Thai: %v, want them stored", err)
+	}
+	if _, err := pool.Exec(ctx, insert, "\u3000Tea\u00a0", "TEA-03", "6 pack"); err != nil {
+		t.Errorf("a name with a space around it: %v, want it stored", err)
+	}
+	if err := pool.QueryRow(ctx, hasIndex).Scan(&indexed); err != nil || !indexed {
+		t.Errorf("after the migration: indexed = %v, err = %v, want the index", indexed, err)
+	}
+
+	// Down: the index goes, and so does the wider refusal.
+	if _, err := provider.Down(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, hasIndex).Scan(&indexed); err != nil || indexed {
+		t.Errorf("after down: indexed = %v, err = %v, want no index", indexed, err)
+	}
+	if _, err := pool.Exec(ctx, insert, "\u3000", "OLD-2", "pcs"); err != nil {
+		t.Errorf("after down, an ideographic space name: %v, want it stored again", err)
+	}
+	_, err = pool.Exec(ctx, insert, " ", "OLD-3", "pcs")
+	assertViolates(t, err, "products_name_check")
 }
