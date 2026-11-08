@@ -243,14 +243,16 @@ func runStockMovements(t *testing.T, newSubject func(t *testing.T) Subject) {
 			"a Cancellation that takes stock": move(store.KindCancellation, user, "", change(tea, -1)),
 			"an Order that adds stock":        move(store.KindOrder, user, "", change(tea, 1)),
 			// stock-movements R3, R11: only an Order makes these, and they link to it.
-			"an Order movement with no Order":       move(store.KindOrder, user, "", change(tea, -1)),
-			"a Cancellation movement with no Order": move(store.KindCancellation, user, "", change(tea, 1)),
-			"an Adjustment with no note":            move(store.KindAdjustment, user, "", change(tea, 1)),
-			"an Adjustment with a blank note":       move(store.KindAdjustment, user, "  ", change(tea, 1)),
-			"a note of more than 200 letters":       move(store.KindReceive, user, strings.Repeat("ก", 201), change(tea, 1)),
-			"an unknown kind":                       move("stocktake", user, "why", change(tea, 1)),
-			"an unknown User":                       move(store.KindReceive, store.User{ID: 404}, "", change(tea, 1)),
-			"a valid change before a bad one":       move(store.KindAdjustment, user, "why", change(tea, 1), change(tea, 0)),
+			"an Order movement with no Order":        move(store.KindOrder, user, "", change(tea, -1)),
+			"a Cancellation movement with no Order":  move(store.KindCancellation, user, "", change(tea, 1)),
+			"an Adjustment with no note":             move(store.KindAdjustment, user, "", change(tea, 1)),
+			"an Adjustment with a blank note":        move(store.KindAdjustment, user, "  ", change(tea, 1)),
+			"an Adjustment with a no-break note":     move(store.KindAdjustment, user, "\u00a0", change(tea, 1)),
+			"an Adjustment with an ideographic note": move(store.KindAdjustment, user, "\u3000 \u0085", change(tea, 1)),
+			"a note of more than 200 letters":        move(store.KindReceive, user, strings.Repeat("ก", 201), change(tea, 1)),
+			"an unknown kind":                        move("stocktake", user, "why", change(tea, 1)),
+			"an unknown User":                        move(store.KindReceive, store.User{ID: 404}, "", change(tea, 1)),
+			"a valid change before a bad one":        move(store.KindAdjustment, user, "why", change(tea, 1), change(tea, 0)),
 		} {
 			if _, err := s.Store.MoveStock(ctx, arg); err == nil {
 				t.Errorf("%s: err = nil, want a refusal", name)

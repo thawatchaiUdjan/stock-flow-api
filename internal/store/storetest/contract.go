@@ -503,9 +503,11 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		s.AddUser(t, store.User{Name: "Malee", Email: "malee@example.com", Role: "owner", Status: "active"})
 
 		for name, arg := range map[string]store.CreateUserParams{
-			"blank name":   {Name: " ", Email: "a@example.com", Role: "staff"},
-			"unknown Role": {Name: "A", Email: "b@example.com", Role: "manager"},
-			"second Owner": {Name: "A", Email: "c@example.com", Role: "owner"},
+			"blank name":          {Name: " ", Email: "a@example.com", Role: "staff"},
+			"no-break space name": {Name: "\u00a0", Email: "d@example.com", Role: "staff"},
+			"ideographic name":    {Name: "\u3000 \u0085", Email: "e@example.com", Role: "staff"},
+			"unknown Role":        {Name: "A", Email: "b@example.com", Role: "manager"},
+			"second Owner":        {Name: "A", Email: "c@example.com", Role: "owner"},
 		} {
 			arg.TokenHash, arg.ExpiresAt = []byte(name), at
 			if _, err := s.Store.CreateUser(ctx, arg); err == nil || errors.Is(err, store.ErrNotFound) {
@@ -662,10 +664,12 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		user := s.AddUser(t, staff("staff@example.com"))
 
 		for name, arg := range map[string]store.ChangeUserParams{
-			"blank name":     {ID: user.ID, Name: " "},
-			"unknown Role":   {ID: user.ID, Role: "manager"},
-			"unknown status": {ID: user.ID, Status: "deleted"},
-			"second Owner":   {ID: user.ID, Role: "owner"},
+			"blank name":          {ID: user.ID, Name: " "},
+			"no-break space name": {ID: user.ID, Name: "\u00a0"},
+			"ideographic name":    {ID: user.ID, Name: "\u3000 \u0085"},
+			"unknown Role":        {ID: user.ID, Role: "manager"},
+			"unknown status":      {ID: user.ID, Status: "deleted"},
+			"second Owner":        {ID: user.ID, Role: "owner"},
 		} {
 			if _, err := s.Store.UpdateUser(ctx, arg); err == nil {
 				t.Errorf("%s: err = nil, want a refusal", name)

@@ -34,10 +34,11 @@ type listUsersOutput struct {
 }
 
 type createUserBody struct {
-	// pattern: a name of only spaces is no name (users-and-access R14). The class is what
-	// \S holds in Go, written out because JavaScript's \S holds more. The name is stored
-	// as it was given, in any language.
-	Name string `json:"name" pattern:"[^\\t\\n\\f\\r ]" patternDescription:"contain a character that is not a space" doc:"The User's name, in any language."`
+	// pattern: a name of only whitespace, in any script, is no name (users-and-access R14).
+	// It is every character unicode.IsSpace holds, as the database constraint has it
+	// (migration 00009). They are written out, not as \p{Z} or \x{85}, which JavaScript
+	// reads differently or not at all. The name is stored as it was given, in any language.
+	Name string `json:"name" pattern:"[^\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]" patternDescription:"contain a character that is not whitespace" doc:"The User's name, in any language."`
 	// users-and-access R15: the email is fixed from here on.
 	Email string `json:"email" format:"email" doc:"Compared without regard to letter case; it cannot change afterwards."`
 	// users-and-access R9, R10: the Owner is made at installation, so only these two.
@@ -61,8 +62,8 @@ const targetErrors = "Answers 403 `target-is-owner` when the target is the Owner
 type updateUserBody struct {
 	// A field left out stays as it is. There is no email: it cannot change
 	// (users-and-access R15), and a body that names one is refused. pattern: a name of
-	// only spaces is no name (R14), written out as in createUserBody.
-	Name string `json:"name,omitempty" pattern:"[^\\t\\n\\f\\r ]" patternDescription:"contain a character that is not a space" doc:"The User's name, in any language."`
+	// only whitespace is no name (R14), written out as in createUserBody.
+	Name string `json:"name,omitempty" pattern:"[^\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]" patternDescription:"contain a character that is not whitespace" doc:"The User's name, in any language."`
 	// users-and-access R9, R35: between these two, never to Owner.
 	Role string `json:"role,omitempty" enum:"admin,staff" doc:"Applies at once to the sessions the User has open."`
 	// users-and-access R16.

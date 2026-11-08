@@ -109,8 +109,9 @@ type adjustStockBody struct {
 	ProductID int64 `json:"productId" doc:"The Product whose stock is wrong. It must be Active."`
 	// stock-movements R5: up or down, never 0 (TransformSchema).
 	Change int32 `json:"change" doc:"How many units to add (above 0) or take (below 0): a whole number other than 0."`
-	// stock-movements R2, R5: required, and not blank.
-	Note string `json:"note" maxLength:"200" pattern:"[^\\t\\n\\f\\r ]" patternDescription:"contain a character that is not a space" doc:"Why the stock is wrong, up to 200 characters."`
+	// stock-movements R2, R5: required, and not only whitespace in any script, written out as
+	// in createProductBody (migration 00009 holds the same in the database).
+	Note string `json:"note" maxLength:"200" pattern:"[^\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]" patternDescription:"contain a character that is not whitespace" doc:"Why the stock is wrong, up to 200 characters."`
 }
 
 // TransformSchema refuses a change of 0, which Huma's tags cannot say. Being in the schema,

@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -374,4 +375,48 @@ func fieldError(location, message, where string) bool {
 		return location == place && strings.Contains(message, "property "+property+" ")
 	}
 	return location == where
+}
+
+// users-and-access R14: a name of only whitespace, in any script, is no name. Every
+// character the rule counts as whitespace is tried alone and in a run; the same 422 as
+// "  ", on Create User and on Update User.
+func TestAUserNameOfOnlyWhitespaceIsRefusedWhicheverCharacterItIs(t *testing.T) {
+	h := newHarness(t)
+	owner, somchai := h.ownerAnd("somchai@example.com")
+
+	for _, r := range whitespaceRunes() {
+		for _, blank := range []string{string(r), string(r) + string(r)} {
+			assertFieldError(t, h.createUser(newUser(blank, "napa@example.com", "staff"), owner), "body.name")
+			assertFieldError(t, h.updateUser(somchai.ID, map[string]string{"name": blank}, owner), "body.name")
+			if t.Failed() {
+				t.Fatalf("name of U+%04X: see above", r)
+			}
+		}
+	}
+}
+
+// A name with text in it is a name, whatever spaces surround it, and is kept as given.
+func TestAUserNameWithTextAndSpacesAroundItIsKept(t *testing.T) {
+	h := newHarness(t)
+	owner, somchai := h.ownerAnd("somchai@example.com")
+
+	for i, name := range []string{"\u3000สมชาย\u00a0", "\u0085Napa\u2028", "p{Z}", `\p{Z}`} {
+		created := h.createUser(newUser(name, fmt.Sprintf("napa%d@example.com", i), "staff"), owner)
+		if created.Code != http.StatusCreated {
+			t.Fatalf("create %q: status = %d, want 201; body %s", name, created.Code, created.Body)
+		}
+		list := decode[struct {
+			Users []userBody `json:"users"`
+		}](t, h.listUsers(owner))
+		if got := list.Users[len(list.Users)-1].Name; got != name {
+			t.Errorf("created name = %q, want %q kept as given", got, name)
+		}
+		updated := h.updateUser(somchai.ID, map[string]string{"name": name}, owner)
+		if updated.Code != http.StatusOK {
+			t.Fatalf("update %q: status = %d, want 200; body %s", name, updated.Code, updated.Body)
+		}
+		if got := decode[userBody](t, updated).Name; got != name {
+			t.Errorf("updated name = %q, want %q kept as given", got, name)
+		}
+	}
 }

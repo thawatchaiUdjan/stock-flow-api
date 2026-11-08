@@ -21,8 +21,8 @@ components:
         note:
           description: Why the stock is wrong, up to 200 characters.
           maxLength: 200
-          pattern: "[^\\t\\n\\f\\r ]"
-          patternDescription: contain a character that is not a space
+          pattern: "[^\\t-\\r \x85   - \u2028\u2029  　]"
+          patternDescription: contain a character that is not whitespace
           type: string
         productId:
           description: The Product whose stock is wrong. It must be Active.
@@ -138,8 +138,8 @@ components:
           type: string
         name:
           description: The User's name, in any language.
-          pattern: "[^\\t\\n\\f\\r ]"
-          patternDescription: contain a character that is not a space
+          pattern: "[^\\t-\\r \x85   - \u2028\u2029  　]"
+          patternDescription: contain a character that is not whitespace
           type: string
         role:
           description: The Role of the new User. There is one Owner, and it is not made here.
@@ -1210,8 +1210,8 @@ components:
           type: string
         name:
           description: The User's name, in any language.
-          pattern: "[^\\t\\n\\f\\r ]"
-          patternDescription: contain a character that is not a space
+          pattern: "[^\\t-\\r \x85   - \u2028\u2029  　]"
+          patternDescription: contain a character that is not whitespace
           type: string
         role:
           description: Applies at once to the sessions the User has open.
