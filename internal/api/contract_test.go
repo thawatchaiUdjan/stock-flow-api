@@ -1,8 +1,11 @@
 package api_test
 
 import (
+	"encoding/json"
+	"fmt"
 	"maps"
 	"net/http"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -664,5 +667,97 @@ func TestTheContractPublishesTheDashboardAndTheSalesReport(t *testing.T) {
 	}
 	if ops["get-dashboard"].Responses["422"] != nil {
 		t.Errorf("get-dashboard takes no input, but declares 422")
+	}
+}
+
+// contractPatterns finds every "pattern" in the published contract, with where it sits.
+func contractPatterns(t *testing.T) map[string]string {
+	t.Helper()
+	_, contract := api.New(api.Deps{})
+	raw, err := json.Marshal(contract.OpenAPI())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]string{}
+	var walk func(path string, node any)
+	walk = func(path string, node any) {
+		switch n := node.(type) {
+		case map[string]any:
+			for key, child := range n {
+				if text, ok := child.(string); ok && key == "pattern" {
+					found[path] = text
+				}
+				walk(path+"/"+key, child)
+			}
+		case []any:
+			for i, child := range n {
+				walk(fmt.Sprintf("%s/%d", path, i), child)
+			}
+		}
+	}
+	walk("", doc)
+	return found
+}
+
+// sharedEscapes are the escapes Go's regexp (RE2) and JavaScript's RegExp read as the
+// same thing. \s and \S are left out: JavaScript's hold every Unicode space, Go's only
+// the ASCII ones. \x{..}, \p{..}, \A, \z and \Q are Go's alone; \u and \1 are
+// JavaScript's.
+const sharedEscapes = `tnrfvdDwW` + `\.^$*+?()[]{}|/-`
+
+// outsideTheSharedSubset says why Go and JavaScript could read pattern differently, or
+// "" when they cannot: it keeps to characters, ranges and classes of them, the shared
+// escapes, anchors, capturing groups, alternation and repeats.
+func outsideTheSharedSubset(pattern string) string {
+	for i := 0; i < len(pattern); i++ {
+		switch {
+		case pattern[i] == '\\':
+			i++
+			if i == len(pattern) || !strings.ContainsRune(sharedEscapes, rune(pattern[i])) {
+				return "an escape the two read differently; write the characters themselves"
+			}
+		case strings.HasPrefix(pattern[i:], "(?"):
+			return "a group syntax only one of them has"
+		case strings.HasPrefix(pattern[i:], "[["):
+			return "a class syntax only one of them has"
+		}
+	}
+	if _, err := regexp.Compile(pattern); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// A pattern in the contract is read by Go and by JavaScript, and must mean the same
+// thing to both. One that is more than the subset is a defect in the contract, even
+// when Go compiles it.
+func TestEveryPatternInTheContractMeansTheSameInGoAndJavaScript(t *testing.T) {
+	found := contractPatterns(t)
+	if len(found) == 0 {
+		t.Fatal("no pattern in the contract: the walk is broken")
+	}
+
+	for path, pattern := range found {
+		if why := outsideTheSharedSubset(pattern); why != "" {
+			t.Errorf("%s: %q: %s", path, pattern, why)
+		}
+	}
+}
+
+// The check must fail on what it is there to catch, and pass what the contract needs.
+func TestThePatternCheckSeesWhatItIsThereToCatch(t *testing.T) {
+	for _, bad := range []string{`\x{85}`, `\p{Z}`, `\P{L}`, `\pL`, `(?i)a`, `(?:a)`, `\Aa`, `a\z`, `a\Z`, `\Qa\E`, `[[:alpha:]]`, `\u0085`, `\1`, `\s`, `\S`, `\b`, `a\`, `(`} {
+		if outsideTheSharedSubset(bad) == "" {
+			t.Errorf("%q passes, want it caught", bad)
+		}
+	}
+	for _, good := range []string{`^[A-Za-z0-9-]+$`, "[^\\t-\\r \u0085\u2028]", `\d+\.\d{2}`, `[^\t\n\f\r ]`, `a|b`, `(ab)*c?`} {
+		if why := outsideTheSharedSubset(good); why != "" {
+			t.Errorf("%q: %s, want it to pass", good, why)
+		}
 	}
 }

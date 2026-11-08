@@ -110,7 +110,7 @@ type adjustStockBody struct {
 	// stock-movements R5: up or down, never 0 (TransformSchema).
 	Change int32 `json:"change" doc:"How many units to add (above 0) or take (below 0): a whole number other than 0."`
 	// stock-movements R2, R5: required, and not blank.
-	Note string `json:"note" maxLength:"200" pattern:"\\S" patternDescription:"contain a character that is not a space" doc:"Why the stock is wrong, up to 200 characters."`
+	Note string `json:"note" maxLength:"200" pattern:"[^\\t\\n\\f\\r ]" patternDescription:"contain a character that is not a space" doc:"Why the stock is wrong, up to 200 characters."`
 }
 
 // TransformSchema refuses a change of 0, which Huma's tags cannot say. Being in the schema,

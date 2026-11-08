@@ -651,3 +651,58 @@ func TestProductOperationsAnswer500WithoutTheCauseWhenTheDatabaseFails(t *testin
 		}
 	}
 }
+
+// products R2, R4: every character the rule counts as whitespace, one by one, alone and
+// in a run. The ticket's list is spelled out here, so a pattern that drops one fails.
+func whitespaceRunes() []rune {
+	var runes []rune
+	for r := '\u0009'; r <= '\u000d'; r++ {
+		runes = append(runes, r)
+	}
+	runes = append(runes, '\u0020', '\u0085', '\u00a0', '\u1680')
+	for r := '\u2000'; r <= '\u200a'; r++ {
+		runes = append(runes, r)
+	}
+	return append(runes, '\u2028', '\u2029', '\u202f', '\u205f', '\u3000')
+}
+
+func TestAProductNameOrUnitOfOnlyWhitespaceIsRefusedWhicheverCharacterItIs(t *testing.T) {
+	h := newHarness(t)
+	s := h.shop()
+	tea := h.seed(store.Product{Name: "Thai tea", Sku: "TEA-01"})
+
+	for _, r := range whitespaceRunes() {
+		for _, field := range []string{"name", "unit"} {
+			for _, blank := range []string{string(r), string(r) + string(r)} {
+				assertProblem(t, h.createProduct(with(field, blank), s.owner), http.StatusUnprocessableEntity, "")
+				assertProblem(t, h.updateProduct(tea.ID, map[string]any{field: blank}, s.owner), http.StatusUnprocessableEntity, "")
+				if t.Failed() {
+					t.Fatalf("%s of U+%04X: see above", field, r)
+				}
+			}
+		}
+	}
+}
+
+// The pattern is read by JavaScript too. Read as a script that takes \p{Z} for the
+// letters p, { and Z and }, it would refuse them; they are no whitespace here.
+func TestAProductNameOrUnitMayHoldTheLettersOfAnEscapeSequence(t *testing.T) {
+	h := newHarness(t)
+	s := h.shop()
+
+	for i, text := range []string{"p", "Z", "{", "}", "p{Z}", "x{85}", `\p{Z}`} {
+		for _, field := range []string{"name", "unit"} {
+			body := with(field, text)
+			body["sku"] = fmt.Sprintf("ESC-%s-%d", field, i)
+			rec := h.createProduct(body, s.owner)
+			if rec.Code != http.StatusCreated {
+				t.Errorf("%s %q: status = %d, want 201; body %s", field, text, rec.Code, rec.Body)
+				continue
+			}
+			got := decode[productBody](t, rec)
+			if kept := map[string]string{"name": got.Name, "unit": got.Unit}[field]; kept != text {
+				t.Errorf("%s = %q, want %q kept as given", field, kept, text)
+			}
+		}
+	}
+}
