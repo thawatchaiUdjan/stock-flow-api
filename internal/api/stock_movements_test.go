@@ -460,7 +460,7 @@ func TestAnAdjustmentNoteWithTextAndSpacesAroundItIsKept(t *testing.T) {
 	s := h.shop()
 	tea := h.seed(store.Product{Name: "Thai tea", Sku: "TEA-01", Stock: 5})
 
-	for _, note := range []string{"\u3000นับใหม่\u00a0", "\u0085count\u2028", "p{Z}"} {
+	for _, note := range []string{"\u3000นับใหม่\u00a0", "\u0085count\u2028", "p{Z}", `\p{Z}`} {
 		rec := h.adjust(map[string]any{"productId": tea.ID, "change": 1, "note": note}, s.owner)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("note %q: status = %d, want 201; body %s", note, rec.Code, rec.Body)
