@@ -670,8 +670,8 @@ func TestTheContractPublishesTheDashboardAndTheSalesReport(t *testing.T) {
 	}
 }
 
-// patterns finds every "pattern" in the published contract, with where it sits.
-func patterns(t *testing.T) map[string]string {
+// contractPatterns finds every "pattern" in the published contract, with where it sits.
+func contractPatterns(t *testing.T) map[string]string {
 	t.Helper()
 	_, contract := api.New(api.Deps{})
 	raw, err := json.Marshal(contract.OpenAPI())
@@ -736,7 +736,7 @@ func outsideTheSharedSubset(pattern string) string {
 // thing to both. One that is more than the subset is a defect in the contract, even
 // when Go compiles it.
 func TestEveryPatternInTheContractMeansTheSameInGoAndJavaScript(t *testing.T) {
-	found := patterns(t)
+	found := contractPatterns(t)
 	if len(found) == 0 {
 		t.Fatal("no pattern in the contract: the walk is broken")
 	}
@@ -755,7 +755,7 @@ func TestThePatternCheckSeesWhatItIsThereToCatch(t *testing.T) {
 			t.Errorf("%q passes, want it caught", bad)
 		}
 	}
-	for _, good := range []string{`^[A-Za-z0-9-]+$`, `[^\t-\r  ]`, `\d+\.\d{2}`, `[^\t\n\f\r ]`, `a|b`, `(ab)*c?`} {
+	for _, good := range []string{`^[A-Za-z0-9-]+$`, "[^\\t-\\r \u0085\u2028]", `\d+\.\d{2}`, `[^\t\n\f\r ]`, `a|b`, `(ab)*c?`} {
 		if why := outsideTheSharedSubset(good); why != "" {
 			t.Errorf("%q: %s, want it to pass", good, why)
 		}

@@ -659,11 +659,11 @@ func whitespaceRunes() []rune {
 	for r := '\u0009'; r <= '\u000d'; r++ {
 		runes = append(runes, r)
 	}
-	runes = append(runes, ' ', '\u0085', ' ', ' ')
-	for r := ' '; r <= ' '; r++ {
+	runes = append(runes, '\u0020', '\u0085', '\u00a0', '\u1680')
+	for r := '\u2000'; r <= '\u200a'; r++ {
 		runes = append(runes, r)
 	}
-	return append(runes, ' ', ' ', ' ', ' ', '　')
+	return append(runes, '\u2028', '\u2029', '\u202f', '\u205f', '\u3000')
 }
 
 func TestAProductNameOrUnitOfOnlyWhitespaceIsRefusedWhicheverCharacterItIs(t *testing.T) {
@@ -694,8 +694,14 @@ func TestAProductNameOrUnitMayHoldTheLettersOfAnEscapeSequence(t *testing.T) {
 		for _, field := range []string{"name", "unit"} {
 			body := with(field, text)
 			body["sku"] = fmt.Sprintf("ESC-%s-%d", field, i)
-			if rec := h.createProduct(body, s.owner); rec.Code != http.StatusCreated {
+			rec := h.createProduct(body, s.owner)
+			if rec.Code != http.StatusCreated {
 				t.Errorf("%s %q: status = %d, want 201; body %s", field, text, rec.Code, rec.Body)
+				continue
+			}
+			got := decode[productBody](t, rec)
+			if kept := map[string]string{"name": got.Name, "unit": got.Unit}[field]; kept != text {
+				t.Errorf("%s = %q, want %q kept as given", field, kept, text)
 			}
 		}
 	}
