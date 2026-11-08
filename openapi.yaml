@@ -21,7 +21,7 @@ components:
         note:
           description: Why the stock is wrong, up to 200 characters.
           maxLength: 200
-          pattern: \S
+          pattern: "[^\\t\\n\\f\\r ]"
           patternDescription: contain a character that is not a space
           type: string
         productId:
@@ -95,7 +95,7 @@ components:
         name:
           description: The Product's name, in any language.
           maxLength: 120
-          pattern: "[^\\t-\\r\\p{Z}\\x{85}]"
+          pattern: "[^\\t-\\r \x85   - \u2028\u2029  　]"
           patternDescription: contain a character that is not whitespace
           type: string
         price:
@@ -113,7 +113,7 @@ components:
         unit:
           description: The word the Product is counted in, such as pcs or box.
           maxLength: 20
-          pattern: "[^\\t-\\r\\p{Z}\\x{85}]"
+          pattern: "[^\\t-\\r \x85   - \u2028\u2029  　]"
           patternDescription: contain a character that is not whitespace
           type: string
       required:
@@ -138,7 +138,7 @@ components:
           type: string
         name:
           description: The User's name, in any language.
-          pattern: \S
+          pattern: "[^\\t\\n\\f\\r ]"
           patternDescription: contain a character that is not a space
           type: string
         role:
@@ -1170,7 +1170,7 @@ components:
         name:
           description: The Product's name, in any language.
           maxLength: 120
-          pattern: "[^\\t-\\r\\p{Z}\\x{85}]"
+          pattern: "[^\\t-\\r \x85   - \u2028\u2029  　]"
           patternDescription: contain a character that is not whitespace
           type: string
         price:
@@ -1194,7 +1194,7 @@ components:
         unit:
           description: The word the Product is counted in.
           maxLength: 20
-          pattern: "[^\\t-\\r\\p{Z}\\x{85}]"
+          pattern: "[^\\t-\\r \x85   - \u2028\u2029  　]"
           patternDescription: contain a character that is not whitespace
           type: string
       type: object
@@ -1210,7 +1210,7 @@ components:
           type: string
         name:
           description: The User's name, in any language.
-          pattern: \S
+          pattern: "[^\\t\\n\\f\\r ]"
           patternDescription: contain a character that is not a space
           type: string
         role:

@@ -651,3 +651,52 @@ func TestProductOperationsAnswer500WithoutTheCauseWhenTheDatabaseFails(t *testin
 		}
 	}
 }
+
+// products R2, R4: every character the rule counts as whitespace, one by one, alone and
+// in a run. The ticket's list is spelled out here, so a pattern that drops one fails.
+func whitespaceRunes() []rune {
+	var runes []rune
+	for r := '\u0009'; r <= '\u000d'; r++ {
+		runes = append(runes, r)
+	}
+	runes = append(runes, ' ', '\u0085', ' ', ' ')
+	for r := ' '; r <= ' '; r++ {
+		runes = append(runes, r)
+	}
+	return append(runes, ' ', ' ', ' ', ' ', '　')
+}
+
+func TestAProductNameOrUnitOfOnlyWhitespaceIsRefusedWhicheverCharacterItIs(t *testing.T) {
+	h := newHarness(t)
+	s := h.shop()
+	tea := h.seed(store.Product{Name: "Thai tea", Sku: "TEA-01"})
+
+	for _, r := range whitespaceRunes() {
+		for _, field := range []string{"name", "unit"} {
+			for _, blank := range []string{string(r), string(r) + string(r)} {
+				assertProblem(t, h.createProduct(with(field, blank), s.owner), http.StatusUnprocessableEntity, "")
+				assertProblem(t, h.updateProduct(tea.ID, map[string]any{field: blank}, s.owner), http.StatusUnprocessableEntity, "")
+				if t.Failed() {
+					t.Fatalf("%s of U+%04X: see above", field, r)
+				}
+			}
+		}
+	}
+}
+
+// The pattern is read by JavaScript too. Read as a script that takes \p{Z} for the
+// letters p, { and Z and }, it would refuse them; they are no whitespace here.
+func TestAProductNameOrUnitMayHoldTheLettersOfAnEscapeSequence(t *testing.T) {
+	h := newHarness(t)
+	s := h.shop()
+
+	for i, text := range []string{"p", "Z", "{", "}", "p{Z}", "x{85}", `\p{Z}`} {
+		for _, field := range []string{"name", "unit"} {
+			body := with(field, text)
+			body["sku"] = fmt.Sprintf("ESC-%s-%d", field, i)
+			if rec := h.createProduct(body, s.owner); rec.Code != http.StatusCreated {
+				t.Errorf("%s %q: status = %d, want 201; body %s", field, text, rec.Code, rec.Body)
+			}
+		}
+	}
+}
