@@ -95,8 +95,8 @@ components:
         name:
           description: The Product's name, in any language.
           maxLength: 120
-          pattern: \S
-          patternDescription: contain a character that is not a space
+          pattern: "[^\\t-\\r\\p{Z}\\x{85}]"
+          patternDescription: contain a character that is not whitespace
           type: string
         price:
           description: What one unit sells for, in whole satang (฿1 = 100), from 0 to 999999999 (฿9,999,999.99).
@@ -113,8 +113,8 @@ components:
         unit:
           description: The word the Product is counted in, such as pcs or box.
           maxLength: 20
-          pattern: \S
-          patternDescription: contain a character that is not a space
+          pattern: "[^\\t-\\r\\p{Z}\\x{85}]"
+          patternDescription: contain a character that is not whitespace
           type: string
       required:
         - name
@@ -1170,8 +1170,8 @@ components:
         name:
           description: The Product's name, in any language.
           maxLength: 120
-          pattern: \S
-          patternDescription: contain a character that is not a space
+          pattern: "[^\\t-\\r\\p{Z}\\x{85}]"
+          patternDescription: contain a character that is not whitespace
           type: string
         price:
           description: What one unit sells for, in whole satang. A new price leaves every Order already created as it was.
@@ -1194,8 +1194,8 @@ components:
         unit:
           description: The word the Product is counted in.
           maxLength: 20
-          pattern: \S
-          patternDescription: contain a character that is not a space
+          pattern: "[^\\t-\\r\\p{Z}\\x{85}]"
+          patternDescription: contain a character that is not whitespace
           type: string
       type: object
     UpdateUserBody:

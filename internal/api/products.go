@@ -55,14 +55,15 @@ type productOutput struct {
 }
 
 type createProductBody struct {
-	// pattern \S: a name of only spaces is no name (products R2). The name is stored as it
-	// was given, in any language.
-	Name string `json:"name" maxLength:"120" pattern:"\\S" patternDescription:"contain a character that is not a space" doc:"The Product's name, in any language."`
+	// pattern: a name of only whitespace, in any script, is no name (products R2). It is
+	// every character unicode.IsSpace holds, as the database constraint has it (migration
+	// 00008). The name is stored as it was given, in any language.
+	Name string `json:"name" maxLength:"120" pattern:"[^\\t-\\r\\p{Z}\\x{85}]" patternDescription:"contain a character that is not whitespace" doc:"The Product's name, in any language."`
 	// products R3: letters, digits and hyphens. The letter case is kept, and ignored when
 	// SKUs are compared.
 	SKU string `json:"sku" maxLength:"40" pattern:"^[A-Za-z0-9-]+$" patternDescription:"be letters, digits and hyphens only" doc:"Letters, digits and hyphens. No other Product may have it, in any letter case."`
 	// products R4.
-	Unit string `json:"unit" maxLength:"20" pattern:"\\S" patternDescription:"contain a character that is not a space" doc:"The word the Product is counted in, such as pcs or box."`
+	Unit string `json:"unit" maxLength:"20" pattern:"[^\\t-\\r\\p{Z}\\x{85}]" patternDescription:"contain a character that is not whitespace" doc:"The word the Product is counted in, such as pcs or box."`
 	// products R5.
 	Price int64 `json:"price" minimum:"0" maximum:"999999999" doc:"What one unit sells for, in whole satang (฿1 = 100), from 0 to 999999999 (฿9,999,999.99)."`
 	// products R8. No stock and no status: a new Product starts with a stock of 0 (R7) and
@@ -78,9 +79,9 @@ type updateProductBody struct {
 	// A field left out stays as it is. There is no stock: nothing sets it here (products
 	// R6, context ADR 0006), and a body that names one is refused. Pointers, so that a
 	// price or a Minimum stock of 0 is a change and not "left out".
-	Name         *string `json:"name,omitempty" maxLength:"120" pattern:"\\S" patternDescription:"contain a character that is not a space" doc:"The Product's name, in any language."`
+	Name         *string `json:"name,omitempty" maxLength:"120" pattern:"[^\\t-\\r\\p{Z}\\x{85}]" patternDescription:"contain a character that is not whitespace" doc:"The Product's name, in any language."`
 	SKU          *string `json:"sku,omitempty" maxLength:"40" pattern:"^[A-Za-z0-9-]+$" patternDescription:"be letters, digits and hyphens only" doc:"Letters, digits and hyphens. No other Product may have it, in any letter case."`
-	Unit         *string `json:"unit,omitempty" maxLength:"20" pattern:"\\S" patternDescription:"contain a character that is not a space" doc:"The word the Product is counted in."`
+	Unit         *string `json:"unit,omitempty" maxLength:"20" pattern:"[^\\t-\\r\\p{Z}\\x{85}]" patternDescription:"contain a character that is not whitespace" doc:"The word the Product is counted in."`
 	Price        *int64  `json:"price,omitempty" minimum:"0" maximum:"999999999" doc:"What one unit sells for, in whole satang. A new price leaves every Order already created as it was."`
 	MinimumStock *int32  `json:"minimumStock,omitempty" minimum:"0" doc:"The stock level at or below which the Product needs restocking."`
 	Status       *string `json:"status,omitempty" enum:"active,archived" doc:"Archived takes the Product out of the default list and keeps it, with its stock. Active restores it."`
