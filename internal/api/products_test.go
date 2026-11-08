@@ -188,9 +188,9 @@ func TestCreateProductRefusesWhatTheRulesRefuse(t *testing.T) {
 		"no name":                           with("name", nil),
 		"an empty name":                     with("name", ""),
 		"a name of only spaces":             with("name", "   "),
-		"a name of only no-break spaces":    with("name", "  "),
-		"a name of only ideographic spaces": with("name", "　"),
-		"a name of only line breaks":        with("name", "  "),
+		"a name of only no-break spaces":    with("name", "\u00a0\u00a0"),
+		"a name of only ideographic spaces": with("name", "\u3000"),
+		"a name of only line breaks":        with("name", " \u0085\u2028"),
 		"a name of 121 characters":          with("name", strings.Repeat("ก", 121)),
 		"no SKU":                            with("sku", nil),
 		"an empty SKU":                      with("sku", ""),
@@ -201,8 +201,8 @@ func TestCreateProductRefusesWhatTheRulesRefuse(t *testing.T) {
 		"no unit":                           with("unit", nil),
 		"an empty unit":                     with("unit", ""),
 		"a unit of only spaces":             with("unit", " "),
-		"a unit of only no-break spaces":    with("unit", " "),
-		"a unit of only ideographic spaces": with("unit", "　"),
+		"a unit of only no-break spaces":    with("unit", "\u00a0"),
+		"a unit of only ideographic spaces": with("unit", "\u3000"),
 		"a unit of 21 characters":           with("unit", strings.Repeat("u", 21)),
 		"no price":                          with("price", nil),
 		"a negative price":                  with("price", -1),
@@ -400,11 +400,11 @@ func TestUpdateProductRefusesWhatTheRulesRefuse(t *testing.T) {
 	for name, body := range map[string]map[string]any{
 		"an empty name":                     {"name": ""},
 		"a name of only spaces":             {"name": "  "},
-		"a name of only no-break spaces":    {"name": " "},
-		"a name of only ideographic spaces": {"name": "　"},
+		"a name of only no-break spaces":    {"name": "\u00a0"},
+		"a name of only ideographic spaces": {"name": "\u3000"},
 		"a unit of only spaces":             {"unit": " "},
-		"a unit of only no-break spaces":    {"unit": " "},
-		"a unit of only ideographic spaces": {"unit": "　"},
+		"a unit of only no-break spaces":    {"unit": "\u00a0"},
+		"a unit of only ideographic spaces": {"unit": "\u3000"},
 		"a name of 121":                     {"name": strings.Repeat("ก", 121)},
 		"an empty SKU":                      {"sku": ""},
 		"a SKU with a space":                {"sku": "TEA 01"},

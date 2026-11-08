@@ -188,12 +188,12 @@ func runProducts(t *testing.T, newSubject func(t *testing.T) Subject) {
 		s := newSubject(t)
 		for name, bad := range map[string]store.InsertProductParams{
 			"a blank name":           {Name: " ", Sku: "A", Unit: "pcs"},
-			"a no-break space name":  {Name: " ", Sku: "A", Unit: "pcs"},
-			"an ideographic name":    {Name: "　  ", Sku: "A", Unit: "pcs"},
+			"a no-break space name":  {Name: "\u00a0", Sku: "A", Unit: "pcs"},
+			"an ideographic name":    {Name: "\u3000 \u00a0", Sku: "A", Unit: "pcs"},
 			"a name over 120":        {Name: strings.Repeat("ก", 121), Sku: "A", Unit: "pcs"},
 			"a blank unit":           {Name: "Tea", Sku: "A", Unit: ""},
-			"a no-break space unit":  {Name: "Tea", Sku: "A", Unit: " "},
-			"an ideographic unit":    {Name: "Tea", Sku: "A", Unit: "　"},
+			"a no-break space unit":  {Name: "Tea", Sku: "A", Unit: "\u00a0"},
+			"an ideographic unit":    {Name: "Tea", Sku: "A", Unit: "\u3000"},
 			"a unit over 20":         {Name: "Tea", Sku: "A", Unit: strings.Repeat("u", 21)},
 			"a SKU with a space":     {Name: "Tea", Sku: "A B", Unit: "pcs"},
 			"a SKU over 40":          {Name: "Tea", Sku: strings.Repeat("A", 41), Unit: "pcs"},
@@ -228,10 +228,10 @@ func runProducts(t *testing.T, newSubject func(t *testing.T) Subject) {
 		s := newSubject(t)
 		tea := s.AddProduct(t, store.Product{Name: "Tea", Sku: "A", Unit: "pcs", Status: "active"})
 		for name, change := range map[string]store.ChangeProductParams{
-			"a no-break space name": {ID: tea.ID, Name: text(" ")},
-			"an ideographic name":   {ID: tea.ID, Name: text("　")},
-			"a no-break space unit": {ID: tea.ID, Unit: text(" ")},
-			"an ideographic unit":   {ID: tea.ID, Unit: text("　")},
+			"a no-break space name": {ID: tea.ID, Name: text("\u00a0")},
+			"an ideographic name":   {ID: tea.ID, Name: text("\u3000")},
+			"a no-break space unit": {ID: tea.ID, Unit: text("\u00a0")},
+			"an ideographic unit":   {ID: tea.ID, Unit: text("\u3000")},
 		} {
 			if _, err := s.Store.UpdateProduct(ctx, change); err == nil || errors.Is(err, store.ErrNotFound) {
 				t.Errorf("%s: err = %v, want a refusal", name, err)

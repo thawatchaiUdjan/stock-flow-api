@@ -935,18 +935,12 @@ func TestTheBlankProductAndSalesIndexMigrationAppliesAndReverses(t *testing.T) {
 	if err := pool.QueryRow(ctx, hasIndex).Scan(&indexed); err != nil || indexed {
 		t.Fatalf("before the migration: indexed = %v, err = %v, want no index", indexed, err)
 	}
-	if _, err := pool.Exec(ctx, insert, "　", "OLD-1", "pcs"); err != nil {
-		t.Fatalf("before the migration, an ideographic space name: %v, want it stored (ASCII btrim)", err)
-	}
-	if _, err := pool.Exec(ctx, `DELETE FROM products WHERE sku = 'OLD-1'`); err != nil {
-		t.Fatal(err)
-	}
 
 	// Up: the stored Product stays, blank names and units in any script are refused.
 	if _, err := provider.UpByOne(ctx); err != nil {
 		t.Fatal(err)
 	}
-	for _, blank := range []string{" ", "　", "\u0085", "\v", "    ", ""} {
+	for _, blank := range []string{"\u00a0", "\u3000", "\u0085", "\v", " \u2003\u2028 ", ""} {
 		_, err := pool.Exec(ctx, insert, blank, "BLANK-1", "pcs")
 		assertViolates(t, err, "products_name_check")
 		_, err = pool.Exec(ctx, insert, "Tea", "BLANK-2", blank)
@@ -955,7 +949,7 @@ func TestTheBlankProductAndSalesIndexMigrationAppliesAndReverses(t *testing.T) {
 	if _, err := pool.Exec(ctx, insert, "ชาไทย", "TEA-02", "ชิ้น"); err != nil {
 		t.Errorf("a name and unit in Thai: %v, want them stored", err)
 	}
-	if _, err := pool.Exec(ctx, insert, "　Tea ", "TEA-03", "6 pack"); err != nil {
+	if _, err := pool.Exec(ctx, insert, "\u3000Tea\u00a0", "TEA-03", "6 pack"); err != nil {
 		t.Errorf("a name with a space around it: %v, want it stored", err)
 	}
 	if err := pool.QueryRow(ctx, hasIndex).Scan(&indexed); err != nil || !indexed {
@@ -969,7 +963,7 @@ func TestTheBlankProductAndSalesIndexMigrationAppliesAndReverses(t *testing.T) {
 	if err := pool.QueryRow(ctx, hasIndex).Scan(&indexed); err != nil || indexed {
 		t.Errorf("after down: indexed = %v, err = %v, want no index", indexed, err)
 	}
-	if _, err := pool.Exec(ctx, insert, "　", "OLD-2", "pcs"); err != nil {
+	if _, err := pool.Exec(ctx, insert, "\u3000", "OLD-2", "pcs"); err != nil {
 		t.Errorf("after down, an ideographic space name: %v, want it stored again", err)
 	}
 	_, err = pool.Exec(ctx, insert, " ", "OLD-3", "pcs")

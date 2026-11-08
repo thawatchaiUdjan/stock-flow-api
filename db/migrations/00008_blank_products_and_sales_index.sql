@@ -8,11 +8,11 @@
 -- on the database's locale, so the characters are listed.
 ALTER TABLE products DROP CONSTRAINT products_name_check;
 ALTER TABLE products ADD CONSTRAINT products_name_check CHECK (
-    name ~ '[^\t-\r \u0085   -     　]' AND char_length(name) <= 120
+    name ~ '[^\t-\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]' AND char_length(name) <= 120
 ); -- products R2
 ALTER TABLE products DROP CONSTRAINT products_unit_check;
 ALTER TABLE products ADD CONSTRAINT products_unit_check CHECK (
-    unit ~ '[^\t-\r \u0085   -     　]' AND char_length(unit) <= 20
+    unit ~ '[^\t-\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]' AND char_length(unit) <= 20
 ); -- products R4
 
 -- SalesByDay and TopSellingProducts read the Completed Orders whose completed_at is in a
