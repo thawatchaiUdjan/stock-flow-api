@@ -969,3 +969,77 @@ func TestTheBlankProductAndSalesIndexMigrationAppliesAndReverses(t *testing.T) {
 	_, err = pool.Exec(ctx, insert, " ", "OLD-3", "pcs")
 	assertViolates(t, err, "products_name_check")
 }
+
+// users-and-access R14, stock-movements R5: a User's name or an Adjustment's note of only
+// whitespace in any script is refused by the schema itself. The migration that says so
+// applies over data already stored, and its down puts the schema back.
+func TestTheBlankUserNameAndAdjustmentNoteMigrationAppliesAndReverses(t *testing.T) {
+	ctx := context.Background()
+	url := testdb.URL(t)
+	pool := open(t, url)
+	db, err := sql.Open("pgx", url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../db/migrations"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const insertUser = `INSERT INTO users (name, email, role, status) VALUES ($1, $2, 'staff', 'active')`
+	const insertMove = `INSERT INTO stock_movements (kind, product_id, change, stock_after, at, user_id, note)
+		SELECT $1, p.id, 1, 1, now(), u.id, $2 FROM products p, users u WHERE p.sku = 'TEA-01' AND u.email = 'somchai@example.com'`
+
+	// Back to the schema before the migration, holding a valid Product, User and Adjustment.
+	if _, err := provider.DownTo(ctx, 8); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO products (name, sku, unit, price) VALUES ('Thai tea', 'TEA-01', 'pcs', 0)`, nil},
+		{insertUser, []any{"Somchai", "somchai@example.com"}},
+		{insertMove, []any{"adjustment", "count"}},
+	} {
+		if _, err := pool.Exec(ctx, q.sql, q.args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Up: what is stored stays, a blank name or note in any script is refused, and text
+	// with whitespace around it is not.
+	if _, err := provider.UpByOne(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for i, blank := range []string{"\u00a0", "\u3000", "\u0085", "\v", " \u2003\u2028 ", ""} {
+		_, err := pool.Exec(ctx, insertUser, blank, fmt.Sprintf("blank%d@example.com", i))
+		assertViolates(t, err, "users_name_check")
+		_, err = pool.Exec(ctx, insertMove, "adjustment", blank)
+		assertViolates(t, err, "stock_movements_adjustment_note_check")
+	}
+	if _, err := pool.Exec(ctx, insertMove, "receive", "\u3000"); err != nil {
+		t.Errorf("a Receive with a blank note: %v, want it stored (the note is optional)", err)
+	}
+	if _, err := pool.Exec(ctx, insertUser, "สมชาย", "thai@example.com"); err != nil {
+		t.Errorf("a name in Thai: %v, want it stored", err)
+	}
+	if _, err := pool.Exec(ctx, insertUser, "\u3000Napa\u00a0", "napa@example.com"); err != nil {
+		t.Errorf("a name with a space around it: %v, want it stored", err)
+	}
+	if _, err := pool.Exec(ctx, insertMove, "adjustment", "\u3000count\u00a0"); err != nil {
+		t.Errorf("a note with a space around it: %v, want it stored", err)
+	}
+
+	// Down: the ASCII-only rule is back.
+	if _, err := provider.Down(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, insertUser, "\u3000", "old@example.com"); err != nil {
+		t.Errorf("after down, an ideographic space name: %v, want it stored again", err)
+	}
+	_, err = pool.Exec(ctx, insertUser, " ", "old2@example.com")
+	assertViolates(t, err, "users_name_check")
+	_, err = pool.Exec(ctx, insertMove, "adjustment", " ")
+	assertViolates(t, err, "stock_movements_adjustment_note_check")
+}

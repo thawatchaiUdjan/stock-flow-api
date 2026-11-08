@@ -433,3 +433,40 @@ func TestListStockMovementsRefusesADateRangeThatEndsBeforeItStarts(t *testing.T)
 	assertFieldError(t, h.do(http.MethodGet, "/stock-movements?from=2026-11-08&to=2026-11-07", nil, s.staff), "query.to")
 	assertFieldError(t, h.do(http.MethodGet, "/stock-movements?from=7-11-2026", nil, s.staff), "query.from")
 }
+
+// stock-movements R5: a note of only whitespace, in any script, is no note. Every character
+// the rule counts as whitespace is tried alone and in a run; the same 422 as "   ".
+func TestAnAdjustmentNoteOfOnlyWhitespaceIsRefusedWhicheverCharacterItIs(t *testing.T) {
+	h := newHarness(t)
+	s := h.shop()
+	tea := h.seed(store.Product{Name: "Thai tea", Sku: "TEA-01", Stock: 5})
+
+	for _, r := range whitespaceRunes() {
+		for _, blank := range []string{string(r), string(r) + string(r)} {
+			assertFieldError(t, h.adjust(map[string]any{"productId": tea.ID, "change": 1, "note": blank}, s.owner), "body.note")
+			if t.Failed() {
+				t.Fatalf("note of U+%04X: see above", r)
+			}
+		}
+	}
+	if stock := h.stockOf(tea.ID, s.owner); stock != 5 {
+		t.Errorf("stock = %d, want 5", stock)
+	}
+}
+
+// A note with text in it is a note, whatever spaces surround it, and is kept as given.
+func TestAnAdjustmentNoteWithTextAndSpacesAroundItIsKept(t *testing.T) {
+	h := newHarness(t)
+	s := h.shop()
+	tea := h.seed(store.Product{Name: "Thai tea", Sku: "TEA-01", Stock: 5})
+
+	for _, note := range []string{"\u3000นับใหม่\u00a0", "\u0085count\u2028", "p{Z}", `\p{Z}`} {
+		rec := h.adjust(map[string]any{"productId": tea.ID, "change": 1, "note": note}, s.owner)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("note %q: status = %d, want 201; body %s", note, rec.Code, rec.Body)
+		}
+		if got := decode[movementBody](t, rec).Note; got != note {
+			t.Errorf("note = %q, want %q kept as given", got, note)
+		}
+	}
+}
