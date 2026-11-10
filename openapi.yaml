@@ -382,6 +382,11 @@ components:
           type:
             - integer
             - "null"
+        total:
+          description: "Always present on numbered success: exact count for all current filters before offset/limit, including 0. Omitted in legacy cursor mode."
+          format: int64
+          minimum: 0
+          type: integer
       required:
         - entries
         - nextBefore
@@ -453,6 +458,11 @@ components:
           type:
             - integer
             - "null"
+        total:
+          description: "Always present on numbered success: exact count for all current filters before offset/limit, including 0. Omitted in legacy cursor mode."
+          format: int64
+          minimum: 0
+          type: integer
       required:
         - movements
         - nextBefore
@@ -1384,7 +1394,7 @@ paths:
         - Sessions
   /login-log:
     get:
-      description: "Every login, failed login and logout, newest first, one page at a time. Entries cannot be changed or removed, and no operation does. Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      description: "Every login, failed login and logout, newest first, one page at a time. Entries cannot be changed or removed, and no operation does. Omit offset to preserve legacy cursor paging, including before/nextBefore and the default limit of 50. An explicitly supplied offset, including offset=0, selects numbered mode; offset and before together return 422. Numbered success includes a bounded page and total, always present and exact for all current filters before offset/limit, including total: 0 for no matches. An out-of-range page is empty with the actual matching total. total is omitted from legacy responses. During this contract-first stage, numbered mode temporarily returns 501; no numbered success or count is implemented yet. Authorization and validation run before this temporary response. Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
       operationId: list-login-log
       parameters:
         - description: Only the entries of this User.
@@ -1415,6 +1425,16 @@ paths:
             description: "The previous page's nextBefore: only the entries older than that. Leave out for the newest."
             format: int64
             minimum: 1
+            type: integer
+        - description: Explicitly selects numbered mode, including 0. Omit for legacy cursor mode. Temporarily returns 501.
+          explode: false
+          in: query
+          name: offset
+          schema:
+            description: Explicitly selects numbered mode, including 0. Omit for legacy cursor mode. Temporarily returns 501.
+            format: int64
+            maximum: 2147483647
+            minimum: 0
             type: integer
         - description: The most entries on a page.
           explode: false
@@ -1458,6 +1478,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorModel"
           description: Internal Server Error
+        "501":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Implemented
       security:
         - session: []
       summary: List the Login log
@@ -2208,7 +2234,7 @@ paths:
         - Setup links
   /stock-movements:
     get:
-      description: Every Role sees every Stock movement, newest first, one page at a time. No operation changes or removes one. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session.
+      description: "Every Role sees every Stock movement, newest first, one page at a time. No operation changes or removes one. Omit offset to preserve legacy cursor paging, including before/nextBefore and the default limit of 50. An explicitly supplied offset, including offset=0, selects numbered mode; offset and before together return 422. Numbered success includes a bounded page and total, always present and exact for all current filters before offset/limit, including total: 0 for no matches. An out-of-range page is empty with the actual matching total. total is omitted from legacy responses. During this contract-first stage, numbered mode temporarily returns 501; no numbered success or count is implemented yet. Authorization and validation run before this temporary response. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
       operationId: list-stock-movements
       parameters:
         - description: Only the movements of this Product.
@@ -2257,6 +2283,16 @@ paths:
             format: int64
             minimum: 1
             type: integer
+        - description: Explicitly selects numbered mode, including 0. Omit for legacy cursor mode. Temporarily returns 501.
+          explode: false
+          in: query
+          name: offset
+          schema:
+            description: Explicitly selects numbered mode, including 0. Omit for legacy cursor mode. Temporarily returns 501.
+            format: int64
+            maximum: 2147483647
+            minimum: 0
+            type: integer
         - description: The most movements on a page.
           explode: false
           in: query
@@ -2293,6 +2329,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorModel"
           description: Internal Server Error
+        "501":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Implemented
       security:
         - session: []
       summary: List the Stock movements
