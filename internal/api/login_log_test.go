@@ -315,6 +315,24 @@ func TestTheLogFiltersByUserAndByResult(t *testing.T) {
 		{"?userId=9999", nil},
 	}
 	for _, c := range cases {
+		numbered := h.do(http.MethodGet, "/login-log"+c.query+"&offset=0&limit=1", nil, owner)
+		if numbered.Code != http.StatusOK {
+			t.Fatalf("numbered filter: %d: %s", numbered.Code, numbered.Body)
+		}
+		body := decode[struct {
+			Total   *int64
+			Entries []logEntry
+		}](t, numbered)
+		if body.Total == nil || *body.Total != int64(len(c.want)) {
+			t.Errorf("%s total: %s", c.query, numbered.Body)
+		}
+		wantPage := c.want
+		if len(wantPage) > 1 {
+			wantPage = wantPage[:1]
+		}
+		if !slices.Equal(results(body.Entries), wantPage) {
+			t.Errorf("%s numbered results = %v, want %v", c.query, results(body.Entries), wantPage)
+		}
 		got := results(h.loginLog(c.query, owner).Entries)
 		if !slices.Equal(got, c.want) {
 			t.Errorf("%s: results = %v, want %v", c.query, got, c.want)

@@ -154,24 +154,44 @@ func (f *Fake) entry(m store.StockMovement) store.ListStockMovementsRow {
 	return row
 }
 
+// navigation-and-lists R6: the fake applies the same filters before counting or paging.
+func matchesStockMovements(row store.StockMovement, arg store.CountStockMovementsParams) bool {
+	return (!arg.ProductID.Valid || row.ProductID == arg.ProductID.Int64) && (!arg.Kind.Valid || row.Kind == arg.Kind.String) && (!arg.FromAt.Valid || !row.At.Before(arg.FromAt.Time)) && (!arg.UntilAt.Valid || row.At.Before(arg.UntilAt.Time))
+}
+
+func (f *Fake) CountStockMovements(_ context.Context, arg store.CountStockMovementsParams) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return 0, f.Err
+	}
+	var total int64
+	for _, row := range f.movements {
+		if matchesStockMovements(row, arg) {
+			total++
+		}
+	}
+	return total, nil
+}
+
 func (f *Fake) ListStockMovements(_ context.Context, arg store.ListStockMovementsParams) ([]store.ListStockMovementsRow, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
 		return nil, f.Err
 	}
-	found := []store.ListStockMovementsRow{}
-	for i := len(f.movements) - 1; i >= 0 && len(found) < int(arg.RowLimit); i-- {
-		m := f.movements[i]
-		switch {
-		case arg.ProductID.Valid && m.ProductID != arg.ProductID.Int64:
-		case arg.Kind.Valid && m.Kind != arg.Kind.String:
-		case arg.FromAt.Valid && m.At.Before(arg.FromAt.Time):
-		case arg.UntilAt.Valid && !m.At.Before(arg.UntilAt.Time):
-		case arg.Before.Valid && m.ID >= arg.Before.Int64:
-		default:
-			found = append(found, f.entry(m))
+	var rows []store.ListStockMovementsRow
+	var skipped int32
+	for i := len(f.movements) - 1; i >= 0 && len(rows) < int(arg.RowLimit); i-- {
+		row := f.movements[i]
+		if !matchesStockMovements(row, store.CountStockMovementsParams{ProductID: arg.ProductID, Kind: arg.Kind, FromAt: arg.FromAt, UntilAt: arg.UntilAt}) || (arg.Before.Valid && row.ID >= arg.Before.Int64) {
+			continue
 		}
+		if skipped < arg.RowOffset {
+			skipped++
+			continue
+		}
+		rows = append(rows, f.entry(row))
 	}
-	return found, nil
+	return rows, nil
 }

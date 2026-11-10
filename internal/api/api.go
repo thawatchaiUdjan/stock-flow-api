@@ -23,6 +23,7 @@ type Store interface {
 	EndSession(ctx context.Context, arg store.EndSessionParams) error
 	AddLoginLogEntry(ctx context.Context, arg store.AddLoginLogEntryParams) error
 	ListLoginLog(ctx context.Context, arg store.ListLoginLogParams) ([]store.ListLoginLogRow, error)
+	CountLoginLog(ctx context.Context, arg store.CountLoginLogParams) (int64, error)
 	GetSetupLinkUser(ctx context.Context, arg store.GetSetupLinkUserParams) (store.GetSetupLinkUserRow, error)
 	SetPassword(ctx context.Context, arg store.SetPasswordParams) (int64, error)
 	ListUsers(ctx context.Context) ([]store.ListUsersRow, error)
@@ -34,6 +35,7 @@ type Store interface {
 	CountProducts(ctx context.Context, arg store.CountProductsParams) (int64, error)
 	MoveStock(ctx context.Context, arg store.MoveStockParams) ([]store.ListStockMovementsRow, error)
 	ListStockMovements(ctx context.Context, arg store.ListStockMovementsParams) ([]store.ListStockMovementsRow, error)
+	CountStockMovements(ctx context.Context, arg store.CountStockMovementsParams) (int64, error)
 	CreateProduct(ctx context.Context, arg store.InsertProductParams) (store.Product, error)
 	UpdateProduct(ctx context.Context, arg store.ChangeProductParams) (store.Product, error)
 	ListOrders(ctx context.Context, arg store.ListOrdersParams) ([]store.ListOrdersRow, error)

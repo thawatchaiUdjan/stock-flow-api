@@ -110,7 +110,7 @@ type listLoginLogInput struct {
 	UserID int64         `query:"userId" minimum:"1" doc:"Only the entries of this User."`
 	Result string        `query:"result" enum:"login,failed-login,logout" doc:"Only the entries with this result."`
 	Before int64         `query:"before" minimum:"1" doc:"The previous page's nextBefore: only the entries older than that. Leave out for the newest."`
-	Offset historyOffset `query:"offset" minimum:"0" maximum:"2147483647" doc:"Explicitly selects numbered mode, including 0. Omit for legacy cursor mode. Temporarily returns 501."`
+	Offset historyOffset `query:"offset" minimum:"0" maximum:"2147483647" doc:"Explicitly selects numbered mode, including 0. Omit for legacy cursor mode."`
 	Limit  int           `query:"limit" minimum:"1" maximum:"100" default:"50" doc:"The most entries on a page."`
 }
 
@@ -137,29 +137,40 @@ func registerLoginLog(api huma.API, deps Deps) {
 		Tags:        []string{"Login log"},
 		Security:    sessionSecurity,
 		Middlewares: huma.Middlewares{ownerOnly(api, deps)},
-		Errors:      []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusUnprocessableEntity, http.StatusInternalServerError, http.StatusNotImplemented},
+		Errors:      []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusUnprocessableEntity, http.StatusInternalServerError},
 	}, func(ctx context.Context, input *listLoginLogInput) (*listLoginLogOutput, error) {
-		// context ADR 0009: #36 declares the contract; #37 supplies pages and counts.
-		if input.Offset.Set {
-			return nil, huma.Error501NotImplemented("Numbered history pagination is not implemented yet.")
-		}
 		// Huma has applied the default (50) and the bounds (1 to 100).
 		limit := input.Limit
+		rowLimit := limit
+		if !input.Offset.Set {
+			rowLimit++
+		}
 		// One more than the page, to know whether another page follows.
 		rows, err := deps.Store.ListLoginLog(ctx, store.ListLoginLogParams{
-			UserID:   pgtype.Int8{Int64: input.UserID, Valid: input.UserID != 0},
-			Result:   pgtype.Text{String: input.Result, Valid: input.Result != ""},
-			Before:   pgtype.Int8{Int64: input.Before, Valid: input.Before != 0},
-			RowLimit: int32(limit + 1),
+			UserID:    pgtype.Int8{Int64: input.UserID, Valid: input.UserID != 0},
+			Result:    pgtype.Text{String: input.Result, Valid: input.Result != ""},
+			Before:    pgtype.Int8{Int64: input.Before, Valid: input.Before != 0},
+			RowOffset: int32(input.Offset.Value),
+			RowLimit:  int32(rowLimit),
 		})
 		if err != nil {
 			return nil, internalError(ctx, "list login log", err)
 		}
 		out := &listLoginLogOutput{}
+		// navigation-and-lists R6, context ADR 0009: legacy responses omit totals.
+		if input.Offset.Set {
+			total, err := deps.Store.CountLoginLog(ctx, store.CountLoginLogParams{UserID: pgtype.Int8{Int64: input.UserID, Valid: input.UserID != 0}, Result: pgtype.Text{String: input.Result, Valid: input.Result != ""}})
+			if err != nil {
+				return nil, internalError(ctx, "count login log", err)
+			}
+			out.Body.Total = &total
+		}
 		out.Body.Entries = make([]loginLogEntryBody, 0, len(rows))
 		if len(rows) > limit {
 			rows = rows[:limit]
-			out.Body.NextBefore = &rows[limit-1].ID
+			if !input.Offset.Set {
+				out.Body.NextBefore = &rows[limit-1].ID
+			}
 		}
 		for _, row := range rows {
 			entry := loginLogEntryBody{

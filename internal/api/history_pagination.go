@@ -11,8 +11,7 @@ const historyPaginationDescription = "Omit offset to preserve legacy cursor pagi
 	"An explicitly supplied offset, including offset=0, selects numbered mode; offset and before together return 422. " +
 	"Numbered success includes a bounded page and total, always present and exact for all current filters before offset/limit, " +
 	"including total: 0 for no matches. An out-of-range page is empty with the actual matching total. " +
-	"total is omitted from legacy responses. During this contract-first stage, numbered mode temporarily returns 501; " +
-	"no numbered success or count is implemented yet. Authorization and validation run before this temporary response."
+	"total is omitted from legacy responses."
 
 // historyOffset preserves explicit zero: Huma does not support pointer query parameters.
 // context ADR 0009: omitting offset keeps the legacy cursor mode.

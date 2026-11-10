@@ -286,8 +286,15 @@ func runStockMovements(t *testing.T, newSubject func(t *testing.T) Subject) {
 		second := listMovements(t, s, store.ListStockMovementsParams{RowLimit: 2, Before: pgtype.Int8{Int64: first[1].ID, Valid: true}})
 		third := listMovements(t, s, store.ListStockMovementsParams{RowLimit: 2, Before: pgtype.Int8{Int64: second[1].ID, Valid: true}})
 
+		var numbered []int64
+		for _, offset := range []int32{0, 2, 4} {
+			numbered = append(numbered, ids(listMovements(t, s, store.ListStockMovementsParams{RowLimit: 2, RowOffset: offset}))...)
+		}
 		got := slices.Concat(ids(first), ids(second), ids(third))
 		slices.Reverse(made)
+		if !slices.Equal(numbered, made) {
+			t.Errorf("numbered ids = %v, want %v", numbered, made)
+		}
 		if !slices.Equal(got, made) {
 			t.Errorf("ids = %v, want %v", got, made)
 		}
@@ -340,6 +347,22 @@ func runStockMovements(t *testing.T, newSubject func(t *testing.T) Subject) {
 		} {
 			if got := ids(listMovements(t, s, c.arg)); !slices.Equal(got, c.want) {
 				t.Errorf("%s: ids = %v, want %v", name, got, c.want)
+			}
+			total, err := s.Store.CountStockMovements(ctx, store.CountStockMovementsParams{ProductID: c.arg.ProductID, Kind: c.arg.Kind, FromAt: c.arg.FromAt, UntilAt: c.arg.UntilAt})
+			if err != nil || total != int64(len(c.want)) {
+				t.Errorf("%s: total = %d, err = %v, want %d", name, total, err, len(c.want))
+			}
+			for _, offset := range []int32{0, 1, 2, 4, 2147483647} {
+				arg := c.arg
+				arg.RowOffset, arg.RowLimit = offset, 1
+				got := ids(listMovements(t, s, arg))
+				var want []int64
+				if int64(offset) < int64(len(c.want)) {
+					want = c.want[offset : offset+1]
+				}
+				if !slices.Equal(got, want) {
+					t.Errorf("%s offset %d: ids = %v, want %v", name, offset, got, want)
+				}
 			}
 		}
 	})

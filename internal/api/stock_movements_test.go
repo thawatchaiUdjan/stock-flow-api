@@ -423,6 +423,31 @@ func TestListStockMovementsFiltersByTheShopsDaysInBangkok(t *testing.T) {
 		if got := ids(query); !slices.Equal(got, want) {
 			t.Errorf("%s: ids = %v, want %v", query, got, want)
 		}
+		// navigation-and-lists R6: totals use the same Bangkok day boundaries as rows.
+		for _, offset := range []int{0, 1, 20} {
+			rec := h.do(http.MethodGet, fmt.Sprintf("/stock-movements?%s&productId=%d&kind=receive&offset=%d&limit=1", query, tea.ID, offset), nil, s.staff)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("numbered dates: %d: %s", rec.Code, rec.Body)
+			}
+			body := decode[struct {
+				Total     *int64
+				Movements []movementBody
+			}](t, rec)
+			if body.Total == nil || *body.Total != int64(len(want)) {
+				t.Errorf("%s total: %s", query, rec.Body)
+			}
+			var got []int64
+			for _, m := range body.Movements {
+				got = append(got, m.ID)
+			}
+			var page []int64
+			if offset < len(want) {
+				page = want[offset : offset+1]
+			}
+			if !slices.Equal(got, page) {
+				t.Errorf("%s offset %d: %v, want %v", query, offset, got, page)
+			}
+		}
 	}
 }
 

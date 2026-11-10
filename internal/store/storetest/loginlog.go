@@ -89,7 +89,16 @@ func runLoginLog(t *testing.T, newSubject func(t *testing.T) Subject) {
 				got = append(got, row.Email)
 			}
 		}
+		var numbered []string
+		for _, offset := range []int32{0, 2, 4} {
+			for _, row := range listLog(t, s, store.ListLoginLogParams{RowLimit: 2, RowOffset: offset}) {
+				numbered = append(numbered, row.Email)
+			}
+		}
 		want := []string{"e@example.com", "d@example.com", "c@example.com", "b@example.com", "a@example.com"}
+		if !slices.Equal(numbered, want) {
+			t.Errorf("numbered entries = %v, want %v", numbered, want)
+		}
 		if !slices.Equal(got, want) {
 			t.Errorf("emails = %v, want %v", got, want)
 		}
@@ -140,6 +149,22 @@ func runLoginLog(t *testing.T, newSubject func(t *testing.T) Subject) {
 		} {
 			if got := len(listLog(t, s, c.arg)); got != c.want {
 				t.Errorf("%s: rows = %d, want %d", name, got, c.want)
+			}
+			total, err := s.Store.CountLoginLog(ctx, store.CountLoginLogParams{UserID: c.arg.UserID, Result: c.arg.Result})
+			if err != nil || total != int64(c.want) {
+				t.Errorf("%s: total = %d, err = %v, want %d", name, total, err, c.want)
+			}
+			for _, offset := range []int32{0, 1, 2, 4, 2147483647} {
+				arg := c.arg
+				arg.RowOffset, arg.RowLimit = offset, 1
+				rows := listLog(t, s, arg)
+				want := 0
+				if int64(offset) < int64(c.want) {
+					want = 1
+				}
+				if len(rows) != want {
+					t.Errorf("%s offset %d: got %d rows, want %d", name, offset, len(rows), want)
+				}
 			}
 		}
 	})
