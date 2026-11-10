@@ -107,17 +107,23 @@ func (loginLogEntryBody) TransformSchema(_ huma.Registry, s *huma.Schema) *huma.
 }
 
 type listLoginLogInput struct {
-	UserID int64  `query:"userId" minimum:"1" doc:"Only the entries of this User."`
-	Result string `query:"result" enum:"login,failed-login,logout" doc:"Only the entries with this result."`
-	Before int64  `query:"before" minimum:"1" doc:"The previous page's nextBefore: only the entries older than that. Leave out for the newest."`
-	Limit  int    `query:"limit" minimum:"1" maximum:"100" default:"50" doc:"The most entries on a page."`
+	UserID int64         `query:"userId" minimum:"1" doc:"Only the entries of this User."`
+	Result string        `query:"result" enum:"login,failed-login,logout" doc:"Only the entries with this result."`
+	Before int64         `query:"before" minimum:"1" doc:"The previous page's nextBefore: only the entries older than that. Leave out for the newest."`
+	Offset historyOffset `query:"offset" minimum:"0" maximum:"2147483647" doc:"Explicitly selects numbered mode, including 0. Omit for legacy cursor mode. Temporarily returns 501."`
+	Limit  int           `query:"limit" minimum:"1" maximum:"100" default:"50" doc:"The most entries on a page."`
 }
 
 type listLoginLogOutput struct {
 	Body struct {
 		Entries    []loginLogEntryBody `json:"entries" nullable:"false" doc:"Newest first."`
 		NextBefore *int64              `json:"nextBefore" doc:"Pass as before for the next page. Null on the last page."`
+		Total      *int64              `json:"total,omitempty" minimum:"0" doc:"Always present on numbered success: exact count for all current filters before offset/limit, including 0. Omitted in legacy cursor mode."`
 	}
+}
+
+func (in *listLoginLogInput) Resolve(ctx huma.Context) []error {
+	return validateHistoryPagination(ctx)
 }
 
 func registerLoginLog(api huma.API, deps Deps) {
@@ -127,12 +133,16 @@ func registerLoginLog(api huma.API, deps Deps) {
 		Path:        "/login-log",
 		Summary:     "List the Login log",
 		Description: "Every login, failed login and logout, newest first, one page at a time. " +
-			"Entries cannot be changed or removed, and no operation does. " + ownerOnlyErrors,
+			"Entries cannot be changed or removed, and no operation does. " + historyPaginationDescription + " " + ownerOnlyErrors,
 		Tags:        []string{"Login log"},
 		Security:    sessionSecurity,
 		Middlewares: huma.Middlewares{ownerOnly(api, deps)},
-		Errors:      []int{http.StatusUnauthorized, http.StatusForbidden},
+		Errors:      []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusUnprocessableEntity, http.StatusInternalServerError, http.StatusNotImplemented},
 	}, func(ctx context.Context, input *listLoginLogInput) (*listLoginLogOutput, error) {
+		// context ADR 0009: #36 declares the contract; #37 supplies pages and counts.
+		if input.Offset.Set {
+			return nil, huma.Error501NotImplemented("Numbered history pagination is not implemented yet.")
+		}
 		// Huma has applied the default (50) and the bounds (1 to 100).
 		limit := input.Limit
 		// One more than the page, to know whether another page follows.

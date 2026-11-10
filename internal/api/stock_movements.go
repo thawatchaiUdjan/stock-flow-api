@@ -69,17 +69,21 @@ func stockMovementOf(row store.ListStockMovementsRow) stockMovement {
 }
 
 type listStockMovementsInput struct {
-	ProductID int64  `query:"productId" minimum:"1" doc:"Only the movements of this Product."`
-	Kind      string `query:"kind" enum:"receive,adjustment,order,cancellation" doc:"Only the movements of this kind."`
-	From      string `query:"from" format:"date" doc:"Only the movements on or after this day of the Shop, in Bangkok time (YYYY-MM-DD)."`
-	To        string `query:"to" format:"date" doc:"Only the movements on or before this day of the Shop, in Bangkok time (YYYY-MM-DD)."`
-	Before    int64  `query:"before" minimum:"1" doc:"The previous page's nextBefore: only the movements older than that. Leave out for the newest."`
-	Limit     int    `query:"limit" minimum:"1" maximum:"100" default:"50" doc:"The most movements on a page."`
+	ProductID int64         `query:"productId" minimum:"1" doc:"Only the movements of this Product."`
+	Kind      string        `query:"kind" enum:"receive,adjustment,order,cancellation" doc:"Only the movements of this kind."`
+	From      string        `query:"from" format:"date" doc:"Only the movements on or after this day of the Shop, in Bangkok time (YYYY-MM-DD)."`
+	To        string        `query:"to" format:"date" doc:"Only the movements on or before this day of the Shop, in Bangkok time (YYYY-MM-DD)."`
+	Before    int64         `query:"before" minimum:"1" doc:"The previous page's nextBefore: only the movements older than that. Leave out for the newest."`
+	Offset    historyOffset `query:"offset" minimum:"0" maximum:"2147483647" doc:"Explicitly selects numbered mode, including 0. Omit for legacy cursor mode. Temporarily returns 501."`
+	Limit     int           `query:"limit" minimum:"1" maximum:"100" default:"50" doc:"The most movements on a page."`
 }
 
 // Resolve refuses a range that ends before it starts, which no schema can say. Huma has
 // checked each date's format by now.
-func (in *listStockMovementsInput) Resolve(huma.Context) []error {
+func (in *listStockMovementsInput) Resolve(ctx huma.Context) []error {
+	if errs := validateHistoryPagination(ctx); len(errs) > 0 {
+		return errs
+	}
 	if in.From != "" && in.To != "" && in.To < in.From {
 		return []error{&huma.ErrorDetail{Location: "query.to", Message: "must not be before from", Value: in.To}}
 	}
@@ -90,6 +94,7 @@ type listStockMovementsOutput struct {
 	Body struct {
 		Movements  []stockMovement `json:"movements" nullable:"false" doc:"Newest first."`
 		NextBefore *int64          `json:"nextBefore" doc:"Pass as before for the next page. Null on the last page."`
+		Total      *int64          `json:"total,omitempty" minimum:"0" doc:"Always present on numbered success: exact count for all current filters before offset/limit, including 0. Omitted in legacy cursor mode."`
 	}
 }
 
@@ -139,12 +144,16 @@ func registerStockMovements(api huma.API, deps Deps) {
 		Path:        "/stock-movements",
 		Summary:     "List the Stock movements",
 		Description: "Every Role sees every Stock movement, newest first, one page at a time. " +
-			"No operation changes or removes one. " + sessionErrors,
+			"No operation changes or removes one. " + historyPaginationDescription + " " + sessionErrors,
 		Tags:        []string{"Stock movements"},
 		Security:    sessionSecurity,
 		Middlewares: huma.Middlewares{anyRole(api, deps)},
-		Errors:      []int{http.StatusUnauthorized},
+		Errors:      []int{http.StatusUnauthorized, http.StatusUnprocessableEntity, http.StatusInternalServerError, http.StatusNotImplemented},
 	}, func(ctx context.Context, input *listStockMovementsInput) (*listStockMovementsOutput, error) {
+		// context ADR 0009: #36 declares the contract; #37 supplies pages and counts.
+		if input.Offset.Set {
+			return nil, huma.Error501NotImplemented("Numbered history pagination is not implemented yet.")
+		}
 		limit := input.Limit
 		// One more than the page, to know whether another page follows. to is a whole
 		// day: the movements before the next day starts.
