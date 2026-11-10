@@ -38,6 +38,25 @@ func (q *Queries) AddLoginLogEntry(ctx context.Context, arg AddLoginLogEntryPara
 	return err
 }
 
+const countLoginLog = `-- name: CountLoginLog :one
+SELECT count(*) FROM login_log
+WHERE ($1::bigint IS NULL OR login_log.user_id = $1)
+    AND ($2::text IS NULL OR login_log.result = $2)
+`
+
+type CountLoginLogParams struct {
+	UserID pgtype.Int8
+	Result pgtype.Text
+}
+
+// navigation-and-lists R6, context ADR 0009: count filters before page selection.
+func (q *Queries) CountLoginLog(ctx context.Context, arg CountLoginLogParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLoginLog, arg.UserID, arg.Result)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const listLoginLog = `-- name: ListLoginLog :many
 SELECT login_log.id, login_log.at, login_log.email, login_log.user_id, users.name AS user_name,
     login_log.result, login_log.ip, login_log.user_agent
@@ -47,14 +66,15 @@ WHERE ($1::bigint IS NULL OR login_log.user_id = $1)
     AND ($2::text IS NULL OR login_log.result = $2)
     AND ($3::bigint IS NULL OR login_log.id < $3)
 ORDER BY login_log.id DESC
-LIMIT $4
+LIMIT $5 OFFSET $4::integer
 `
 
 type ListLoginLogParams struct {
-	UserID   pgtype.Int8
-	Result   pgtype.Text
-	Before   pgtype.Int8
-	RowLimit int32
+	UserID    pgtype.Int8
+	Result    pgtype.Text
+	Before    pgtype.Int8
+	RowOffset int32
+	RowLimit  int32
 }
 
 type ListLoginLogRow struct {
@@ -76,6 +96,7 @@ func (q *Queries) ListLoginLog(ctx context.Context, arg ListLoginLogParams) ([]L
 		arg.UserID,
 		arg.Result,
 		arg.Before,
+		arg.RowOffset,
 		arg.RowLimit,
 	)
 	if err != nil {

@@ -14,4 +14,10 @@ WHERE (sqlc.narg(user_id)::bigint IS NULL OR login_log.user_id = sqlc.narg(user_
     AND (sqlc.narg(result)::text IS NULL OR login_log.result = sqlc.narg(result))
     AND (sqlc.narg(before)::bigint IS NULL OR login_log.id < sqlc.narg(before))
 ORDER BY login_log.id DESC
-LIMIT sqlc.arg(row_limit);
+LIMIT sqlc.arg(row_limit) OFFSET sqlc.arg(row_offset)::integer;
+
+-- navigation-and-lists R6, context ADR 0009: count filters before page selection.
+-- name: CountLoginLog :one
+SELECT count(*) FROM login_log
+WHERE (sqlc.narg(user_id)::bigint IS NULL OR login_log.user_id = sqlc.narg(user_id))
+    AND (sqlc.narg(result)::text IS NULL OR login_log.result = sqlc.narg(result));

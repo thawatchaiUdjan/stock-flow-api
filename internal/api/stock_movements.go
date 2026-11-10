@@ -74,7 +74,7 @@ type listStockMovementsInput struct {
 	From      string        `query:"from" format:"date" doc:"Only the movements on or after this day of the Shop, in Bangkok time (YYYY-MM-DD)."`
 	To        string        `query:"to" format:"date" doc:"Only the movements on or before this day of the Shop, in Bangkok time (YYYY-MM-DD)."`
 	Before    int64         `query:"before" minimum:"1" doc:"The previous page's nextBefore: only the movements older than that. Leave out for the newest."`
-	Offset    historyOffset `query:"offset" minimum:"0" maximum:"2147483647" doc:"Explicitly selects numbered mode, including 0. Omit for legacy cursor mode. Temporarily returns 501."`
+	Offset    historyOffset `query:"offset" minimum:"0" maximum:"2147483647" doc:"Explicitly selects numbered mode, including 0. Omit for legacy cursor mode."`
 	Limit     int           `query:"limit" minimum:"1" maximum:"100" default:"50" doc:"The most movements on a page."`
 }
 
@@ -148,13 +148,13 @@ func registerStockMovements(api huma.API, deps Deps) {
 		Tags:        []string{"Stock movements"},
 		Security:    sessionSecurity,
 		Middlewares: huma.Middlewares{anyRole(api, deps)},
-		Errors:      []int{http.StatusUnauthorized, http.StatusUnprocessableEntity, http.StatusInternalServerError, http.StatusNotImplemented},
+		Errors:      []int{http.StatusUnauthorized, http.StatusUnprocessableEntity, http.StatusInternalServerError},
 	}, func(ctx context.Context, input *listStockMovementsInput) (*listStockMovementsOutput, error) {
-		// context ADR 0009: #36 declares the contract; #37 supplies pages and counts.
-		if input.Offset.Set {
-			return nil, huma.Error501NotImplemented("Numbered history pagination is not implemented yet.")
-		}
 		limit := input.Limit
+		rowLimit := limit
+		if !input.Offset.Set {
+			rowLimit++
+		}
 		// One more than the page, to know whether another page follows. to is a whole
 		// day: the movements before the next day starts.
 		rows, err := deps.Store.ListStockMovements(ctx, store.ListStockMovementsParams{
@@ -163,16 +163,27 @@ func registerStockMovements(api huma.API, deps Deps) {
 			FromAt:    startOfShopDay(input.From, 0),
 			UntilAt:   startOfShopDay(input.To, 1),
 			Before:    pgtype.Int8{Int64: input.Before, Valid: input.Before != 0},
-			RowLimit:  int32(limit + 1),
+			RowOffset: int32(input.Offset.Value),
+			RowLimit:  int32(rowLimit),
 		})
 		if err != nil {
 			return nil, internalError(ctx, "list stock movements", err)
 		}
 		out := &listStockMovementsOutput{}
+		// navigation-and-lists R6, context ADR 0009: legacy responses omit totals.
+		if input.Offset.Set {
+			total, err := deps.Store.CountStockMovements(ctx, store.CountStockMovementsParams{ProductID: pgtype.Int8{Int64: input.ProductID, Valid: input.ProductID != 0}, Kind: pgtype.Text{String: input.Kind, Valid: input.Kind != ""}, FromAt: startOfShopDay(input.From, 0), UntilAt: startOfShopDay(input.To, 1)})
+			if err != nil {
+				return nil, internalError(ctx, "count stock movements", err)
+			}
+			out.Body.Total = &total
+		}
 		out.Body.Movements = make([]stockMovement, 0, len(rows))
 		if len(rows) > limit {
 			rows = rows[:limit]
-			out.Body.NextBefore = &rows[limit-1].ID
+			if !input.Offset.Set {
+				out.Body.NextBefore = &rows[limit-1].ID
+			}
 		}
 		for _, row := range rows {
 			out.Body.Movements = append(out.Body.Movements, stockMovementOf(row))

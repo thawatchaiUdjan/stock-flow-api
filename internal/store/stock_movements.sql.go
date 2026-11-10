@@ -12,6 +12,34 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countStockMovements = `-- name: CountStockMovements :one
+SELECT count(*) FROM stock_movements
+WHERE ($1::bigint IS NULL OR stock_movements.product_id = $1)
+    AND ($2::text IS NULL OR stock_movements.kind = $2)
+    AND ($3::timestamptz IS NULL OR stock_movements.at >= $3)
+    AND ($4::timestamptz IS NULL OR stock_movements.at < $4)
+`
+
+type CountStockMovementsParams struct {
+	ProductID pgtype.Int8
+	Kind      pgtype.Text
+	FromAt    pgtype.Timestamptz
+	UntilAt   pgtype.Timestamptz
+}
+
+// navigation-and-lists R6, context ADR 0009: count filters before page selection.
+func (q *Queries) CountStockMovements(ctx context.Context, arg CountStockMovementsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countStockMovements,
+		arg.ProductID,
+		arg.Kind,
+		arg.FromAt,
+		arg.UntilAt,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getStockMovement = `-- name: GetStockMovement :one
 SELECT stock_movements.id, stock_movements.kind, stock_movements.product_id,
     products.name AS product_name, products.sku AS product_sku,
@@ -113,7 +141,7 @@ WHERE ($1::bigint IS NULL OR stock_movements.product_id = $1)
     AND ($4::timestamptz IS NULL OR stock_movements.at < $4)
     AND ($5::bigint IS NULL OR stock_movements.id < $5)
 ORDER BY stock_movements.id DESC
-LIMIT $6
+LIMIT $7 OFFSET $6::integer
 `
 
 type ListStockMovementsParams struct {
@@ -122,6 +150,7 @@ type ListStockMovementsParams struct {
 	FromAt    pgtype.Timestamptz
 	UntilAt   pgtype.Timestamptz
 	Before    pgtype.Int8
+	RowOffset int32
 	RowLimit  int32
 }
 
@@ -152,6 +181,7 @@ func (q *Queries) ListStockMovements(ctx context.Context, arg ListStockMovements
 		arg.FromAt,
 		arg.UntilAt,
 		arg.Before,
+		arg.RowOffset,
 		arg.RowLimit,
 	)
 	if err != nil {

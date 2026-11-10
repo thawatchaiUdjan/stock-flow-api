@@ -321,6 +321,26 @@ func (f *Fake) addEntry(arg store.AddLoginLogEntryParams) error {
 	return nil
 }
 
+// navigation-and-lists R6: the fake applies the same filters before counting or paging.
+func matchesLoginLog(row store.ListLoginLogRow, arg store.CountLoginLogParams) bool {
+	return (!arg.UserID.Valid || row.UserID == arg.UserID) && (!arg.Result.Valid || row.Result == arg.Result.String)
+}
+
+func (f *Fake) CountLoginLog(_ context.Context, arg store.CountLoginLogParams) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return 0, f.Err
+	}
+	var total int64
+	for _, row := range f.log {
+		if matchesLoginLog(row, arg) {
+			total++
+		}
+	}
+	return total, nil
+}
+
 func (f *Fake) ListLoginLog(_ context.Context, arg store.ListLoginLogParams) ([]store.ListLoginLogRow, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -328,15 +348,17 @@ func (f *Fake) ListLoginLog(_ context.Context, arg store.ListLoginLogParams) ([]
 		return nil, f.Err
 	}
 	var rows []store.ListLoginLogRow
-	for _, entry := range slices.Backward(f.log) {
-		switch {
-		case arg.UserID.Valid && entry.UserID != arg.UserID:
-		case arg.Result.Valid && entry.Result != arg.Result.String:
-		case arg.Before.Valid && entry.ID >= arg.Before.Int64:
-		case len(rows) >= int(arg.RowLimit):
-		default:
-			rows = append(rows, entry)
+	var skipped int32
+	for i := len(f.log) - 1; i >= 0 && len(rows) < int(arg.RowLimit); i-- {
+		row := f.log[i]
+		if !matchesLoginLog(row, store.CountLoginLogParams{UserID: arg.UserID, Result: arg.Result}) || (arg.Before.Valid && row.ID >= arg.Before.Int64) {
+			continue
 		}
+		if skipped < arg.RowOffset {
+			skipped++
+			continue
+		}
+		rows = append(rows, row)
 	}
 	return rows, nil
 }

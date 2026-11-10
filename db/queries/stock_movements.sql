@@ -51,4 +51,12 @@ WHERE (sqlc.narg(product_id)::bigint IS NULL OR stock_movements.product_id = sql
     AND (sqlc.narg(until_at)::timestamptz IS NULL OR stock_movements.at < sqlc.narg(until_at))
     AND (sqlc.narg(before)::bigint IS NULL OR stock_movements.id < sqlc.narg(before))
 ORDER BY stock_movements.id DESC
-LIMIT sqlc.arg(row_limit);
+LIMIT sqlc.arg(row_limit) OFFSET sqlc.arg(row_offset)::integer;
+
+-- navigation-and-lists R6, context ADR 0009: count filters before page selection.
+-- name: CountStockMovements :one
+SELECT count(*) FROM stock_movements
+WHERE (sqlc.narg(product_id)::bigint IS NULL OR stock_movements.product_id = sqlc.narg(product_id))
+    AND (sqlc.narg(kind)::text IS NULL OR stock_movements.kind = sqlc.narg(kind))
+    AND (sqlc.narg(from_at)::timestamptz IS NULL OR stock_movements.at >= sqlc.narg(from_at))
+    AND (sqlc.narg(until_at)::timestamptz IS NULL OR stock_movements.at < sqlc.narg(until_at));
