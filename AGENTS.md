@@ -98,6 +98,8 @@ This repo owns the contract, and `stock-flow-web` generates its client from it.
 
 ## Agent skills
 
+For session boundaries, model/effort choices, stage updates and continuation prompts, read [the session guide](docs/session-guide.md) at task start and before a handoff. Before every `code-review` invocation, read [the local review override](docs/agents/code-review.md); it overrides installed skill defaults for reviewer settings, context, dirty-file coverage and fallback. Apply these rules when `/implement` calls review too. Keep repo overrides here or in `docs/agents/`, not in installed skills; see [skill maintenance](README.md#updating).
+
 ### Issue tracker
 
 Issues and specs in this repo on GitHub; the record is local. See `docs/agents/issue-tracker.md`.
