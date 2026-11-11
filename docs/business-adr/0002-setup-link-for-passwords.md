@@ -1,6 +1,6 @@
 # 0002: Users set their own password through a one-time Setup link
 
-Status: Accepted
+Status: Superseded by business ADR 0011
 Date: 2026-11-06
 Affects: api, web
 
