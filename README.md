@@ -8,10 +8,10 @@ A practice project for frontend development. Prefer the simplest thing that work
 
 ## Setup
 
-1. Clone this repository. No sibling checkout is required.
+1. Clone this repository. No sibling checkout is required. On Windows, enable native symlink creation (Developer Mode or the required privilege) and clone with `git clone -c core.symlinks=true <repo-url>` so the checked-in agent links work.
 2. Install the Go version in `go.mod` and run `go mod download`.
 3. Copy `.env.example` to `.env` and fill in local credentials. Run `go run ./cmd/api`.
-4. For agent workflows, install Node/npm and Git, then run `bash scripts/install-skills.sh`. Git Bash works on Windows; enable native symlink creation (Developer Mode or the required privilege) for the portable Claude skill links. GitHub work uses an authenticated `gh` CLI.
+4. For agent workflows, install Node/npm and Git, then run `bash scripts/install-skills.sh`. Git Bash works on Windows. GitHub work uses an authenticated `gh` CLI.
 5. Read [AGENTS.md](AGENTS.md) for exact build, test, format, migration and contract-generation commands.
 
 ## Local workflow

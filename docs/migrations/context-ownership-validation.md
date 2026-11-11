@@ -9,6 +9,7 @@ This report covers the documentation/skills migration only. Product code, schema
 - Skills: all 13 installer/lock entries resolve, including required planning dependencies. Claude links are portable relative symlinks. Installer rerun passed after normalising Windows junctions.
 - Link validation passed; a deliberately broken relative link made the checker fail, then was removed. `git diff --check` passed. The checker runs in CI too.
 - Runtime/database/contract/dependency/deployment files and existing technical ADRs have no diff.
+- Independent checkout: a fresh clone under `.git/ownership-independent-checkout` has no context or web sibling, passes documentation link checks, and resolves all 13 Claude skill paths with native symlinks enabled. Windows initially checked symlinks out as text with its default `core.symlinks=false`; setup now documents cloning with `core.symlinks=true` and native symlink privilege.
 - Independent Standards/Spec review: pending completion in this branch.
 - Slow tests remain CI's responsibility under `docs/agents/testing.md`; no local slow run is claimed.
 - Web pin/adoption and historical security/concurrency questions remain unverified/unresolved as listed in the migration document.
