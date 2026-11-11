@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <style>@media screen and (max-width:600px){.outer{padding:16px!important}.content{padding:24px!important}}</style>
+</head>
+<body style="margin:0;padding:0;background:#F6F7F4;color:#20261F;font-family:Figtree,'Noto Sans Thai',Arial,sans-serif;font-size:15px;line-height:1.5">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F6F7F4">
+    <tr><td class="outer" align="center" style="padding:40px 24px">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;background:#FFFFFF;border:1px solid #E2E5DD;border-radius:8px">
+        <tr><td class="content" style="padding:32px">
+          <p style="margin:0 0 32px;color:#3A6B4F;font-size:21px;font-weight:600">StockFlow</p>
+          <h1 style="margin:0 0 20px;font-size:24px;line-height:30px;letter-spacing:-0.015em;font-weight:600">{{.Title}}</h1>
+          <p style="margin:0 0 16px">Hi {{.Name}},</p>
+          <p style="margin:0 0 24px">{{.Intro}}</p>
+{{if .Code}}<p style="margin:0 0 20px;padding:20px 12px;background:#E6F0E8;border-radius:8px;color:#3A6B4F;text-align:center;font-size:36px;line-height:44px;font-weight:600;letter-spacing:6px;font-variant-numeric:tabular-nums">{{.Code}}</p>{{end}}
+{{if .Expiry}}<p style="margin:0 0 24px;color:#5C6558;font-size:13px">{{.Expiry}}</p>{{end}}
+          <table role="presentation" cellspacing="0" cellpadding="0"><tr><td bgcolor="#3A6B4F" style="border-radius:6px"><a href="{{.Link}}" style="display:inline-block;padding:13px 20px;border:1px solid #3A6B4F;border-radius:6px;color:#FFFFFF;font-weight:600;text-decoration:none">{{.Action}}</a></td></tr></table>
+          <p style="margin:24px 0 0;color:#5C6558;font-size:13px">If the button does not work, open this link:<br><a href="{{.Link}}" style="color:#3A6B4F;overflow-wrap:anywhere;word-break:break-all">{{.Link}}</a></p>
+          <p style="margin:24px 0 0;padding-top:24px;border-top:1px solid #E2E5DD;color:#5C6558;font-size:13px">{{.Help}}</p>
+        </td></tr>
+      </table>
+      <p style="margin:20px 0 0;color:#5C6558;font-size:13px">StockFlow · Secure access to your Shop</p>
+    </td></tr>
+  </table>
+</body>
+</html>

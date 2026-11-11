@@ -11,6 +11,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
 
+	"github.com/thawatchaiUdjan/stock-flow-api/internal/email"
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
 )
 
@@ -30,6 +31,12 @@ type Store interface {
 	CreateUser(ctx context.Context, arg store.CreateUserParams) (store.CreateUserRow, error)
 	UpdateUser(ctx context.Context, arg store.ChangeUserParams) (store.ChangeUserRow, error)
 	ResetPassword(ctx context.Context, arg store.IssueSetupLinkParams) error
+	CreateEmailUser(context.Context, store.CreateEmailUserParams) (store.User, error)
+	IssuePasswordCredential(context.Context, store.EmailCredentialParams) (store.User, error)
+	VerifyFirstTimeCode(context.Context, store.VerifyFirstTimeCodeParams) (bool, error)
+	ReadEmailPasswordUser(context.Context, store.EmailPasswordParams) (store.User, error)
+	SetEmailPassword(context.Context, store.EmailPasswordParams) (store.User, error)
+	ReserveEmailRequest(context.Context, store.EmailRequestParams) (bool, error)
 	GetProduct(ctx context.Context, id int64) (store.Product, error)
 	ListProducts(ctx context.Context, arg store.ListProductsParams) ([]store.Product, error)
 	CountProducts(ctx context.Context, arg store.CountProductsParams) (int64, error)
@@ -56,11 +63,19 @@ type PasswordHasher interface {
 	Verify(encoded, password string) bool
 }
 
+// Mailer is the external transactional-email boundary (users-and-access R49).
+type Mailer interface {
+	Send(context.Context, email.Message) error
+}
+
 // Deps is what the API runs on. The contract needs none of them: no handler runs.
 type Deps struct {
 	Store          Store
 	PasswordHasher PasswordHasher
 	Now            func() time.Time
+	Mailer         Mailer
+	CodeSecret     []byte
+	WebBaseURL     string
 }
 
 // New builds the HTTP handler and the API it serves. The API's OpenAPI document is
@@ -69,11 +84,12 @@ func New(deps Deps) (http.Handler, huma.API) {
 	router := chi.NewMux()
 	router.Use(noStore, withRequestInfo)
 
-	api := humachi.New(router, huma.DefaultConfig("stock-flow API", "0.1.0"))
+	api := humachi.New(router, huma.DefaultConfig("stock-flow API", "0.2.0"))
 	registerHealth(api, deps.Store)
 	registerSessions(api, deps)
 	registerSetupLinks(api, deps)
 	registerUsers(api, deps)
+	registerEmailAuth(api, deps)
 	registerLoginLog(api, deps)
 	registerProducts(api, deps)
 	registerStockMovements(api, deps)

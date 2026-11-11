@@ -1,0 +1,13 @@
+Hi Napa,
+
+Use this code to verify your email and choose your own StockFlow password.
+
+Your code: 012345
+
+This code expires in 10 minutes (11 Nov 2026, 09:30 UTC).
+
+Set up password: https://stock-flow.example/password-setup
+
+If you did not request this, you can ignore this email.
+
+StockFlow

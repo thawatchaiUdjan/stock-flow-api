@@ -24,15 +24,17 @@ type Fake struct {
 	// a database that can read but not write.
 	LogErr error
 
-	mu        sync.Mutex
-	users     []store.User
-	sessions  map[string]store.Session
-	links     map[int64]store.SetupLink
-	log       []store.ListLoginLogRow
-	products  []store.Product
-	movements []store.StockMovement
-	orders    []store.Order
-	lines     []store.OrderLine
+	mu            sync.Mutex
+	users         []store.User
+	sessions      map[string]store.Session
+	links         map[int64]store.SetupLink
+	credentials   map[int64]store.EmailCredential
+	emailRequests []store.EmailRequestParams
+	log           []store.ListLoginLogRow
+	products      []store.Product
+	movements     []store.StockMovement
+	orders        []store.Order
+	lines         []store.OrderLine
 	// numbered is the last Order number handed out, as the order_numbers sequence keeps it.
 	numbered int64
 }
@@ -41,7 +43,7 @@ var _ Store = (*Fake)(nil)
 
 // NewFake returns an empty Fake.
 func NewFake() *Fake {
-	return &Fake{sessions: map[string]store.Session{}, links: map[int64]store.SetupLink{}}
+	return &Fake{sessions: map[string]store.Session{}, links: map[int64]store.SetupLink{}, credentials: map[int64]store.EmailCredential{}}
 }
 
 // AddUser seeds a User and returns it with its ID.
@@ -196,6 +198,7 @@ func (f *Fake) UpdateUser(_ context.Context, arg store.ChangeUserParams) (store.
 	if changed.Status == "inactive" {
 		f.endSessions(changed.ID)
 		delete(f.links, changed.ID)
+		delete(f.credentials, changed.ID)
 	}
 	return store.ChangeUserRow{
 		ID: changed.ID, Name: changed.Name, Email: changed.Email, Role: changed.Role, Status: changed.Status,
@@ -222,6 +225,7 @@ func (f *Fake) ResetPassword(_ context.Context, arg store.IssueSetupLinkParams) 
 		return err
 	}
 	target.PasswordHash = pgtype.Text{}
+	delete(f.credentials, arg.UserID)
 	f.endSessions(arg.UserID)
 	return nil
 }
@@ -423,6 +427,7 @@ func (f *Fake) SetPassword(_ context.Context, arg store.SetPasswordParams) (int6
 	for userID, link := range f.links {
 		if string(link.TokenHash) == string(arg.TokenHash) && link.ExpiresAt.After(arg.At) {
 			delete(f.links, userID)
+			delete(f.credentials, userID)
 			for i := range f.users {
 				if f.users[i].ID != userID {
 					continue

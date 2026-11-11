@@ -18,8 +18,10 @@
 - `cmd/api`: the server's `main`, which reads configuration and wires things together. No logic.
 - `cmd/openapi`: writes `openapi.yaml`.
 - `cmd/install`: the developer command that issues the Owner's Setup link. Wiring, flags and printing; no logic.
+- `cmd/email-preview`: renders the delivery templates with fictional data for offline review; no network or credentials.
 - `internal/api`: HTTP only. Huma operations with their input and output types, grouped one file per business area (`health.go`, later `orders.go`…). It depends on what it needs from the database through small interfaces declared here (`api.Store`), so the fast layer can fake them.
 - `internal/auth`: what logging in rests on outside HTTP: password hashing, tokens, issuing the Owner's Setup link.
+- `internal/email`: escaped HTML/plain-text transactional templates and the Brevo HTTP delivery adapter. No password fields or provider secrets in errors/logs.
 - `internal/store`: the database. SQL in `db/queries/*.sql`, the Go generated from it, `pool.go`, and `store.go`: `store.Store`, what the API runs on, with the rules that take several statements. No HTTP types.
 - `internal/store/storetest`: the contract suite of the store ports and the fake that passes it. Imported by tests only.
 - `internal/testdb`: real Postgres for slow tests. Imported only by `//go:build slow` files.

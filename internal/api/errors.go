@@ -13,16 +13,20 @@ import (
 // The domain error codes, carried in Problem Details' type (ADR 0019). They are a
 // contract: stock-flow-web checks against them, so renaming one breaks it.
 const (
-	codeLoginFailed       = "login-failed"
-	codeSessionEnded      = "session-ended"
-	codeSetupLinkInvalid  = "setup-link-invalid"
-	codeEmailTaken        = "email-taken"
-	codeTargetIsOwner     = "target-is-owner"
-	codeUserInactive      = "user-inactive"
-	codeSKUTaken          = "sku-taken"
-	codeInsufficientStock = "insufficient-stock"
-	codeProductArchived   = "product-archived"
-	codeOrderNotPending   = "order-not-pending"
+	codeLoginFailed          = "login-failed"
+	codeSessionEnded         = "session-ended"
+	codeSetupLinkInvalid     = "setup-link-invalid"
+	codeEmailTaken           = "email-taken"
+	codeTargetIsOwner        = "target-is-owner"
+	codeUserInactive         = "user-inactive"
+	codeSKUTaken             = "sku-taken"
+	codeInsufficientStock    = "insufficient-stock"
+	codeProductArchived      = "product-archived"
+	codeOrderNotPending      = "order-not-pending"
+	codeEmailAuthUnavailable = "email-auth-unavailable"
+	codeFirstTimeCodeInvalid = "first-time-code-invalid"
+	codePasswordSetupInvalid = "password-setup-invalid"
+	codePasswordResetInvalid = "password-reset-invalid"
 )
 
 // errorCodes is the published list. Every code above must be in it.
@@ -37,6 +41,10 @@ var errorCodes = []struct{ code, meaning string }{
 	{codeInsufficientStock, "The stock change, or the Order, would take a Product's stock below 0. The error's products member names each such Product with its stock."},
 	{codeProductArchived, "The Product is Archived: its stock cannot be received or adjusted, and it cannot be ordered."},
 	{codeOrderNotPending, "The Order is completed or cancelled already, and neither can change."},
+	{codeEmailAuthUnavailable, "Email password setup and recovery are not configured."},
+	{codeFirstTimeCodeInvalid, "The First-time code cannot be used: it is wrong, expired, consumed, replaced, blocked or ineligible."},
+	{codePasswordSetupInvalid, "The password-setup grant is expired, consumed, replaced or ineligible."},
+	{codePasswordResetInvalid, "The Reset link is expired, consumed, replaced or ineligible."},
 }
 
 func domainError(status int, code, detail string) *huma.ErrorModel {

@@ -18,7 +18,7 @@ type user struct {
 	Email       string `json:"email" doc:"As it was entered when the User was created. It never changes."`
 	Role        string `json:"role" enum:"owner,admin,staff" doc:"The User's Role."`
 	Status      string `json:"status" enum:"active,inactive" doc:"An Inactive User cannot log in."`
-	PasswordSet bool   `json:"passwordSet" doc:"False until the person sets a password through a Setup link."`
+	PasswordSet bool   `json:"passwordSet" doc:"False until the person sets their own password."`
 }
 
 // setupLink is what an Owner is shown once, to pass on by hand (users-and-access R28).
@@ -67,7 +67,7 @@ type updateUserBody struct {
 	// users-and-access R9, R35: between these two, never to Owner.
 	Role string `json:"role,omitempty" enum:"admin,staff" doc:"Applies at once to the sessions the User has open."`
 	// users-and-access R16.
-	Status string `json:"status,omitempty" enum:"active,inactive" doc:"Setting a User Inactive ends all their sessions and stops their Setup link. Setting them Active again brings back neither."`
+	Status string `json:"status,omitempty" enum:"active,inactive" doc:"Setting a User Inactive ends all their sessions and invalidates setup/recovery credentials. Setting them Active again revives none."`
 }
 
 type updateUserInput struct {

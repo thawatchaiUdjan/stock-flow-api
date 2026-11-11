@@ -10,6 +10,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type EmailCredential struct {
+	UserID         int64
+	Kind           string
+	TokenHash      []byte
+	ExpiresAt      time.Time
+	FailedAttempts int32
+	BlockedUntil   time.Time
+}
+
+type EmailRequestEvent struct {
+	ID          int64
+	EmailHash   []byte
+	IpHash      []byte
+	RequestedAt time.Time
+}
+
 type LoginLog struct {
 	ID        int64
 	At        time.Time
