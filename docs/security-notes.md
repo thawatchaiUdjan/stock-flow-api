@@ -1,0 +1,11 @@
+# Security notes: review on 2026-11-08
+
+A read-only review of authentication, sessions and authorization in `stock-flow-api` on `main`, and of how `stock-flow-web` holds the session. Nothing is ticketed yet: the first two findings change confirmed rules, so they need a decision first.
+
+- **High: login has no throttling or lockout.** Anyone can guess passwords at `POST /login` without limit, for example against the Owner's email. Each attempt runs an Argon2id hash and writes a Login log row. `/setup-link/password` hashes the password before it checks the token, so bad-token calls also burn CPU. A fix needs a rule in [Users & access](requirements/users-and-access.md): how many failures, over what window, and what happens next.
+- **Medium: passwords need only 6 characters** ([Users & access](requirements/users-and-access.md) R19), with no maximum and no deny-list. With no throttling, `123456` falls quickly.
+- **Medium: no security headers on the web origin.** `stock-flow-web/vercel.json` sets no CSP, `frame-ancestors`, nosniff or Referrer-Policy, so the app can be framed (clickjacking). This is technical and can be ticketed in the web repo.
+- **Medium: the api is reachable directly** at its own Vercel origin, so throttling and headers must live in the api itself. Client-IP handling for the Login log ([api ADR 0022](https://github.com/thawatchaiUdjan/stock-flow-api/tree/main/docs/adr), still Proposed) is untested on the second Vercel hop.
+- **Low:** CSRF protection rests on SameSite=Lax alone. That is safe on `vercel.app`, but not if the app moves to a custom domain whose parent domain has untrusted subdomains. Orders have no maximum number of lines, and a quantity has no maximum. Sessions last 7 days with no idle timeout.
+- Found sound: 128-bit random session and setup tokens, stored hashed. The cookie is HttpOnly, Secure and SameSite=Lax. Setup links are single-use and atomic. Passwords use Argon2id with a constant-time compare. Every login failure gets one identical 401. Every route has a role check. SQL is fully parameterized. No secrets are committed.
+- Not checked: the Vercel and Supabase dashboards, a dependency CVE scan, and the full git history for secrets.

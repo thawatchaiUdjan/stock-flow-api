@@ -9,7 +9,7 @@
 
 ## Naming
 
-- Domain concepts use the terms in `stock-flow-context`'s `GLOSSARY.md`, never their `_Avoid_` synonyms.
+- Domain concepts use the terms in this repo's `GLOSSARY.md`, never their `_Avoid_` synonyms.
 - Huma `OperationID`s are kebab-case verb-noun (`get-health`, `create-order`): `stock-flow-web`'s generated client names its functions after them, so renaming one is a contract change.
 - SQL query names (`-- name: CreateOrder :one`) are PascalCase verb-noun; sqlc turns them into Go methods.
 
@@ -38,7 +38,7 @@
 ## Comments
 
 - A comment states *why*, or the constraint the code obeys, never *what* the next line does.
-- Code that enforces a recorded rule cites it: `<module> R3` or `context ADR 0007`. Code that follows a technical decision of this repo cites it as `ADR 0006`.
+- Code that enforces a recorded rule cites it: `<module> R3` or `business ADR 0007` (historical `context ADR 0007` resolves to the same imported decision). Code that follows a technical decision of this repo cites it as `ADR 0006`.
 
 ## Tests
 
