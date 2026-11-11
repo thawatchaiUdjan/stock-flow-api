@@ -53,7 +53,7 @@ func TestTheContractPublishesEveryOperationOfLoggingIn(t *testing.T) {
 // users-and-access R4: nobody can sign up. What needs no session is this list and no
 // more, so an operation that makes a User can't be reached without logging in.
 func TestOnlyTheseOperationsNeedNoSession(t *testing.T) {
-	public := []string{"create-session", "get-health", "read-setup-link", "set-password"}
+	public := []string{"create-session", "get-health", "read-setup-link", "request-first-time-code", "set-email-password", "set-password", "verify-first-time-code"}
 
 	var got []string
 	for id, op := range operations(t) {
@@ -85,7 +85,7 @@ func TestTheContractDeclaresTheSessionCookie(t *testing.T) {
 	if scheme == nil || scheme.Type != "apiKey" || scheme.In != "cookie" || scheme.Name != "session" {
 		t.Errorf("scheme = %+v, want an apiKey in the session cookie", scheme)
 	}
-	for _, id := range []string{"end-session", "get-current-user", "list-users", "create-user", "update-user", "reset-password"} {
+	for _, id := range []string{"end-session", "get-current-user", "list-users", "create-user", "update-user", "reset-password", "create-email-user"} {
 		op := operations(t)[id]
 		if len(op.Security) != 1 {
 			t.Errorf("%s: security = %v, want the session scheme", id, op.Security)
@@ -102,7 +102,7 @@ func TestTheContractDeclaresTheSessionCookie(t *testing.T) {
 func TestASetupLinkTokenTravelsOnlyInRequestBodies(t *testing.T) {
 	ops := operations(t)
 
-	for _, id := range []string{"read-setup-link", "set-password"} {
+	for _, id := range []string{"read-setup-link", "set-password", "verify-first-time-code", "set-email-password"} {
 		op := ops[id]
 		if op.Method != http.MethodPost || len(op.Parameters) != 0 || strings.Contains(op.Path, "{") {
 			t.Errorf("%s: %s %s with parameters %v", id, op.Method, op.Path, op.Parameters)
@@ -118,15 +118,19 @@ func TestEveryOperationDeclaresItsErrors(t *testing.T) {
 	ops := operations(t)
 
 	for id, statuses := range map[string][]string{
-		"create-session":   {"401"},
-		"end-session":      {"401"},
-		"get-current-user": {"401"},
-		"read-setup-link":  {"410"},
-		"set-password":     {"410", "422"},
-		"list-users":       {"401", "403"},
-		"create-user":      {"401", "403", "409", "422"},
-		"update-user":      {"401", "403", "404", "422"},
-		"reset-password":   {"401", "403", "404", "409"},
+		"create-session":          {"401"},
+		"end-session":             {"401"},
+		"get-current-user":        {"401"},
+		"read-setup-link":         {"410"},
+		"set-password":            {"410", "422"},
+		"list-users":              {"401", "403"},
+		"create-user":             {"401", "403", "409", "422"},
+		"update-user":             {"401", "403", "404", "422"},
+		"reset-password":          {"401", "403", "404", "409"},
+		"create-email-user":       {"401", "403", "409", "422", "500", "503"},
+		"request-first-time-code": {"422", "500", "503"},
+		"verify-first-time-code":  {"410", "422", "500", "503"},
+		"set-email-password":      {"410", "422", "500", "503"},
 	} {
 		for _, status := range statuses {
 			if ops[id].Responses[status] == nil {
@@ -141,15 +145,19 @@ func TestEveryOperationNamesItsErrorCodes(t *testing.T) {
 	ops := operations(t)
 
 	for id, code := range map[string]string{
-		"create-session":   "login-failed",
-		"end-session":      "session-ended",
-		"get-current-user": "session-ended",
-		"read-setup-link":  "setup-link-invalid",
-		"set-password":     "setup-link-invalid",
-		"list-users":       "session-ended",
-		"create-user":      "email-taken",
-		"update-user":      "target-is-owner",
-		"reset-password":   "user-inactive",
+		"create-session":          "login-failed",
+		"end-session":             "session-ended",
+		"get-current-user":        "session-ended",
+		"read-setup-link":         "setup-link-invalid",
+		"set-password":            "setup-link-invalid",
+		"list-users":              "session-ended",
+		"create-user":             "email-taken",
+		"update-user":             "target-is-owner",
+		"reset-password":          "user-inactive",
+		"create-email-user":       "email-taken",
+		"request-first-time-code": "email-auth-unavailable",
+		"verify-first-time-code":  "first-time-code-invalid",
+		"set-email-password":      "password-setup-invalid",
 	} {
 		if !strings.Contains(ops[id].Description, "`"+code+"`") {
 			t.Errorf("%s: description %q does not name %s", id, ops[id].Description, code)
@@ -164,7 +172,7 @@ func TestTheContractPublishesEveryErrorCode(t *testing.T) {
 	model := contract.OpenAPI().Components.Schemas.Map()["ErrorModel"]
 
 	typ := model.Properties["type"]
-	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken", "insufficient-stock", "product-archived", "order-not-pending"}
+	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken", "insufficient-stock", "product-archived", "order-not-pending", "email-auth-unavailable", "first-time-code-invalid", "password-setup-invalid"}
 	if !slices.Equal(typ.Enum, want) {
 		t.Errorf("type enum = %v, want %v", typ.Enum, want)
 	}

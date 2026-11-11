@@ -43,6 +43,7 @@ func staff(email string) store.User {
 // Run is the contract of the store ports. The fake and the real store both pass it, so
 // the fake can't be more permissive than Postgres (docs/agents/testing.md).
 func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
+	runEmailAuth(t, newSubject)
 	ctx := context.Background()
 
 	t.Run("finds a User by email whatever its letter case", func(t *testing.T) {

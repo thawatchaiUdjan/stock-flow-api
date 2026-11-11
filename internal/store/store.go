@@ -142,6 +142,9 @@ func (s *Store) UpdateUser(ctx context.Context, arg ChangeUserParams) (updated C
 		if err := q.DeleteSetupLink(ctx, arg.ID); err != nil {
 			return fmt.Errorf("delete setup link: %w", err)
 		}
+		if err := q.DeleteEmailCredential(ctx, arg.ID); err != nil {
+			return fmt.Errorf("delete email credential: %w", err)
+		}
 		return nil
 	})
 	return updated, err
@@ -162,6 +165,10 @@ func (s *Store) ResetPassword(ctx context.Context, arg IssueSetupLinkParams) err
 		}
 		if err := q.ClearPassword(ctx, arg.UserID); err != nil {
 			return fmt.Errorf("clear password: %w", err)
+		}
+		// During compatibility, a legacy reset must not revive an email grant (R48).
+		if err := q.DeleteEmailCredential(ctx, arg.UserID); err != nil {
+			return fmt.Errorf("delete email credential: %w", err)
 		}
 		if err := q.DeleteUserSessions(ctx, arg.UserID); err != nil {
 			return fmt.Errorf("delete sessions: %w", err)
@@ -202,6 +209,9 @@ func (s *Store) SetPassword(ctx context.Context, arg SetPasswordParams) (used in
 		role, err := q.SetUserPassword(ctx, SetUserPasswordParams{PasswordHash: arg.PasswordHash, ID: userID})
 		if err != nil {
 			return fmt.Errorf("set user password: %w", err)
+		}
+		if err := q.DeleteEmailCredential(ctx, userID); err != nil {
+			return fmt.Errorf("delete email credential: %w", err)
 		}
 		if role == roleOwner {
 			if err := q.DeleteUserSessions(ctx, userID); err != nil {
