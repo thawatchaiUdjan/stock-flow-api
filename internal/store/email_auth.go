@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -49,30 +50,40 @@ func (s *Store) ReserveEmailRequest(ctx context.Context, arg EmailRequestParams)
 	err = InTx(ctx, s.pool, func(q *Queries) error {
 		for _, key := range []string{"email:" + hex.EncodeToString(arg.EmailHash), "ip:" + hex.EncodeToString(arg.IPHash)} {
 			if err := q.LockEmailRequestKey(ctx, key); err != nil {
-				return err
+				return fmt.Errorf("lock email request allowance: %w", err)
 			}
 		}
 		if err := q.PruneEmailRequests(ctx, arg.At.Add(-time.Hour)); err != nil {
-			return err
+			return fmt.Errorf("prune email request history: %w", err)
 		}
 		usage, err := q.EmailRequestUsage(ctx, EmailRequestUsageParams{
 			EmailHash: arg.EmailHash, IpHash: arg.IPHash,
 			HourStart: arg.At.Add(-time.Hour), MinuteStart: arg.At.Add(-time.Minute),
 		})
-		allowed = usage.AllowsRequest()
-		if err != nil || !allowed {
-			return err
+		if err != nil {
+			return fmt.Errorf("read email request usage: %w", err)
 		}
-		return q.RecordEmailRequest(ctx, RecordEmailRequestParams{EmailHash: arg.EmailHash, IpHash: arg.IPHash, RequestedAt: arg.At})
+		allowed = usage.AllowsRequest()
+		if !allowed {
+			return nil
+		}
+		if err := q.RecordEmailRequest(ctx, RecordEmailRequestParams{EmailHash: arg.EmailHash, IpHash: arg.IPHash, RequestedAt: arg.At}); err != nil {
+			return fmt.Errorf("reserve email request: %w", err)
+		}
+		return nil
 	})
 	return allowed && err == nil, err
 }
 
 func lockPasswordUser(ctx context.Context, q *Queries, id int64) (User, error) {
 	if err := q.LockSetupLink(ctx, id); err != nil {
-		return User{}, err
+		return User{}, fmt.Errorf("lock legacy setup link: %w", err)
 	}
-	return q.LockEmailAuthUser(ctx, id)
+	user, err := q.LockEmailAuthUser(ctx, id)
+	if err != nil {
+		return User{}, fmt.Errorf("lock email access User: %w", err)
+	}
+	return user, nil
 }
 
 // IssuePasswordCredential rechecks eligibility under the User lock, so a concurrent
@@ -81,7 +92,7 @@ func (s *Store) IssuePasswordCredential(ctx context.Context, arg EmailCredential
 	err = InTx(ctx, s.pool, func(q *Queries) error {
 		user, err := q.GetUserByEmail(ctx, arg.Email)
 		if err != nil {
-			return err
+			return fmt.Errorf("find email credential User: %w", err)
 		}
 		user, err = lockPasswordUser(ctx, q, user.ID)
 		if err != nil {
@@ -93,7 +104,7 @@ func (s *Store) IssuePasswordCredential(ctx context.Context, arg EmailCredential
 		if err := q.IssueEmailCredential(ctx, IssueEmailCredentialParams{
 			UserID: user.ID, Kind: arg.Kind, TokenHash: arg.TokenHash, ExpiresAt: arg.ExpiresAt,
 		}); err != nil {
-			return err
+			return fmt.Errorf("issue email credential: %w", err)
 		}
 		issued = user
 		return nil
@@ -109,7 +120,7 @@ func (s *Store) VerifyFirstTimeCode(ctx context.Context, arg VerifyFirstTimeCode
 			return nil
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("find code verification User: %w", err)
 		}
 		user, err = lockPasswordUser(ctx, q, user.ID)
 		if err != nil {
@@ -120,26 +131,29 @@ func (s *Store) VerifyFirstTimeCode(ctx context.Context, arg VerifyFirstTimeCode
 			return nil
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("read code verification credential: %w", err)
 		}
 		if !user.CanUseEmailCredential(FirstTimeCode) {
 			return nil
 		}
 		next, accepted := credential.VerifyCode(arg)
 		if !accepted {
-			return q.SetEmailCodeAttempts(ctx, SetEmailCodeAttemptsParams{
+			if err := q.SetEmailCodeAttempts(ctx, SetEmailCodeAttemptsParams{
 				UserID: user.ID, FailedAttempts: next.FailedAttempts, BlockedUntil: next.BlockedUntil,
-			})
+			}); err != nil {
+				return fmt.Errorf("save code verification failures: %w", err)
+			}
+			return nil
 		}
 		if err := q.IssueEmailCredential(ctx, IssueEmailCredentialParams{
 			UserID: user.ID, Kind: next.Kind, TokenHash: next.TokenHash, ExpiresAt: next.ExpiresAt,
 		}); err != nil {
-			return err
+			return fmt.Errorf("exchange code for password grant: %w", err)
 		}
 		if err := q.SetEmailCodeAttempts(ctx, SetEmailCodeAttemptsParams{
 			UserID: user.ID, FailedAttempts: next.FailedAttempts, BlockedUntil: next.BlockedUntil,
 		}); err != nil {
-			return err
+			return fmt.Errorf("save password grant attempt state: %w", err)
 		}
 		verified = true
 		return nil
@@ -150,7 +164,11 @@ func (s *Store) VerifyFirstTimeCode(ctx context.Context, arg VerifyFirstTimeCode
 // ReadEmailPasswordUser validates before the expensive password hash. Completion
 // rechecks under lock; this read is not authority to change a password.
 func (s *Store) ReadEmailPasswordUser(ctx context.Context, arg EmailPasswordParams) (User, error) {
-	return s.GetEmailCredentialUser(ctx, GetEmailCredentialUserParams{Kind: arg.Kind, TokenHash: arg.TokenHash, At: arg.At})
+	user, err := s.GetEmailCredentialUser(ctx, GetEmailCredentialUserParams{Kind: arg.Kind, TokenHash: arg.TokenHash, At: arg.At})
+	if err != nil {
+		return User{}, fmt.Errorf("read email password credential: %w", err)
+	}
+	return user, nil
 }
 
 // SetEmailPassword consumes a grant/link, changes the password and removes every
@@ -159,7 +177,7 @@ func (s *Store) SetEmailPassword(ctx context.Context, arg EmailPasswordParams) (
 	err = InTx(ctx, s.pool, func(q *Queries) error {
 		user, err := q.GetEmailCredentialUser(ctx, GetEmailCredentialUserParams{Kind: arg.Kind, TokenHash: arg.TokenHash, At: arg.At})
 		if err != nil {
-			return err
+			return fmt.Errorf("find password completion User: %w", err)
 		}
 		user, err = lockPasswordUser(ctx, q, user.ID)
 		if err != nil {
@@ -167,22 +185,22 @@ func (s *Store) SetEmailPassword(ctx context.Context, arg EmailPasswordParams) (
 		}
 		credential, err := q.GetEmailCredential(ctx, user.ID)
 		if err != nil {
-			return err
+			return fmt.Errorf("read password completion credential: %w", err)
 		}
 		if !credential.AllowsPassword(user, arg) {
 			return ErrNotFound
 		}
 		if _, err := q.SetUserPassword(ctx, SetUserPasswordParams{ID: user.ID, PasswordHash: arg.PasswordHash}); err != nil {
-			return err
+			return fmt.Errorf("replace User password: %w", err)
 		}
 		if err := q.DeleteUserSessions(ctx, user.ID); err != nil {
-			return err
+			return fmt.Errorf("revoke password completion sessions: %w", err)
 		}
 		if err := q.DeleteSetupLink(ctx, user.ID); err != nil {
-			return err
+			return fmt.Errorf("delete legacy password credential: %w", err)
 		}
 		if err := q.DeleteEmailCredential(ctx, user.ID); err != nil {
-			return err
+			return fmt.Errorf("consume email password credential: %w", err)
 		}
 		user.PasswordHash.String, user.PasswordHash.Valid = arg.PasswordHash, true
 		updated = user

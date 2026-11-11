@@ -21,7 +21,7 @@ Track retirement separately in [API ticket #49](https://github.com/thawatchaiUdj
 
 - The expansion release supports the pinned client while enabling new web implementation.
 - Owner-triggered legacy resets remain temporarily reachable during compatibility; they are absent from the new operations and must retire at the deliberate cutover.
-- Schema changes are additive. Roll back application code without dropping tables or reviving consumed credentials. Forward fixes are preferred after new flows have been used.
+- Schema changes are additive. Forward fixes are preferred after new flows have been used. If an application rollback to pre-email code is unavoidable, use an authorised maintenance window: suspend writes, invalidate all outstanding email credentials, deploy the old code with the additive tables retained, and only then resume legacy writes. Old code cannot invalidate email credentials it does not know about, so skipping this cleanup can leave stale credentials usable after a roll-forward. Never restore consumed or invalidated credentials from a backup.
 - Publish the generated contract before asking web to adopt. No sibling edits or web issue messages.
 
 ## Alternatives considered

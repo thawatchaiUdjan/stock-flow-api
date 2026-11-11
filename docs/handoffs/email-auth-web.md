@@ -95,7 +95,9 @@ This is an expansion release: legacy creation, Owner resets and Setup-link opera
 
 [API ticket #49](https://github.com/thawatchaiUdjan/stock-flow-api/issues/49) owns their later deliberate retirement and legacy non-Owner link invalidation. It remains blocked on the completed API release, web's exact adopted pin and real integration result, and explicit owner cutover authorisation. Report those facts back through this handoff process; API has not posted a web issue.
 
-Keep migration 00010's additive tables during application rollback; do not drop data, restore consumed credentials, or recreate invalidated links. Prefer a forward fix after Users have used new recovery. Old web can remain pinned during preparation, but rolling it back after new Users exist may restore obsolete Owner-reset controls, so coordinate application rollback rather than assuming the UI rollback alone is safe. The later retirement plan must prove that mixed deployments or rollback cannot resurrect old links.
+Keep migration 00010's additive tables during application rollback; do not drop them, restore consumed credentials, or recreate invalidated links. Prefer a forward fix after Users have used new recovery. If reverting API code to the pre-email version is unavoidable, obtain operator authorisation, stop API writes, invalidate outstanding email credentials, deploy the old code, then resume legacy writes. The old implementation cannot invalidate new credentials during later legacy password changes; cleanup prevents those stale credentials becoming usable again after roll-forward. Preserve existing passwords and sessions. No rollback or cleanup was executed during this task.
+
+Old web can remain pinned during preparation, but rolling it back after new Users exist may restore obsolete Owner-reset controls, so coordinate application rollback rather than assuming the UI rollback alone is safe. The later retirement plan must prove that mixed deployments or rollback cannot resurrect old links.
 
 ## Receiving-repo acceptance evidence
 
