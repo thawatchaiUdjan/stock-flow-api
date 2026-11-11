@@ -3,7 +3,6 @@ package storetest
 import (
 	"bytes"
 	"context"
-	"crypto/subtle"
 	"errors"
 	"strings"
 	"time"
@@ -19,23 +18,24 @@ func (f *Fake) ReserveEmailRequest(_ context.Context, arg store.EmailRequestPara
 		return false, f.Err
 	}
 	kept := f.emailRequests[:0]
-	emailCount, ipCount := 0, 0
-	cooldown := false
+	usage := store.EmailRequestUsageRow{}
 	for _, event := range f.emailRequests {
 		if !event.At.After(arg.At.Add(-time.Hour)) {
 			continue
 		}
 		kept = append(kept, event)
 		if bytes.Equal(event.EmailHash, arg.EmailHash) {
-			emailCount++
-			cooldown = cooldown || event.At.After(arg.At.Add(-time.Minute))
+			usage.EmailCount++
+			if event.At.After(arg.At.Add(-time.Minute)) {
+				usage.RecentCount++
+			}
 		}
 		if bytes.Equal(event.IPHash, arg.IPHash) {
-			ipCount++
+			usage.IpCount++
 		}
 	}
 	f.emailRequests = kept
-	if cooldown || emailCount >= 5 || ipCount >= 30 {
+	if !usage.AllowsRequest() {
 		return false, nil
 	}
 	f.emailRequests = append(f.emailRequests, arg)
@@ -67,16 +67,6 @@ func (f *Fake) CreateEmailUser(_ context.Context, arg store.CreateEmailUserParam
 	return user, nil
 }
 
-func credentialEligible(user *store.User, kind string) bool {
-	if user == nil || user.Status != "active" {
-		return false
-	}
-	if kind == store.ResetLink {
-		return user.PasswordHash.Valid
-	}
-	return !user.PasswordHash.Valid && user.Role != "owner"
-}
-
 func (f *Fake) IssuePasswordCredential(_ context.Context, arg store.EmailCredentialParams) (store.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -85,7 +75,7 @@ func (f *Fake) IssuePasswordCredential(_ context.Context, arg store.EmailCredent
 	}
 	for i := range f.users {
 		user := &f.users[i]
-		if strings.EqualFold(user.Email, arg.Email) && credentialEligible(user, arg.Kind) {
+		if strings.EqualFold(user.Email, arg.Email) && user.CanUseEmailCredential(arg.Kind) {
 			if arg.Kind != store.FirstTimeCode && arg.Kind != store.SetupGrant && arg.Kind != store.ResetLink {
 				return store.User{}, errors.New("violates email_credentials_kind_check")
 			}
@@ -111,23 +101,21 @@ func (f *Fake) VerifyFirstTimeCode(_ context.Context, arg store.VerifyFirstTimeC
 	}
 	for i := range f.users {
 		user := &f.users[i]
-		credential := f.credentials[user.ID]
-		if strings.EqualFold(user.Email, arg.Email) && credentialEligible(user, store.FirstTimeCode) &&
-			credential.Kind == store.FirstTimeCode && credential.ExpiresAt.After(arg.At) && !credential.BlockedUntil.After(arg.At) {
-			if credential.FailedAttempts == 5 {
-				credential.FailedAttempts = 0
-			}
-			if subtle.ConstantTimeCompare(credential.TokenHash, arg.CodeHash) != 1 {
-				credential.FailedAttempts++
-				if credential.FailedAttempts == 5 {
-					credential.BlockedUntil = arg.At.Add(10 * time.Minute)
+		credential, exists := f.credentials[user.ID]
+		if !exists {
+			continue
+		}
+		if strings.EqualFold(user.Email, arg.Email) && user.CanUseEmailCredential(store.FirstTimeCode) {
+			next, accepted := credential.VerifyCode(arg)
+			if accepted {
+				for id, existing := range f.credentials {
+					if id != user.ID && bytes.Equal(existing.TokenHash, next.TokenHash) {
+						return false, errors.New("violates email_credentials_token_hash_key")
+					}
 				}
-				f.credentials[user.ID] = credential
-				return false, nil
 			}
-			credential.Kind, credential.TokenHash, credential.ExpiresAt = store.SetupGrant, arg.GrantHash, arg.GrantExpiresAt
-			f.credentials[user.ID] = credential
-			return true, nil
+			f.credentials[user.ID] = next
+			return accepted, nil
 		}
 	}
 	return false, nil
@@ -139,8 +127,7 @@ func (f *Fake) emailPasswordUser(arg store.EmailPasswordParams) (*store.User, er
 	}
 	for id, credential := range f.credentials {
 		user := f.userRef(id)
-		if credential.Kind == arg.Kind && credential.ExpiresAt.After(arg.At) &&
-			subtle.ConstantTimeCompare(credential.TokenHash, arg.TokenHash) == 1 && credentialEligible(user, arg.Kind) {
+		if user != nil && credential.AllowsPassword(*user, arg) {
 			return user, nil
 		}
 	}

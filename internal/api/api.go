@@ -84,7 +84,7 @@ func New(deps Deps) (http.Handler, huma.API) {
 	router := chi.NewMux()
 	router.Use(noStore, withRequestInfo)
 
-	api := humachi.New(router, huma.DefaultConfig("stock-flow API", "0.1.0"))
+	api := humachi.New(router, huma.DefaultConfig("stock-flow API", "0.2.0"))
 	registerHealth(api, deps.Store)
 	registerSessions(api, deps)
 	registerSetupLinks(api, deps)

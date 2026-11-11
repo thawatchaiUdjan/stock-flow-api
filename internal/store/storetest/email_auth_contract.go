@@ -3,6 +3,7 @@ package storetest
 import (
 	"context"
 	"errors"
+	"github.com/jackc/pgx/v5/pgtype"
 	"testing"
 	"time"
 
@@ -58,6 +59,17 @@ func runEmailAuth(t *testing.T, newSubject func(*testing.T) Subject) {
 		}
 		if ok, err := verify(s, first.Email, "same-digest", at); err != nil || !ok {
 			t.Fatalf("failed issuance changed existing code: %v, %v", ok, err)
+		}
+	})
+
+	t.Run("Reset credential issuance requires an Active User with a password", func(t *testing.T) {
+		s := newSubject(t)
+		for _, u := range []store.User{staff("unfinished@example.com"), {Name: "Inactive", Email: "inactive@example.com", Role: "staff", Status: "inactive", PasswordHash: pgtype.Text{String: "hash", Valid: true}}} {
+			u = s.AddUser(t, u)
+			_, err := s.Store.IssuePasswordCredential(ctx, store.EmailCredentialParams{Email: u.Email, Kind: store.ResetLink, TokenHash: []byte(u.Email), ExpiresAt: at.Add(time.Hour)})
+			if !errors.Is(err, store.ErrNotFound) {
+				t.Fatalf("ineligible reset issued for %s: %v", u.Email, err)
+			}
 		}
 	})
 
@@ -159,6 +171,65 @@ func runEmailAuth(t *testing.T, newSubject func(*testing.T) Subject) {
 		request.At = at.Add(time.Hour)
 		if ok, err := s.Store.ReserveEmailRequest(ctx, request); err != nil || !ok {
 			t.Fatalf("hour expiry = %v, %v", ok, err)
+		}
+	})
+
+	t.Run("Reset links preserve access until consumption and revoke all credentials", func(t *testing.T) {
+		s := newSubject(t)
+		u := staff("reset@example.com")
+		u.PasswordHash = pgtype.Text{String: "old-hash", Valid: true}
+		u = s.AddUser(t, u)
+		if _, err := s.Store.CreateSession(ctx, store.CreateSessionParams{UserID: u.ID, TokenHash: []byte("session"), PasswordHash: u.PasswordHash, ExpiresAt: at.Add(time.Hour)}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Store.IssueSetupLink(ctx, store.IssueSetupLinkParams{UserID: u.ID, TokenHash: []byte("legacy"), ExpiresAt: at.Add(time.Hour)}); err != nil {
+			t.Fatal(err)
+		}
+		issue(t, s, u.Email, store.ResetLink, "reset-digest")
+		if _, err := s.Store.GetSession(ctx, []byte("session")); err != nil {
+			t.Fatal("issuing reset ended session", err)
+		}
+		got, err := s.Store.GetUserByEmail(ctx, u.Email)
+		if err != nil || got.PasswordHash != u.PasswordHash {
+			t.Fatalf("issuing reset changed password: %+v, %v", got, err)
+		}
+		updated, err := s.Store.SetEmailPassword(ctx, store.EmailPasswordParams{Kind: store.ResetLink, TokenHash: []byte("reset-digest"), At: at, PasswordHash: "new-hash"})
+		if err != nil || updated.PasswordHash.String != "new-hash" {
+			t.Fatalf("reset = %+v, %v", updated, err)
+		}
+		if _, err := s.Store.GetSession(ctx, []byte("session")); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("session survived: %v", err)
+		}
+		if _, err := s.Store.GetSetupLinkUser(ctx, store.GetSetupLinkUserParams{TokenHash: []byte("legacy"), At: at}); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("legacy link survived: %v", err)
+		}
+		if _, err := s.Store.ReadEmailPasswordUser(ctx, store.EmailPasswordParams{Kind: store.ResetLink, TokenHash: []byte("reset-digest"), At: at}); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("Reset link survived: %v", err)
+		}
+	})
+
+	t.Run("deactivation invalidates codes and grants through reactivation", func(t *testing.T) {
+		for _, grant := range []bool{false, true} {
+			s := newSubject(t)
+			u := s.AddUser(t, staff("new@example.com"))
+			issue(t, s, u.Email, store.FirstTimeCode, "code")
+			if grant {
+				if ok, err := verify(s, u.Email, "code", at); err != nil || !ok {
+					t.Fatalf("verify = %v, %v", ok, err)
+				}
+			}
+			for _, status := range []string{"inactive", "active"} {
+				if _, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: u.ID, Status: status}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if grant {
+				if _, err := s.Store.ReadEmailPasswordUser(ctx, store.EmailPasswordParams{Kind: store.SetupGrant, TokenHash: []byte("grant-digest"), At: at}); !errors.Is(err, store.ErrNotFound) {
+					t.Fatalf("grant revived: %v", err)
+				}
+			} else if ok, err := verify(s, u.Email, "code", at); err != nil || ok {
+				t.Fatalf("code revived: %v, %v", ok, err)
+			}
 		}
 	})
 }

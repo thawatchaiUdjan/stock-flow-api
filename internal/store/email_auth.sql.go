@@ -8,8 +8,6 @@ package store
 import (
 	"context"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createEmailUser = `-- name: CreateEmailUser :one
@@ -48,33 +46,39 @@ func (q *Queries) DeleteEmailCredential(ctx context.Context, userID int64) error
 	return err
 }
 
-const emailRequestAllowed = `-- name: EmailRequestAllowed :one
+const emailRequestUsage = `-- name: EmailRequestUsage :one
 SELECT
     (SELECT count(*) FROM email_request_events AS hourly_email
-     WHERE hourly_email.email_hash = $1 AND hourly_email.requested_at > $2) < 5
-    AND (SELECT count(*) FROM email_request_events AS cooldown_email
-         WHERE cooldown_email.email_hash = $1 AND cooldown_email.requested_at > $3) = 0
-    AND (SELECT count(*) FROM email_request_events AS hourly_ip
-         WHERE hourly_ip.ip_hash = $4 AND hourly_ip.requested_at > $2) < 30 AS allowed
+     WHERE hourly_email.email_hash = $1 AND hourly_email.requested_at > $2) AS email_count,
+    (SELECT count(*) FROM email_request_events AS cooldown_email
+     WHERE cooldown_email.email_hash = $1 AND cooldown_email.requested_at > $3) AS recent_count,
+    (SELECT count(*) FROM email_request_events AS hourly_ip
+     WHERE hourly_ip.ip_hash = $4 AND hourly_ip.requested_at > $2) AS ip_count
 `
 
-type EmailRequestAllowedParams struct {
+type EmailRequestUsageParams struct {
 	EmailHash   []byte
 	HourStart   time.Time
 	MinuteStart time.Time
 	IpHash      []byte
 }
 
-func (q *Queries) EmailRequestAllowed(ctx context.Context, arg EmailRequestAllowedParams) (pgtype.Bool, error) {
-	row := q.db.QueryRow(ctx, emailRequestAllowed,
+type EmailRequestUsageRow struct {
+	EmailCount  int64
+	RecentCount int64
+	IpCount     int64
+}
+
+func (q *Queries) EmailRequestUsage(ctx context.Context, arg EmailRequestUsageParams) (EmailRequestUsageRow, error) {
+	row := q.db.QueryRow(ctx, emailRequestUsage,
 		arg.EmailHash,
 		arg.HourStart,
 		arg.MinuteStart,
 		arg.IpHash,
 	)
-	var allowed pgtype.Bool
-	err := row.Scan(&allowed)
-	return allowed, err
+	var i EmailRequestUsageRow
+	err := row.Scan(&i.EmailCount, &i.RecentCount, &i.IpCount)
+	return i, err
 }
 
 const getEmailCredential = `-- name: GetEmailCredential :one

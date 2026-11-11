@@ -28,6 +28,12 @@ API owns `openapi.yaml`, generated from Huma operations by `go generate ./...` a
 
 Keep published contracts compatible or explicitly version breaking changes. Notify [stock-flow-web](https://github.com/thawatchaiUdjan/stock-flow-web) directly through linked issues of relevant published changes. Web chooses a specific API commit and tests integration against it; it does not follow API `main` automatically. Adoption remains unconfirmed until web replies with its pinned commit and integration result.
 
+## Email access
+
+Contract version 0.2.0 adds first-time email code setup and self-service password recovery alongside the legacy API during web adoption. API owns the templates. [Configuration, previews and live verification](docs/email/README.md) describe Brevo setup, the four optional environment settings, email-client limits and rollback. Render the actual templates offline with `go run ./cmd/email-preview`; no credentials or email sending are involved.
+
+Legacy-flow retirement remains blocked on confirmed web adoption in [ticket #49](https://github.com/thawatchaiUdjan/stock-flow-api/issues/49). This expansion release does not automatically change the pinned web client or perform a cutover.
+
 ## Agent skills
 
 [scripts/install-skills.sh](scripts/install-skills.sh) installs only this repo's skills from [mattpocock/skills](https://github.com/mattpocock/skills), using pinned `skills@1.7.4` and disabled telemetry. Skills live in `.agents/skills/`, with Claude links in `.claude/skills/`; `skills-lock.json` records source paths and hashes.

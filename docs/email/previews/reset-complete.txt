@@ -1,0 +1,9 @@
+Hi Napa,
+
+Your StockFlow password has changed. All existing sessions have ended. Log in again using your new password.
+
+Login: https://stock-flow.example/login
+
+If you did not make this change, contact the person who maintains your system.
+
+StockFlow

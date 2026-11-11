@@ -7,13 +7,16 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
 
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/api"
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/auth"
+	"github.com/thawatchaiUdjan/stock-flow-api/internal/email"
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
 )
 
@@ -37,6 +40,22 @@ func run() error {
 	if port == "" {
 		port = "8080"
 	}
+	deps := api.Deps{PasswordHasher: auth.DefaultPasswordHasher, Now: time.Now}
+	mailKey, sender := os.Getenv("BREVO_API_KEY"), os.Getenv("EMAIL_SENDER_ADDRESS")
+	webBase, codeSecret := os.Getenv("WEB_BASE_URL"), os.Getenv("EMAIL_CODE_SECRET")
+	// Legacy-only deployments remain valid; partial email settings must not fail
+	// silently and leave a configured-looking but unusable password flow.
+	if mailKey != "" || sender != "" || webBase != "" || codeSecret != "" {
+		origin, err := url.Parse(webBase)
+		if err != nil || origin.Scheme != "https" || origin.Host == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || (origin.Path != "" && origin.Path != "/") || len(codeSecret) < 32 {
+			return errors.New("email access requires WEB_BASE_URL as an HTTPS origin and EMAIL_CODE_SECRET of at least 32 bytes")
+		}
+		mailer, err := email.NewBrevo(email.Config{APIKey: mailKey, SenderEmail: sender}, nil)
+		if err != nil {
+			return err
+		}
+		deps.Mailer, deps.CodeSecret, deps.WebBaseURL = mailer, []byte(codeSecret), strings.TrimSuffix(webBase, "/")
+	}
 
 	pool, err := store.Open(databaseURL)
 	if err != nil {
@@ -44,7 +63,8 @@ func run() error {
 	}
 	defer pool.Close()
 
-	handler, _ := api.New(api.Deps{Store: store.NewStore(pool), PasswordHasher: auth.DefaultPasswordHasher, Now: time.Now})
+	deps.Store = store.NewStore(pool)
+	handler, _ := api.New(deps)
 	server := &http.Server{
 		Addr:              ":" + port,
 		Handler:           handler,

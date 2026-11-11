@@ -26,6 +26,7 @@ const (
 	codeEmailAuthUnavailable = "email-auth-unavailable"
 	codeFirstTimeCodeInvalid = "first-time-code-invalid"
 	codePasswordSetupInvalid = "password-setup-invalid"
+	codePasswordResetInvalid = "password-reset-invalid"
 )
 
 // errorCodes is the published list. Every code above must be in it.
@@ -43,6 +44,7 @@ var errorCodes = []struct{ code, meaning string }{
 	{codeEmailAuthUnavailable, "Email password setup and recovery are not configured."},
 	{codeFirstTimeCodeInvalid, "The First-time code cannot be used: it is wrong, expired, consumed, replaced, blocked or ineligible."},
 	{codePasswordSetupInvalid, "The password-setup grant is expired, consumed, replaced or ineligible."},
+	{codePasswordResetInvalid, "The Reset link is expired, consumed, replaced or ineligible."},
 }
 
 func domainError(status int, code, detail string) *huma.ErrorModel {

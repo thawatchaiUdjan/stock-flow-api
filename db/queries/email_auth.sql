@@ -41,14 +41,14 @@ WHERE email_credentials.kind = sqlc.arg(kind)
 -- name: LockEmailRequestKey :exec
 SELECT pg_advisory_xact_lock(hashtextextended(sqlc.arg(lock_key)::text, 0));
 
--- name: EmailRequestAllowed :one
+-- name: EmailRequestUsage :one
 SELECT
     (SELECT count(*) FROM email_request_events AS hourly_email
-     WHERE hourly_email.email_hash = sqlc.arg(email_hash) AND hourly_email.requested_at > sqlc.arg(hour_start)) < 5
-    AND (SELECT count(*) FROM email_request_events AS cooldown_email
-         WHERE cooldown_email.email_hash = sqlc.arg(email_hash) AND cooldown_email.requested_at > sqlc.arg(minute_start)) = 0
-    AND (SELECT count(*) FROM email_request_events AS hourly_ip
-         WHERE hourly_ip.ip_hash = sqlc.arg(ip_hash) AND hourly_ip.requested_at > sqlc.arg(hour_start)) < 30 AS allowed;
+     WHERE hourly_email.email_hash = sqlc.arg(email_hash) AND hourly_email.requested_at > sqlc.arg(hour_start)) AS email_count,
+    (SELECT count(*) FROM email_request_events AS cooldown_email
+     WHERE cooldown_email.email_hash = sqlc.arg(email_hash) AND cooldown_email.requested_at > sqlc.arg(minute_start)) AS recent_count,
+    (SELECT count(*) FROM email_request_events AS hourly_ip
+     WHERE hourly_ip.ip_hash = sqlc.arg(ip_hash) AND hourly_ip.requested_at > sqlc.arg(hour_start)) AS ip_count;
 
 -- name: RecordEmailRequest :exec
 INSERT INTO email_request_events (email_hash, ip_hash, requested_at) VALUES ($1, $2, $3);

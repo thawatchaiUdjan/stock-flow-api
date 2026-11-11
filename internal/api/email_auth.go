@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -32,7 +33,7 @@ type emailRequestOutput struct {
 type createEmailUserOutput struct {
 	Body struct {
 		User          user   `json:"user"`
-		EmailDelivery string `json:"emailDelivery" enum:"sent,failed,suppressed" doc:"Creation succeeds even when email sending fails or is limited. Retry through password setup; do not create a duplicate User."`
+		EmailDelivery string `json:"emailDelivery" enum:"sent,failed,suppressed" doc:"sent means provider acceptance, not inbox delivery. Creation succeeds even when sending fails or is limited. Retry through password setup; do not create a duplicate User."`
 	}
 }
 
@@ -86,8 +87,8 @@ func registerEmailAuth(api huma.API, deps Deps) {
 		if err != nil {
 			return nil, internalError(ctx, "create email User", err)
 		}
-		// R46: delivery failure cannot undo creation or invite a duplicate retry.
-		delivery, err := sendFirstTimeCode(ctx, deps, created.Email)
+		// users-and-access R46: delivery failure cannot undo creation or invite a duplicate retry.
+		delivery, err := sendPasswordInstructions(ctx, deps, created.Email, false)
 		if err != nil {
 			delivery = "failed"
 			slog.WarnContext(ctx, "initial password email could not be prepared")
@@ -107,7 +108,7 @@ func registerEmailAuth(api huma.API, deps Deps) {
 		if err := emailAuthReady(deps); err != nil {
 			return nil, err
 		}
-		if _, err := sendFirstTimeCode(ctx, deps, input.Body.Email); err != nil {
+		if _, err := sendPasswordInstructions(ctx, deps, input.Body.Email, false); err != nil {
 			return nil, internalError(ctx, "request first-time code", err)
 		}
 		out := &emailRequestOutput{}
@@ -148,32 +149,72 @@ func registerEmailAuth(api huma.API, deps Deps) {
 		Description:   "Answers 410 `password-setup-invalid` for expired, consumed, replaced or ineligible grants, and 503 `email-auth-unavailable` when not configured. Starts no session.",
 		DefaultStatus: http.StatusNoContent, Errors: []int{http.StatusGone, http.StatusInternalServerError, http.StatusServiceUnavailable},
 	}, func(ctx context.Context, input *emailPasswordInput) (*struct{}, error) {
+		_, err := saveEmailPassword(ctx, deps, input, store.SetupGrant)
+		return nil, err
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "request-password-reset", Method: http.MethodPost, Path: "/v2/password-reset/request",
+		Summary: "Request self-service password recovery", Tags: []string{"Email access"},
+		Description:   "Answers the same 202 message for unknown, inactive, limited and delivery-failure outcomes. Users without passwords receive a First-time code, except the initial Owner. Answers 503 `email-auth-unavailable` when not configured.",
+		DefaultStatus: http.StatusAccepted, Errors: []int{http.StatusInternalServerError, http.StatusServiceUnavailable},
+	}, func(ctx context.Context, input *emailRequestInput) (*emailRequestOutput, error) {
 		if err := emailAuthReady(deps); err != nil {
 			return nil, err
 		}
-		arg := store.EmailPasswordParams{Kind: store.SetupGrant, TokenHash: auth.HashToken(input.Body.Token), At: deps.Now()}
-		invalid := func() error {
-			return domainError(http.StatusGone, codePasswordSetupInvalid, "This password-setup grant no longer works. Request a new code.")
+		if _, err := sendPasswordInstructions(ctx, deps, input.Body.Email, true); err != nil {
+			return nil, internalError(ctx, "request password reset", err)
 		}
-		if _, err := deps.Store.ReadEmailPasswordUser(ctx, arg); err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				return nil, invalid()
-			}
-			return nil, internalError(ctx, "read password-setup grant", err)
+		out := &emailRequestOutput{}
+		out.Body.Message = emailRequestMessage
+		return out, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "reset-email-password", Method: http.MethodPost, Path: "/v2/password-reset/password",
+		Summary: "Set a new password using an emailed Reset link", Tags: []string{"Email access"},
+		Description:   "Answers 410 `password-reset-invalid` for expired, used, replaced or ineligible links, and 503 `email-auth-unavailable` when not configured. Ends all sessions and starts none. Notification failure does not undo the change.",
+		DefaultStatus: http.StatusNoContent, Errors: []int{http.StatusGone, http.StatusInternalServerError, http.StatusServiceUnavailable},
+	}, func(ctx context.Context, input *emailPasswordInput) (*struct{}, error) {
+		updated, err := saveEmailPassword(ctx, deps, input, store.ResetLink)
+		if err != nil {
+			return nil, err
 		}
-		arg.PasswordHash = deps.PasswordHasher.Hash(input.Body.Password)
-		arg.At = deps.Now()
-		if _, err := deps.Store.SetEmailPassword(ctx, arg); err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				return nil, invalid()
-			}
-			return nil, internalError(ctx, "set email password", err)
+		if err := deps.Mailer.Send(ctx, email.Message{Kind: email.ResetComplete, To: updated.Email, Name: updated.Name, Link: deps.WebBaseURL + "/login"}); err != nil {
+			slog.WarnContext(ctx, "password reset notification could not be sent")
 		}
 		return nil, nil
 	})
 }
 
-func sendFirstTimeCode(ctx context.Context, deps Deps, address string) (string, error) {
+func saveEmailPassword(ctx context.Context, deps Deps, input *emailPasswordInput, kind string) (store.User, error) {
+	if err := emailAuthReady(deps); err != nil {
+		return store.User{}, err
+	}
+	code, detail := codePasswordSetupInvalid, "This password-setup grant no longer works. Request a new code."
+	if kind == store.ResetLink {
+		code, detail = codePasswordResetInvalid, "This Reset link no longer works. Request a new one through Forgot password."
+	}
+	refusal := func(doing string, err error) error {
+		if errors.Is(err, store.ErrNotFound) {
+			return domainError(http.StatusGone, code, detail)
+		}
+		return internalError(ctx, doing, err)
+	}
+	arg := store.EmailPasswordParams{Kind: kind, TokenHash: auth.HashToken(input.Body.Token), At: deps.Now()}
+	if _, err := deps.Store.ReadEmailPasswordUser(ctx, arg); err != nil {
+		return store.User{}, refusal("read password credential", err)
+	}
+	arg.PasswordHash = deps.PasswordHasher.Hash(input.Body.Password)
+	arg.At = deps.Now()
+	updated, err := deps.Store.SetEmailPassword(ctx, arg)
+	if err != nil {
+		return store.User{}, refusal("save email password", err)
+	}
+	return updated, nil
+}
+
+func sendPasswordInstructions(ctx context.Context, deps Deps, address string, recovery bool) (string, error) {
 	info, _ := ctx.Value(requestInfoKey{}).(requestInfo)
 	allowed, err := deps.Store.ReserveEmailRequest(ctx, store.EmailRequestParams{
 		EmailHash: auth.HashToken(strings.ToLower(address)), IPHash: auth.HashToken(info.ip), At: deps.Now(),
@@ -186,9 +227,26 @@ func sendFirstTimeCode(ctx context.Context, deps Deps, address string) (string, 
 	}
 	code := auth.NewFirstTimeCode()
 	expires := deps.Now().Add(10 * time.Minute)
+	kind := store.FirstTimeCode
+	digest := auth.HashFirstTimeCode(deps.CodeSecret, address, code)
+	message := email.Message{Kind: email.FirstTimeCode, Code: code, Link: deps.WebBaseURL + "/password-setup"}
+	if recovery {
+		user, err := deps.Store.GetUserByEmail(ctx, address)
+		if errors.Is(err, store.ErrNotFound) {
+			return "suppressed", nil
+		}
+		if err != nil {
+			return "failed", err
+		}
+		if user.PasswordHash.Valid {
+			kind = store.ResetLink
+			token := auth.NewToken()
+			digest, expires = auth.HashToken(token), deps.Now().Add(30*time.Minute)
+			message = email.Message{Kind: email.ResetLink, Link: deps.WebBaseURL + "/reset-password#token=" + url.QueryEscape(token)}
+		}
+	}
 	issued, err := deps.Store.IssuePasswordCredential(ctx, store.EmailCredentialParams{
-		Email: address, Kind: store.FirstTimeCode,
-		TokenHash: auth.HashFirstTimeCode(deps.CodeSecret, address, code), ExpiresAt: expires,
+		Email: address, Kind: kind, TokenHash: digest, ExpiresAt: expires,
 	})
 	if errors.Is(err, store.ErrNotFound) {
 		return "suppressed", nil
@@ -196,11 +254,9 @@ func sendFirstTimeCode(ctx context.Context, deps Deps, address string) (string, 
 	if err != nil {
 		return "failed", err
 	}
-	if err := deps.Mailer.Send(ctx, email.Message{
-		Kind: email.FirstTimeCode, To: issued.Email, Name: issued.Name, Code: code,
-		Link: deps.WebBaseURL + "/password-setup", ExpiresAt: expires,
-	}); err != nil {
-		slog.WarnContext(ctx, "transactional email could not be sent", "kind", email.FirstTimeCode)
+	message.To, message.Name, message.ExpiresAt = issued.Email, issued.Name, expires
+	if err := deps.Mailer.Send(ctx, message); err != nil {
+		slog.WarnContext(ctx, "transactional email could not be sent", "kind", message.Kind)
 		return "failed", nil
 	}
 	return "sent", nil

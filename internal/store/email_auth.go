@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"time"
@@ -56,11 +55,11 @@ func (s *Store) ReserveEmailRequest(ctx context.Context, arg EmailRequestParams)
 		if err := q.PruneEmailRequests(ctx, arg.At.Add(-time.Hour)); err != nil {
 			return err
 		}
-		allowance, err := q.EmailRequestAllowed(ctx, EmailRequestAllowedParams{
+		usage, err := q.EmailRequestUsage(ctx, EmailRequestUsageParams{
 			EmailHash: arg.EmailHash, IpHash: arg.IPHash,
 			HourStart: arg.At.Add(-time.Hour), MinuteStart: arg.At.Add(-time.Minute),
 		})
-		allowed = allowance.Valid && allowance.Bool
+		allowed = usage.AllowsRequest()
 		if err != nil || !allowed {
 			return err
 		}
@@ -76,18 +75,8 @@ func lockPasswordUser(ctx context.Context, q *Queries, id int64) (User, error) {
 	return q.LockEmailAuthUser(ctx, id)
 }
 
-func emailCredentialEligible(user User, kind string) bool {
-	if user.Status != "active" {
-		return false
-	}
-	if kind == ResetLink {
-		return user.PasswordHash.Valid
-	}
-	return !user.PasswordHash.Valid && user.Role != roleOwner
-}
-
 // IssuePasswordCredential rechecks eligibility under the User lock, so a concurrent
-// deactivation or password change cannot leave usable instructions (R32, R48).
+// deactivation or password change cannot leave usable instructions (users-and-access R32, R48).
 func (s *Store) IssuePasswordCredential(ctx context.Context, arg EmailCredentialParams) (issued User, err error) {
 	err = InTx(ctx, s.pool, func(q *Queries) error {
 		user, err := q.GetUserByEmail(ctx, arg.Email)
@@ -98,7 +87,7 @@ func (s *Store) IssuePasswordCredential(ctx context.Context, arg EmailCredential
 		if err != nil {
 			return err
 		}
-		if !emailCredentialEligible(user, arg.Kind) {
+		if !user.CanUseEmailCredential(arg.Kind) {
 			return ErrNotFound
 		}
 		if err := q.IssueEmailCredential(ctx, IssueEmailCredentialParams{
@@ -112,7 +101,7 @@ func (s *Store) IssuePasswordCredential(ctx context.Context, arg EmailCredential
 	return issued, err
 }
 
-// VerifyFirstTimeCode consumes the code when it exchanges it for a grant (R42).
+// VerifyFirstTimeCode consumes the code when it exchanges it for a grant (users-and-access R42).
 func (s *Store) VerifyFirstTimeCode(ctx context.Context, arg VerifyFirstTimeCodeParams) (verified bool, err error) {
 	err = InTx(ctx, s.pool, func(q *Queries) error {
 		user, err := q.GetUserByEmail(ctx, arg.Email)
@@ -133,25 +122,22 @@ func (s *Store) VerifyFirstTimeCode(ctx context.Context, arg VerifyFirstTimeCode
 		if err != nil {
 			return err
 		}
-		if !emailCredentialEligible(user, FirstTimeCode) || credential.Kind != FirstTimeCode ||
-			!credential.ExpiresAt.After(arg.At) || credential.BlockedUntil.After(arg.At) {
+		if !user.CanUseEmailCredential(FirstTimeCode) {
 			return nil
 		}
-		// R41: a completed block restores the allowance; a resend never does.
-		if credential.FailedAttempts == 5 {
-			credential.FailedAttempts = 0
-		}
-		if subtle.ConstantTimeCompare(credential.TokenHash, arg.CodeHash) != 1 {
-			credential.FailedAttempts++
-			if credential.FailedAttempts == 5 {
-				credential.BlockedUntil = arg.At.Add(10 * time.Minute)
-			}
+		next, accepted := credential.VerifyCode(arg)
+		if !accepted {
 			return q.SetEmailCodeAttempts(ctx, SetEmailCodeAttemptsParams{
-				UserID: user.ID, FailedAttempts: credential.FailedAttempts, BlockedUntil: credential.BlockedUntil,
+				UserID: user.ID, FailedAttempts: next.FailedAttempts, BlockedUntil: next.BlockedUntil,
 			})
 		}
 		if err := q.IssueEmailCredential(ctx, IssueEmailCredentialParams{
-			UserID: user.ID, Kind: SetupGrant, TokenHash: arg.GrantHash, ExpiresAt: arg.GrantExpiresAt,
+			UserID: user.ID, Kind: next.Kind, TokenHash: next.TokenHash, ExpiresAt: next.ExpiresAt,
+		}); err != nil {
+			return err
+		}
+		if err := q.SetEmailCodeAttempts(ctx, SetEmailCodeAttemptsParams{
+			UserID: user.ID, FailedAttempts: next.FailedAttempts, BlockedUntil: next.BlockedUntil,
 		}); err != nil {
 			return err
 		}
@@ -183,8 +169,7 @@ func (s *Store) SetEmailPassword(ctx context.Context, arg EmailPasswordParams) (
 		if err != nil {
 			return err
 		}
-		if !emailCredentialEligible(user, arg.Kind) || credential.Kind != arg.Kind ||
-			!credential.ExpiresAt.After(arg.At) || subtle.ConstantTimeCompare(credential.TokenHash, arg.TokenHash) != 1 {
+		if !credential.AllowsPassword(user, arg) {
 			return ErrNotFound
 		}
 		if _, err := q.SetUserPassword(ctx, SetUserPasswordParams{ID: user.ID, PasswordHash: arg.PasswordHash}); err != nil {
