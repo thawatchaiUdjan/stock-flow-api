@@ -22,6 +22,9 @@ jobs:
         with:
           go-version-file: go.mod # caches the module and build cache by default
 
+      - name: Documentation links
+        run: bash scripts/check-links.sh
+
       - name: gofmt
         run: |
           unformatted="$(gofmt -l .)"

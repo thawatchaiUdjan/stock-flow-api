@@ -1,0 +1,210 @@
+{
+  "source_repository": "https://github.com/thawatchaiUdjan/stock-flow-context",
+  "source_commit": "4c81bd45ff27cca31bd911e5e429b46c273265d2",
+  "import_date": "2026-11-11",
+  "api_base_commit": "2384eabf44f0cebfd6f01feedd44a75d1b78178c",
+  "files": [
+    {
+      "source_path": "GLOSSARY.md",
+      "destination_path": "GLOSSARY.md",
+      "source_blob": "78a10738ea3cbf61a703d97f9d303702de800b75",
+      "source_sha256": "5081a468944ae50c69b702ef8dece36104cb5f3e97256eaf8ce45cb9f0488ac4",
+      "import_sha256": "5081a468944ae50c69b702ef8dece36104cb5f3e97256eaf8ce45cb9f0488ac4",
+      "transformations": []
+    },
+    {
+      "source_path": "README.md",
+      "destination_path": "docs/history/context-README.md",
+      "source_blob": "8284b9c5bb418cc3dfa6f0f4479c9365667f4d4e",
+      "source_sha256": "a40d2586c33de90c03ca87bcef9438a354bfc3294adb731fa56a3933c94b47da",
+      "import_sha256": "08c0fbfd00128e9d4a8c6bc8fe08aa200ccd91e25be839574f10ca14cf7e7a65",
+      "transformations": [
+        "Relative historical links pinned to their original context commit; decision text unchanged."
+      ]
+    },
+    {
+      "source_path": "docs/adr/0001-three-roles.md",
+      "destination_path": "docs/business-adr/0001-three-roles.md",
+      "source_blob": "115acd9d35d4ea2377dc0fddda322337d0c979c9",
+      "source_sha256": "00a412fcd26305406a6d28f71549444c858af2116e41cf8f8451889342936db3",
+      "import_sha256": "00a412fcd26305406a6d28f71549444c858af2116e41cf8f8451889342936db3",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/adr/0002-setup-link-for-passwords.md",
+      "destination_path": "docs/business-adr/0002-setup-link-for-passwords.md",
+      "source_blob": "0fd55f625c1263fb2b8a557d6a512f9b80316582",
+      "source_sha256": "6cad681655722b69821b5e6fbcbcac7830cf50744e86f8af31a728fffad55b06",
+      "import_sha256": "6cad681655722b69821b5e6fbcbcac7830cf50744e86f8af31a728fffad55b06",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/adr/0003-owner-new-setup-link-ends-sessions.md",
+      "destination_path": "docs/business-adr/0003-owner-new-setup-link-ends-sessions.md",
+      "source_blob": "c210182ef250d5ea1867a64bbc83be856e4ab92a",
+      "source_sha256": "ea6105b4f8e729e0f81a62d8c405cb153de2a969a53f874c768e79c51deb6a56",
+      "import_sha256": "ea6105b4f8e729e0f81a62d8c405cb153de2a969a53f874c768e79c51deb6a56",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/adr/0004-owner-name-fixed-in-database.md",
+      "destination_path": "docs/business-adr/0004-owner-name-fixed-in-database.md",
+      "source_blob": "e031cb8b4823f814c7117b61c96e19ee51d3dce5",
+      "source_sha256": "6443d5216421a18a69cca35e8e1d21c2d41a5e1519ba27bf0b77a5e19bebb608",
+      "import_sha256": "6443d5216421a18a69cca35e8e1d21c2d41a5e1519ba27bf0b77a5e19bebb608",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/adr/0005-autopilot.md",
+      "destination_path": "docs/business-adr/0005-autopilot.md",
+      "source_blob": "ed726161f5ae76e158c527bb7001717637954cce",
+      "source_sha256": "d2297e252ba4870c090c1b5bdc50c416023b27fa96569fd40783a3277bcacfe5",
+      "import_sha256": "155aa0012189fca75a9735b9810cbeb5838d73cf5416bec4981f326b4a931b5c",
+      "transformations": [
+        "Relative historical links pinned to their original context commit; decision text unchanged."
+      ]
+    },
+    {
+      "source_path": "docs/adr/0006-stock-changes-only-through-movements.md",
+      "destination_path": "docs/business-adr/0006-stock-changes-only-through-movements.md",
+      "source_blob": "cf7358c542bb3d7de95f3b96458901ead317eb57",
+      "source_sha256": "ad0dbfd9f0e3efab4b0622131bbe8be3c9d1300331537be2a35dfcc8680b5dcd",
+      "import_sha256": "ad0dbfd9f0e3efab4b0622131bbe8be3c9d1300331537be2a35dfcc8680b5dcd",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/adr/0007-orders-take-stock-when-created.md",
+      "destination_path": "docs/business-adr/0007-orders-take-stock-when-created.md",
+      "source_blob": "86030f9d1925674886f45f2fb7e29b8254a859f2",
+      "source_sha256": "c061931103ee8f1c9e114c500efaba90c69680df9632c8b535e513e709fe9e5d",
+      "import_sha256": "c061931103ee8f1c9e114c500efaba90c69680df9632c8b535e513e709fe9e5d",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/adr/0008-choose-workflow-per-task.md",
+      "destination_path": "docs/business-adr/0008-choose-workflow-per-task.md",
+      "source_blob": "50b7644ec9d4570946413378551333f861bb88b1",
+      "source_sha256": "6d81c43c4c4298eb244f3fabc2779cdba9faa2d09cb5674071019d4e7d663b2a",
+      "import_sha256": "6d81c43c4c4298eb244f3fabc2779cdba9faa2d09cb5674071019d4e7d663b2a",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/adr/0009-numbered-history-pagination.md",
+      "destination_path": "docs/business-adr/0009-numbered-history-pagination.md",
+      "source_blob": "04190b52644430653e4020013c5bcc5c857d870b",
+      "source_sha256": "9bad8cf21c34b4715edaee0a4ed98a2750b9d3c9284e0d7d3e0dc5a57d3123af",
+      "import_sha256": "9bad8cf21c34b4715edaee0a4ed98a2750b9d3c9284e0d7d3e0dc5a57d3123af",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/feature-log.md",
+      "destination_path": "docs/history/context-feature-log.md",
+      "source_blob": "c5db66f0ff25513bafa699af0db5c0df47a39dad",
+      "source_sha256": "1dcb4444a3af44f459a5321d717ac04b61ce019d1f1775a2b78a1cdb8b82ab53",
+      "import_sha256": "e5b1cf4bea7685770ef2b352d5efa8ea21de264c6a43f36e01a2766ff4f837df",
+      "transformations": [
+        "Relative historical links pinned to their original context commit; decision text unchanged."
+      ]
+    },
+    {
+      "source_path": "docs/requirements/README.md",
+      "destination_path": "docs/requirements/README.md",
+      "source_blob": "e7a34a26b1c3050d4f4da72437d4cce9a8c33e63",
+      "source_sha256": "114ecd7d44fd7cff33f98eecee840d93b86ae966a72cd51fe10b8e29181cb101",
+      "import_sha256": "114ecd7d44fd7cff33f98eecee840d93b86ae966a72cd51fe10b8e29181cb101",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/requirements/dashboard-and-reports.md",
+      "destination_path": "docs/requirements/dashboard-and-reports.md",
+      "source_blob": "b572fbf4686a234dff296c30b92593509e0ce9ad",
+      "source_sha256": "7288a6e4cefe9d1c5e9910e94e52b9283e846611037fa246334400a8cdf7010e",
+      "import_sha256": "7288a6e4cefe9d1c5e9910e94e52b9283e846611037fa246334400a8cdf7010e",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/requirements/date-controls.md",
+      "destination_path": "docs/requirements/date-controls.md",
+      "source_blob": "4e6192b2fd2f6ca7a0ff0a0dd7fb9d4505490236",
+      "source_sha256": "398c36bf79db084252163d088f84eb2417139d68481620970a4ec1b3aa7aec06",
+      "import_sha256": "398c36bf79db084252163d088f84eb2417139d68481620970a4ec1b3aa7aec06",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/requirements/navigation-and-lists.md",
+      "destination_path": "docs/requirements/navigation-and-lists.md",
+      "source_blob": "b5d1c91f072628c9b3704999089f70a7221facf1",
+      "source_sha256": "48db5b84ecb047651c17f2b41b77786dd29719fe41c8d043586456d909c28ce9",
+      "import_sha256": "c7dff7ae64f50b6cbe331aca7555e203f00c70e1d0ea5aabf5fdf54686a917d7",
+      "transformations": [
+        "Relative business ADR links now resolve under docs/business-adr/."
+      ]
+    },
+    {
+      "source_path": "docs/requirements/orders.md",
+      "destination_path": "docs/requirements/orders.md",
+      "source_blob": "1511fbf76263c0409233da069f2a1003ae437a0f",
+      "source_sha256": "14d5940a8cd6e31ac92881aa625ed44882bb960a43d5cedf2aadb107b3db5533",
+      "import_sha256": "14d5940a8cd6e31ac92881aa625ed44882bb960a43d5cedf2aadb107b3db5533",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/requirements/products.md",
+      "destination_path": "docs/requirements/products.md",
+      "source_blob": "05403d11bcfe7a20c7bb2cdab4ce8c1eff13cbe0",
+      "source_sha256": "a018829256fb5d400b31e8c5e594bfaa668f0221a2eb4c7ee31de69b9818872a",
+      "import_sha256": "a018829256fb5d400b31e8c5e594bfaa668f0221a2eb4c7ee31de69b9818872a",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/requirements/stock-movements.md",
+      "destination_path": "docs/requirements/stock-movements.md",
+      "source_blob": "9b623420b19971b6724b53fb6ba195a39cdd79aa",
+      "source_sha256": "e1bac3064e505e5918185db94fa4317ca8ede9f37a77e94738b7e35e52c80fa9",
+      "import_sha256": "e1bac3064e505e5918185db94fa4317ca8ede9f37a77e94738b7e35e52c80fa9",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/requirements/users-and-access.md",
+      "destination_path": "docs/requirements/users-and-access.md",
+      "source_blob": "5dd9add72ada84b29604f8c5e09ae190cc0e5bbe",
+      "source_sha256": "9ccf8a00ce341c17faab60eedeac767949d8c05c8632c161ac339989ac897ffa",
+      "import_sha256": "9ccf8a00ce341c17faab60eedeac767949d8c05c8632c161ac339989ac897ffa",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/research/2026-11-09-date-picker-empty-state.md",
+      "destination_path": "docs/research/2026-11-09-date-picker-empty-state.md",
+      "source_blob": "6fea4c2fa7bfcfbbaf10a546a2fc5a7d7cb61ac2",
+      "source_sha256": "dd585035dcc67d874d24b765c7f4d0e3fe37af77a90c444a97997cc2c0ce1671",
+      "import_sha256": "dd585035dcc67d874d24b765c7f4d0e3fe37af77a90c444a97997cc2c0ce1671",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/research/README.md",
+      "destination_path": "docs/research/README.md",
+      "source_blob": "81ff506e0a8270feaf6612b2b0a361e1e38a59d0",
+      "source_sha256": "0b1b8622a61a804db1b9c13ed77569d4e227c89d62f254199003a7caf08f1fbc",
+      "import_sha256": "0b1b8622a61a804db1b9c13ed77569d4e227c89d62f254199003a7caf08f1fbc",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/security-notes.md",
+      "destination_path": "docs/security-notes.md",
+      "source_blob": "c649d3d78d5cba711f5a82d80a529ccec075f203",
+      "source_sha256": "4709be226ca267cacf866c11651f8b14d4d3c122bf96711c2422c373f217961a",
+      "import_sha256": "4709be226ca267cacf866c11651f8b14d4d3c122bf96711c2422c373f217961a",
+      "transformations": []
+    },
+    {
+      "source_path": "docs/status.md",
+      "destination_path": "docs/history/context-status.md",
+      "source_blob": "8fb2c08127ce10cdea6b8892b72811feaf5fd168",
+      "source_sha256": "c841bad2e5fc7128c266e85d99aad303873e47b0eb9aea2bb0f222b016dab704",
+      "import_sha256": "b860cb457c1a538c87ca0770524dbc033d5b19395276eb265d43c85512a702db",
+      "transformations": [
+        "Relative historical links pinned to their original context commit; decision text unchanged."
+      ]
+    }
+  ]
+}

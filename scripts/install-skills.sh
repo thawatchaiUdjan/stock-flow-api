@@ -11,6 +11,13 @@ cd "$(dirname "$0")/.."
 # Why each skill is here: README.md, "Agent skills".
 SKILLS=(
   setup-matt-pocock-skills
+  grill-with-docs
+  grilling
+  domain-modeling
+  to-spec
+  to-tickets
+  research
+  writing-for-agents
   implement
   tdd
   codebase-design
@@ -37,6 +44,18 @@ args=()
 for s in "${SKILLS[@]}"; do args+=(--skill "$s"); done
 
 npx -y "$CLI" add "$SOURCE" "${args[@]}" --agent claude-code --agent universal --yes
+
+# The CLI creates absolute junctions on Windows. Store portable relative links,
+# matching this repo's existing Claude links, so a fresh checkout works elsewhere.
+# Never replace an ordinary directory: it may contain user-managed skill files.
+for s in "${SKILLS[@]}"; do
+  link=".claude/skills/$s"
+  if [ -e "$link" ] && [ ! -L "$link" ]; then
+    echo "install-skills: expected a link at $link; refusing to replace a directory" >&2
+    exit 1
+  fi
+  MSYS=winsymlinks:nativestrict ln -sfn "../../.agents/skills/$s" "$link"
+done
 
 # Check what landed on disk, not the installer's exit code.
 missing=0
