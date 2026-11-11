@@ -39,12 +39,20 @@ The Role of a person who works in the Shop day to day.
 _Avoid_: Employee, general user
 
 **Setup link**:
-A one-time link through which a person sets their own password.
+A one-time link through which the first Owner sets their password at installation.
 _Avoid_: Invite link, reset link, temporary password
 
 **Login log**:
 The permanent list of logins, failed logins and logouts.
 _Avoid_: Audit log, login history
+
+**First-time code**:
+A one-time code emailed to a new User to verify their email before they set their first password.
+_Avoid_: Login OTP, temporary password
+
+**Reset link**:
+A one-time link emailed to a User who requests recovery of their password.
+_Avoid_: Setup link, temporary password
 
 ### Products
 
