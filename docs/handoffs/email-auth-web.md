@@ -7,7 +7,7 @@ The owner confirmed the complete design on 2026-11-11 and selected Autopilot. Th
 - Confirmed product record: [API PR #45](https://github.com/thawatchaiUdjan/stock-flow-api/pull/45), merged at `691599bb0baa85fecb82d100e0a34c0c186bf807`.
 - Requirements: [users-and-access R27–R34 and R41–R49](../requirements/users-and-access.md), [business ADR 0011](../business-adr/0011-email-first-time-setup-and-self-service-recovery.md), [glossary](../../GLOSSARY.md).
 - API spec: [#46](https://github.com/thawatchaiUdjan/stock-flow-api/issues/46). Implementation: [#47](https://github.com/thawatchaiUdjan/stock-flow-api/issues/47) and [#48](https://github.com/thawatchaiUdjan/stock-flow-api/issues/48).
-- API contract publication commit: `94d834a7280b87ad4c9314ec2d6fb5c3d44be649`, contract version **0.2.0**. [Generated OpenAPI at that exact commit](https://github.com/thawatchaiUdjan/stock-flow-api/blob/94d834a7280b87ad4c9314ec2d6fb5c3d44be649/openapi.yaml).
+- API contract publication commit: `e8cede1385994733cf5a5995169901cc8cb61a61`, contract version **0.2.0**. [Generated OpenAPI at that exact commit](https://github.com/thawatchaiUdjan/stock-flow-api/blob/e8cede1385994733cf5a5995169901cc8cb61a61/openapi.yaml).
 - This commit is for the additive API implementation PR. Publication of source/contract is not proof of merge, production deployment, configured email, or inbox delivery. Confirm API deployment readiness before switching live web traffic.
 - Web's existing pin, observed read-only at web commit `0d634468a78e0f137719255d2980b2bfcdf63942`, is API commit `2384eabf44f0cebfd6f01feedd44a75d1b78178c`. Adoption of the new pin is **unconfirmed**.
 
