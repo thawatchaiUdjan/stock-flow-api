@@ -2,6 +2,8 @@
 
 API owns these templates and their Brevo HTTP adapter. The runtime sends the same HTML and plain text that the preview command renders. [Business ADR 0011](../business-adr/0011-email-first-time-setup-and-self-service-recovery.md) owns the product rules; [spec #46](https://github.com/thawatchaiUdjan/stock-flow-api/issues/46) owns the implementation acceptance.
 
+[Web implementation handoff](../handoffs/email-auth-web.md) gives the exact API pin, changed screens, contract/errors and adoption checks. [Validation evidence](validation.md) records tests, mutation proof and the remaining live/CI boundaries.
+
 ## Design and previews
 
 Follow the existing web design at commit `0d634468a78e0f137719255d2980b2bfcdf63942`: Forest `#3A6B4F`, Page `#F6F7F4`, Ink `#20261F`, white surfaces and the Figtree/Noto Sans Thai font stack. Email clients without those fonts use Arial/sans-serif; there is no remote font dependency. Layout uses presentation tables, inline styles, wrapping fallback links and a phone media query.
