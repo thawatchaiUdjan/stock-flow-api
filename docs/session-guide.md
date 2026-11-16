@@ -1,6 +1,6 @@
 # Sessions and reviewer settings
 
-Use this guide with [AGENTS.md](../AGENTS.md), [the API workflow](workflow.md) and [testing policy](agents/testing.md). It guides available host tools; it installs no automatic workers, worker service or required coordinator. Do not launch extra implementation sessions unless requested. Work only in this API repository. Follow branch/worktree rules and use one writer per checkout; reviewers are read-only.
+Use this guide with [AGENTS.md](../AGENTS.md), [the API workflow](workflow.md) and [testing policy](agents/testing.md). It serves both Codex and Claude Code (`CLAUDE.md` is a real file importing `AGENTS.md`, not a symlink). It guides available host tools; it installs no automatic workers, worker service or required coordinator. Do not launch extra implementation sessions unless requested. Work only in this API repository. Follow branch/worktree rules and use one writer per checkout; reviewers are read-only.
 
 ## Keep useful context together
 
@@ -8,20 +8,22 @@ Keep requirements discussions, `/grill-with-docs`, `/to-spec` and `/to-tickets` 
 
 Consider a fresh implementation session after long planning or for an independent substantial ticket only when a compact handoff can replace irrelevant history. A new session is optional. Return to the original session when unresolved planning context is still useful. Before handing off, record important chat decisions, authorisation, progress, blockers and check/review evidence in the local record, API ticket or PR. Chat alone is not the durable record. Keep business decisions in the existing requirements/ADR process; do not turn a handoff into a new source of product rules.
 
-Changing model/effort and opening a new session are separate choices. Use supported host settings to change model/effort within the current session when useful. A prompt requesting a model does not change active settings. Report requested and effective settings separately; mark effective settings unconfirmed unless tooling exposes them. In Codex CLI use `/model`; in supported desktop hosts use the model/reasoning picker. Check the host's actual controls first. [Official OpenAI model guidance](https://learn.chatgpt.com/docs/models) describes those controls and availability; checked 2026-11-11.
+Changing model/effort and opening a new session are separate choices. Use supported host settings to change model/effort within the current session when useful. A prompt requesting a model does not change active settings. Report requested and effective settings separately; mark effective settings unconfirmed unless tooling exposes them. In Codex CLI use `/model`; in Claude Code use `/model` and `/effort` (`low`, `medium`, `high`, `xhigh`, `max`); in supported desktop hosts use the model/reasoning picker. Check the host's actual controls first. [Official OpenAI model guidance](https://learn.chatgpt.com/docs/models) describes those controls and availability; checked 2026-11-11.
 
 ## Starting recommendations
 
-These are repository starting points, not guarantees of quality, speed or savings. Recheck the host's available models and supported effort levels at task start. The current Codex delegation tool advertises all four IDs below; that is availability evidence, not proof of the active model. If unavailable, explain the missing choice and proposed available substitute. For implementation, use an available model suited to the same role and disclose the substitution; review has the stricter fallback below.
+These are repository starting points, not guarantees of quality, speed or savings. Recheck the host's available models and supported effort levels at task start. The current Codex delegation tool advertises the Codex IDs below; Claude Code accepts the `sonnet`, `opus` and `haiku` aliases. That is availability evidence, not proof of the active model. If a choice is unavailable, explain the missing choice and proposed available substitute. For implementation, use an available model suited to the same role and disclose the substitution; review has the stricter fallback below.
 
-| Work | Requested model | Effort |
-| --- | --- | --- |
-| Requirements, planning and normal feature implementation | GPT-6.1 Sol (`gpt-6.1-sol`) | `medium` |
-| Small, clear fixes with known scope | GPT-6.1 Terra (`gpt-6.1-terra`) | `medium` |
-| Demonstrated difficult diagnosis: unresolved evidence, concurrency or repeated failed hypotheses | GPT-6.1 Sol (`gpt-6.1-sol`) | `high` |
-| Diagnosis still blocked for a specific reason after that | Consider GPT-6 Astra (`gpt-6-astra`) | `high` |
-| Already separate routine formatting task, optionally | GPT-6 Luna (`gpt-6-luna`) | `low` |
-| Each Standards and Spec reviewer, unless owner overrides | GPT-6.1 Sol (`gpt-6.1-sol`) | `medium` |
+| Work | Tier / effort | Codex | Claude Code |
+| --- | --- | --- | --- |
+| Requirements, planning and normal feature implementation | Standard / `medium` | GPT-6.1 Sol (`gpt-6.1-sol`) | Claude Sonnet 5.5 (`sonnet`) |
+| Small, clear fixes with known scope | Light / `medium` | GPT-6.1 Terra (`gpt-6.1-terra`) | Claude Sonnet 5.5 (`sonnet`) |
+| Demonstrated difficult diagnosis: unresolved evidence, concurrency or repeated failed hypotheses | Standard / `high` | GPT-6.1 Sol | Claude Sonnet 5.5 |
+| Diagnosis still blocked for a specific reason after that | Consider Deep / `high` | GPT-6 Astra (`gpt-6-astra`) | Claude Opus 5.5 (`opus`) |
+| Already separate routine formatting task, optionally | Routine / `low` | GPT-6 Luna (`gpt-6-luna`) | Claude Haiku 5.5 (`haiku`) |
+| Each Standards and Spec reviewer, unless owner overrides | Standard / `medium` | `gpt-6.1-sol` | project agents pinned to `sonnet` / `medium` |
+
+On Claude Code, Standard and Light share a model; Light differs only by task size. The Claude column is an unmeasured starting proposal; recheck it when models change.
 
 Do not create a session or agent merely to format a short PR body. Escalate only with a named difficulty and the evidence the stronger setting should resolve. A host may expose different effort labels; verify their mapping instead of assuming equivalence.
 
@@ -46,7 +48,9 @@ Run `go build ./...`, `go test ./...`, `go vet -tags slow ./...`, `gofmt -l .`, 
 
 After implementation and required checks, automatically invoke `code-review` before PR completion. Load [the local review override](agents/code-review.md) as well as the installed skill. It defines explicit reviewer settings, exact reviewed-state capture (including new untracked implementation files), focused context, read-only review and targeted repair review. Keep Standards and Spec reports separate. Skip Spec only when no specification or acceptance source exists; a documentation task's owner acceptance conditions count.
 
-If explicit reviewer settings are unsupported, report that and provide a filled handoff for a fresh Sol/medium review session. Do not silently inherit host defaults. If subagents remain unavailable there, review Standards and Spec as separate passes and disclose reduced isolation. Finish there without another identical handoff loop. Report requested settings and whether tooling confirms effective settings.
+In Claude Code, review uses the two project agents in `.claude/agents/`, `standards-reviewer` and `spec-reviewer`. Each is pinned to `model: sonnet` and `effort: medium`, has only Read, Grep, Glob and Bash (no Edit or Write; Bash could write, so read-only also rests on their instructions), and must be started as a fresh agent, never a fork, so no implementation history is inherited. This replaces the `gpt-6.1-sol` / `fork_turns` wording in the installed `code-review` skill's step 4 for Claude Code; the skill file is not edited, so reinstalling cannot erase it. Claude Code's Agent tool does not report effective settings, so label them unconfirmed.
+
+If explicit reviewer settings are unsupported, report that and provide a filled handoff for a fresh Sol/medium (Standard / medium) review session. Do not silently inherit host defaults. If subagents remain unavailable there, review Standards and Spec as separate passes and disclose reduced isolation. Finish there without another identical handoff loop. Report requested settings and whether tooling confirms effective settings.
 
 ## Copyable prompts
 
@@ -60,7 +64,7 @@ C:/ProjectsDev/projects/stock-flow/stock-flow-api. Read AGENTS.md,
 docs/workflow.md, docs/session-guide.md and applicable local skill instructions.
 Keep requirements, /to-spec and /to-tickets in this session. Record decisions
 locally. Scope and delegation: [owner's exact authority and unresolved decisions].
-Use host settings for Sol/medium where available; report actual evidence.
+Use host settings for Standard/medium where available; report actual evidence.
 Preserve requirements confirmation, Approval gates if selected, and explicit
 merge permission. Prepare a branch/PR; stop before merging.
 ```
@@ -74,8 +78,8 @@ C:/ProjectsDev/projects/stock-flow/stock-flow-api. Read AGENTS.md, workflow,
 session guide, testing policy and invoked skills. Authority: [owner scope/gates].
 Branch/checkpoint: [branch and commit; dirty paths or clean state].
 Implement only [acceptance criteria] using tdd at [agreed seam]. Retain [exclusions].
-Use Sol/medium for normal feature work, or Terra/medium for a small clear fix,
-through supported host controls; report requested/effective settings.
+Use Standard/medium (Sol or Sonnet) for normal feature work, or Light/medium
+(Terra or Sonnet) for a small clear fix, through supported host controls; report requested/effective settings.
 Keep tests, review fixes and PR creation together. Run required checks and
 automatic Standards/Spec review with the local override before completing PR.
 Continue authorised stages, preserve current mode/gates, stop before merging.
@@ -87,7 +91,7 @@ Continue authorised stages, preserve current mode/gates, stop before merging.
 Continue the ticket's existing workflow mode and owner gates. In stock-flow-api,
 fix only the validation mismatch named by the ticket, against its exact merged
 rule ID and existing published request/error semantics. Read the local record
-and flag conflicts before editing. Use Terra/medium if the cause is clear.
+and flag conflicts before editing. Use Light/medium if the cause is clear.
 At the agreed HTTP seam, write a failing httptest through api.New for the
 recorded invalid case and a valid boundary case. Preserve Problem Details,
 error-code enum, status declarations and compatibility. Prove the guard matters
@@ -102,7 +106,7 @@ This is a process example, not an authorised bug or a new validation requirement
 
 ```text
 Continue [existing mode] as a read-only reviewer in a fresh session. Select
-gpt-6.1-sol / medium using host settings and report effective-setting evidence.
+Standard / medium (gpt-6.1-sol in Codex, sonnet in Claude Code) using host settings and report effective-setting evidence.
 Repo: [absolute API path]. Read AGENTS.md, docs/agents/code-review.md and
 the installed code-review skill. Task/authority: [ticket URL and owner scope].
 Base: [pinned SHA]. Reviewed commit: [SHA]. Commits: [exact list or none].
@@ -134,7 +138,7 @@ requirements confirmation, Approval gates and explicit merge permission.
 
 ## Compare usage per completed ticket
 
-Cached input reuses an eligible matching prompt prefix; new context adds input that must be processed. A long session can reuse context, but irrelevant history still competes for attention. Cache reuse depends on model/settings and matching boundaries, so neither staying nor restarting guarantees a cheaper run. See [OpenAI prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching).
+Cached input reuses an eligible matching prompt prefix; new context adds input that must be processed. A long session can reuse context, but irrelevant history still competes for attention. Cache reuse depends on model/settings and matching boundaries, so neither staying nor restarting guarantees a cheaper run. See [OpenAI prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching) and [Anthropic prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
 
 Higher reasoning effort can add latency and reasoning usage; reasoning tokens count as API output usage even when not shown as answer text. See [OpenAI reasoning documentation](https://developers.openai.com/api/docs/guides/reasoning). A fresh session can reduce irrelevant history while repeating instruction loading, exploration and tool setup. A short handoff helps only if it preserves enough evidence to avoid rediscovery and repairs.
 
