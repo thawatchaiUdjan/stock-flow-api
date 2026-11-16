@@ -40,6 +40,11 @@ if [ "${#SKILLS[@]}" -eq 0 ]; then
   exit 1
 fi
 
+# The reviewer agents and settings are maintained by hand (docs/agents/code-review.md);
+# the installer must leave them alone. Fingerprint them to prove it.
+guarded() { git ls-files -s -- .claude/agents .claude/settings.json; for f in .claude/agents/* .claude/settings.json; do [ -f "$f" ] && git hash-object -- "$f"; done; }
+guard_before="$(guarded)"
+
 args=()
 for s in "${SKILLS[@]}"; do args+=(--skill "$s"); done
 
@@ -56,6 +61,11 @@ for s in "${SKILLS[@]}"; do
   fi
   MSYS=winsymlinks:nativestrict ln -sfn "../../.agents/skills/$s" "$link"
 done
+
+if [ "$(guarded)" != "$guard_before" ]; then
+  echo "install-skills: .claude/agents or .claude/settings.json changed; the installer must not touch them" >&2
+  exit 1
+fi
 
 # Check what landed on disk, not the installer's exit code.
 missing=0

@@ -56,6 +56,6 @@ Legacy-flow retirement remains blocked on confirmed web adoption in [ticket #49]
 
 ### Updating
 
-Run `bash scripts/install-skills.sh` here. It refreshes only this repository; inspect `git diff skills-lock.json .agents/skills .claude/skills` before committing. Read new skills and scripts before installation. Do not edit installed skill files: put repo overrides in `AGENTS.md` or `docs/agents/`.
+Run `bash scripts/install-skills.sh` here. It refreshes only this repository; inspect `git diff skills-lock.json .agents/skills .claude/skills` before committing. Read new skills and scripts before installation. Do not edit installed skill files: put repo overrides in `AGENTS.md` or `docs/agents/`. The installer never touches `.claude/agents/` (the Claude Code reviewer agents, see [session guide](docs/session-guide.md)) or `.claude/settings.json`; it fails if it changes them.
 
 For another source, install with `npx skills@1.7.4 add <source> --skill <name> --agent claude-code --agent universal`, then add the name to `OTHER_SKILLS` in the installer. Refresh those skills by name with `npx skills@1.7.4 update -p <name>`. No sibling-wide updater is used.
