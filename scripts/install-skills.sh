@@ -42,7 +42,7 @@ fi
 
 # The reviewer agents and settings are maintained by hand (docs/agents/code-review.md);
 # the installer must leave them alone. Fingerprint them to prove it.
-guarded() { git ls-files -s -- .claude/agents .claude/settings.json; for f in .claude/agents/* .claude/settings.json; do [ -f "$f" ] && git hash-object -- "$f"; done; }
+guarded() { git ls-files -s -- .claude/agents .claude/settings.json; for f in .claude/agents/* .claude/settings.json; do if [ -f "$f" ]; then git hash-object -- "$f"; fi; done; }
 guard_before="$(guarded)"
 
 args=()
