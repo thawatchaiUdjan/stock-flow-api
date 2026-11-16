@@ -19,13 +19,21 @@ These are repository starting points, not guarantees of quality, speed or saving
 | Requirements, planning and normal feature implementation | Standard / `medium` | GPT-6.1 Sol (`gpt-6.1-sol`) | Claude Sonnet 5.5 (`sonnet`) |
 | Small, clear fixes with known scope | Light / `medium` | GPT-6.1 Terra (`gpt-6.1-terra`) | Claude Sonnet 5.5 (`sonnet`) |
 | Demonstrated difficult diagnosis: unresolved evidence, concurrency or repeated failed hypotheses | Standard / `high` | GPT-6.1 Sol | Claude Sonnet 5.5 |
-| Diagnosis still blocked for a specific reason after that | Consider Deep / `high` | GPT-6 Astra (`gpt-6-astra`) | Claude Opus 5.5 (`opus`) |
+| Diagnosis still blocked for a specific reason after that | Consider Deep / `high` | GPT-6 Astra (`gpt-6-astra`) | Claude Opus 5.5 (`opus`), only per [Claude Code usage](#claude-code-usage) |
 | Already separate routine formatting task, optionally | Routine / `low` | GPT-6 Luna (`gpt-6-luna`) | Claude Haiku 5.5 (`haiku`) |
 | Each Standards and Spec reviewer, unless owner overrides | Standard / `medium` | `gpt-6.1-sol` | project agents pinned to `sonnet` / `medium` |
 
 On Claude Code, Standard and Light share a model; Light differs only by task size. The Claude column is an unmeasured starting proposal; recheck it when models change.
 
 Do not create a session or agent merely to format a short PR body. Escalate only with a named difficulty and the evidence the stronger setting should resolve. A host may expose different effort labels; verify their mapping instead of assuming equivalence.
+
+## Claude Code usage
+
+Default to Sonnet. Escalate to Opus only when Sonnet at `high` effort has not resolved a stated difficulty after two focused attempts, where an attempt is a fix followed by a check that still fails. Name the difficulty and the check Opus should make pass. Return to Sonnet once it is resolved. This threshold is an unmeasured proposal; adjust it from trial evidence.
+
+On a subscription plan, Opus uses meaningfully more quota than Sonnet. Which plans include Opus varies by account, so this guide does not say. In a session, `/model` shows the models the account can use and `/usage` shows plan usage limits. For a trial, note `/usage` before and after one ticket and record model, effort and the number of repair rounds beside it. Compare that with the per-ticket guidance below; it promises no saving.
+
+Sources, checked 2026-11-16: Anthropic help article ["Models, usage, and limits in Claude Code"](https://support.claude.com/en/articles/14552983-models-usage-limits-in-claude-code), and the Claude Code [commands page](https://code.claude.com/docs/en/commands) (`/model`, `/effort`, `/usage`). The commands page was read in full; the help article's full text could not be fetched, so the quota comparison above rests on the owner's instruction and should be rechecked against it.
 
 ## Stage boundaries and authority
 
