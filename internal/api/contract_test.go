@@ -53,7 +53,7 @@ func TestTheContractPublishesEveryOperationOfLoggingIn(t *testing.T) {
 // users-and-access R4: nobody can sign up. What needs no session is this list and no
 // more, so an operation that makes a User can't be reached without logging in.
 func TestOnlyTheseOperationsNeedNoSession(t *testing.T) {
-	public := []string{"create-session", "get-health", "read-setup-link", "request-first-time-code", "request-password-reset", "reset-email-password", "set-email-password", "set-password", "verify-first-time-code"}
+	public := []string{"create-session", "get-health", "identify-login-email", "read-setup-link", "request-first-time-code", "request-password-reset", "reset-email-password", "set-email-password", "set-password", "verify-first-time-code"}
 
 	var got []string
 	for id, op := range operations(t) {
@@ -162,6 +162,7 @@ func TestEveryOperationNamesItsErrorCodes(t *testing.T) {
 		"set-email-password":      "password-setup-invalid",
 		"request-password-reset":  "email-auth-unavailable",
 		"reset-email-password":    "password-reset-invalid",
+		"identify-login-email":    "login-check-limited",
 	} {
 		if !strings.Contains(ops[id].Description, "`"+code+"`") {
 			t.Errorf("%s: description %q does not name %s", id, ops[id].Description, code)
@@ -176,7 +177,7 @@ func TestTheContractPublishesEveryErrorCode(t *testing.T) {
 	model := contract.OpenAPI().Components.Schemas.Map()["ErrorModel"]
 
 	typ := model.Properties["type"]
-	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken", "insufficient-stock", "product-archived", "order-not-pending", "email-auth-unavailable", "first-time-code-invalid", "password-setup-invalid", "password-reset-invalid"}
+	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken", "insufficient-stock", "product-archived", "order-not-pending", "email-auth-unavailable", "first-time-code-invalid", "password-setup-invalid", "password-reset-invalid", "login-check-limited"}
 	if !slices.Equal(typ.Enum, want) {
 		t.Errorf("type enum = %v, want %v", typ.Enum, want)
 	}

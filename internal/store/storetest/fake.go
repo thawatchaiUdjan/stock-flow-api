@@ -30,6 +30,7 @@ type Fake struct {
 	links         map[int64]store.SetupLink
 	credentials   map[int64]store.EmailCredential
 	emailRequests []store.EmailRequestParams
+	loginChecks   []store.LoginCheckParams
 	log           []store.ListLoginLogRow
 	products      []store.Product
 	movements     []store.StockMovement

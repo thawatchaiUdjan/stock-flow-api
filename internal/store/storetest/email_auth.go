@@ -42,6 +42,34 @@ func (f *Fake) ReserveEmailRequest(_ context.Context, arg store.EmailRequestPara
 	return true, nil
 }
 
+func (f *Fake) ReserveLoginCheck(_ context.Context, arg store.LoginCheckParams) (bool, time.Time, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return false, time.Time{}, f.Err
+	}
+	kept := f.loginChecks[:0]
+	usage := store.LoginCheckUsageRow{OldestAt: arg.At}
+	for _, check := range f.loginChecks {
+		if !check.At.After(arg.At.Add(-time.Hour)) {
+			continue
+		}
+		kept = append(kept, check)
+		if bytes.Equal(check.IPHash, arg.IPHash) {
+			if usage.CheckCount == 0 || check.At.Before(usage.OldestAt) {
+				usage.OldestAt = check.At
+			}
+			usage.CheckCount++
+		}
+	}
+	f.loginChecks = kept
+	allowed, retryAt := usage.Check()
+	if allowed {
+		f.loginChecks = append(f.loginChecks, arg)
+	}
+	return allowed, retryAt, nil
+}
+
 func (f *Fake) CreateEmailUser(_ context.Context, arg store.CreateEmailUserParams) (store.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

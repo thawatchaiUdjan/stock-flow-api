@@ -27,6 +27,7 @@ const (
 	codeFirstTimeCodeInvalid = "first-time-code-invalid"
 	codePasswordSetupInvalid = "password-setup-invalid"
 	codePasswordResetInvalid = "password-reset-invalid"
+	codeLoginCheckLimited    = "login-check-limited"
 )
 
 // errorCodes is the published list. Every code above must be in it.
@@ -45,6 +46,7 @@ var errorCodes = []struct{ code, meaning string }{
 	{codeFirstTimeCodeInvalid, "The First-time code cannot be used: it is wrong, expired, consumed, replaced, blocked or ineligible."},
 	{codePasswordSetupInvalid, "The password-setup grant is expired, consumed, replaced or ineligible."},
 	{codePasswordResetInvalid, "The Reset link is expired, consumed, replaced or ineligible."},
+	{codeLoginCheckLimited, "Too many Login email checks came from this IP address in the last hour. Retry-After says when to try again."},
 }
 
 func domainError(status int, code, detail string) *huma.ErrorModel {
