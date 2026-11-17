@@ -1,6 +1,6 @@
 # Users & access
 
-Status: Amended by business ADR 0003, business ADR 0004 and [business ADR 0011](../business-adr/0011-email-first-time-setup-and-self-service-recovery.md)
+Status: Amended by business ADR 0003, business ADR 0004, [business ADR 0011](../business-adr/0011-email-first-time-setup-and-self-service-recovery.md) and [business ADR 0012](../business-adr/0012-email-first-login.md)
 
 ## Purpose
 
@@ -9,10 +9,10 @@ Everyone who works in the Shop uses this module to log in. It decides who has a 
 ## Rules
 
 - **R1** The system serves one Shop; all data in it belongs to that Shop.
-- **R2** A User logs in with an email and a password.
+- **R2** A User logs in with an email and a password. Login asks for the email first, then the password (business ADR 0012).
 - **R3** An email belongs to one User only, and is compared without regard to letter case.
 - **R4** Nobody can sign up on their own.
-- **R5** A failed login shows the same message, whatever the reason: a wrong email, a wrong password, an Inactive User, or a User with no password yet.
+- **R5** A failed password step shows the same message, whatever the reason: a wrong email, a wrong password, an Inactive User, or a User with no password yet. Login's email step answers under R50–R52 (business ADR 0012).
 - **R6** A User may be logged in on several devices at once.
 - **R7** A logged-in User can log out, which ends the session on that device only.
 - **R8** There are three Roles: Owner, Admin and Staff. Every User has exactly one.
@@ -49,7 +49,7 @@ Everyone who works in the Shop uses this module to log in. It decides who has a 
 - **R26** A User whose session has ended is sent to Login with a message saying so.
 - **R27** An Admin or Staff User sets their first password after verifying a First-time code emailed to their registered address. The code contains six digits and expires 10 minutes after issue. Subsequent logins use email and password without a code (business ADR 0011).
 - **R28** Creating an Admin or Staff User automatically emails their First-time code. The Owner does not receive a Setup link or code to pass on (business ADR 0011).
-- **R29** An Active Admin or Staff User without a password can request or resend a First-time code through password setup on Login. Issuing a new code invalidates the previous code; the Owner cannot issue password-reset instructions for another User (business ADR 0011).
+- **R29** An Active Admin or Staff User without a password can request or resend a First-time code from Login's email step (R51) or through password setup. Issuing a new code invalidates the previous code; the Owner cannot issue password-reset instructions for another User (business ADR 0011).
 - **R30** After first setting or resetting a password, the person is sent to Login. Neither flow logs them in automatically (business ADR 0011).
 - **R31** An Active User with a password, including the Owner, requests their own Reset link through Forgot password on Login. It works once, expires 30 minutes after issue, and only the newest link works. Saving the new password ends all their sessions at once. There is no Owner-triggered password-reset action (business ADR 0011).
 - **R32** An Inactive User cannot receive password-setup or recovery instructions. Making a User Inactive invalidates their codes, verification grants, Reset links and any Setup link. Reactivation requires fresh instructions; old credentials do not revive (business ADR 0011).
@@ -64,12 +64,16 @@ Everyone who works in the Shop uses this module to log in. It decides who has a 
 - **R41** Five incorrect First-time code attempts block code verification for that email for 10 minutes. Resending does not bypass the block or reset its failed-attempt allowance. This does not lock ordinary password login (business ADR 0011).
 - **R42** Successfully verifying a First-time code grants 10 minutes to set the first password. This verification grant is single-use and does not create a logged-in session (business ADR 0011).
 - **R43** First-time code and Reset link email requests share limits: one send per 60 seconds, five per email per hour, and 30 per IP address per hour. Exact windows, counter semantics and retry handling are delegated technical details within these limits (business ADR 0011).
-- **R44** Public setup and recovery email requests return the same eligibility-neutral message. They do not reveal whether the email matches a User, their status, or whether they have set a password. Unknown and Inactive Users receive nothing (business ADR 0011).
+- **R44** Public setup and recovery email requests return the same eligibility-neutral message. They do not reveal whether the email matches a User, their status, or whether they have set a password. Unknown and Inactive Users receive nothing (business ADR 0011). Login's email step is the exception, under R50–R52 (business ADR 0012).
 - **R45** A recovery request for an eligible Active Admin or Staff User without a password sends a First-time code instead of a Reset link. The initial Owner email exemption in R34 takes precedence (business ADR 0011).
 - **R46** If sending the initial email fails, the newly created User remains without a password and can retry through password setup. The Owner sees creation success and email-sending failure separately; public requests retain the generic response (business ADR 0011).
 - **R47** Requesting a Reset link does not change the current password or end sessions. After a successful reset, the system emails a completion notification; notification failure does not undo the password change (business ADR 0011).
 - **R48** Password setup and recovery codes, links and verification grants work once. Successful password setup or reset invalidates all outstanding setup and recovery credentials for that User (business ADR 0011).
 - **R49** First-time code, Reset link and reset-completion emails use English, StockFlow branding, responsive HTML and a plain-text alternative. API owns the email templates and follows the existing web design system, adapted to email clients (business ADR 0011).
+- **R50** Login's email step tells an Active User with a password, including the Owner, to continue to the password step. It answers "no account" for an unknown email and for an Inactive User alike, and never reveals Inactive status. It is not a login attempt, so the Login log does not record it (business ADR 0012).
+- **R51** For an Active Admin or Staff User without a password, Login's email step sends a First-time code within R43's limits and continues to the code step. If R43 limits the send or delivery fails, it still continues to the code step and says that no new code was sent (business ADR 0012).
+- **R52** For the first Owner before installation setup, Login's email step says to use the installation Setup link and sends nothing (R34, business ADR 0012).
+- **R53** Login's email step is limited to 100 checks per IP address per rolling hour. Over the limit, it answers that the check is limited and when to retry, revealing nothing about the email (business ADR 0012).
 
 ## Out of scope
 
@@ -87,4 +91,4 @@ Everyone who works in the Shop uses this module to log in. It decides who has a 
 | 1 | How are repeated failed logins limited: how many failures, over what window, per email or per address, and what happens then (a wait, or a lock the Owner clears)? Today nothing limits them. Found by the [security review](../security-notes.md). | Requirements owner | 2026-11-08 |
 | 2 | Should R19's 6-character minimum rise (e.g. to 8 or 10), with a maximum and a list of refused common passwords? | Requirements owner | 2026-11-08 |
 
-The owner confirmed the email setup/recovery design on 2026-11-11 in business ADR 0011, retaining R15 and R19 unchanged. The two questions above concern broader policy and remain outside this feature. The record becomes authoritative on merge; runtime rollout and web adoption are separate work.
+The owner confirmed the email setup/recovery design on 2026-11-11 in business ADR 0011, retaining R15 and R19 unchanged. On 2026-11-17 the owner accepted user enumeration for Login's email step in business ADR 0012. The two questions above concern broader policy and remain outside this feature. The record becomes authoritative on merge; runtime rollout and web adoption are separate work.
