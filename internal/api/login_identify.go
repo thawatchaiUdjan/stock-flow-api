@@ -35,14 +35,14 @@ func registerLoginIdentify(api huma.API, deps Deps) {
 		out := &identifyOutput{}
 		user, err := deps.Store.GetUserByEmail(ctx, input.Body.Email)
 		switch {
-		case errors.Is(err, store.ErrNotFound) || err == nil && user.Status != "active":
+		case errors.Is(err, store.ErrNotFound) || err == nil && user.Status != statusActive:
 			// users-and-access R50: Inactive status is never told apart from an unknown email.
 			out.Body.Next = "no-account"
 		case err != nil:
 			return nil, internalError(ctx, "identify login email", err)
 		case user.PasswordHash.Valid:
 			out.Body.Next = "password"
-		case user.Role == "owner":
+		case user.Role == roleOwner:
 			// users-and-access R34, R52: initial Owner setup sends nothing.
 			out.Body.Next = "installation-link"
 		default:

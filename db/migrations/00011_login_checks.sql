@@ -1,6 +1,6 @@
 -- +goose Up
 -- Hashed IP addresses and a bounded rolling window for Login's email step, shared
--- across API instances (users-and-access R53).
+-- across API instances (users-and-access R53, ADR 0024).
 CREATE TABLE login_checks (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     ip_hash bytea NOT NULL,

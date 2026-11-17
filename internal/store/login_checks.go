@@ -25,7 +25,8 @@ func (usage LoginCheckUsageRow) Check() (allowed bool, retryAt time.Time) {
 	return false, usage.OldestAt.Add(time.Hour)
 }
 
-// ReserveLoginCheck counts one email check for the IP, unless the limit refuses it.
+// ReserveLoginCheck counts one email check for the IP, unless the limit refuses it. Like
+// the R43 ledger, it stores only hashed identities (ADR 0024).
 func (s *Store) ReserveLoginCheck(ctx context.Context, arg LoginCheckParams) (allowed bool, retryAt time.Time, err error) {
 	err = InTx(ctx, s.pool, func(q *Queries) error {
 		// Same advisory-lock query as the R43 ledger, in its own key namespace.
