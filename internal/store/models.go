@@ -26,6 +26,12 @@ type EmailRequestEvent struct {
 	RequestedAt time.Time
 }
 
+type LoginCheck struct {
+	ID        int64
+	IpHash    []byte
+	CheckedAt time.Time
+}
+
 type LoginLog struct {
 	ID        int64
 	At        time.Time

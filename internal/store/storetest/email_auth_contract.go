@@ -174,6 +174,42 @@ func runEmailAuth(t *testing.T, newSubject func(*testing.T) Subject) {
 		}
 	})
 
+	// users-and-access R53: 100 email checks per IP address per rolling hour.
+	t.Run("login checks are limited per IP per rolling hour", func(t *testing.T) {
+		s := newSubject(t)
+		check := func(ip string, when time.Time) (bool, time.Time) {
+			t.Helper()
+			ok, retryAt, err := s.Store.ReserveLoginCheck(ctx, store.LoginCheckParams{IPHash: []byte(ip), At: when})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return ok, retryAt
+		}
+		for i := range 100 {
+			if ok, _ := check("shop", at.Add(time.Duration(i)*time.Second)); !ok {
+				t.Fatalf("check %d refused", i+1)
+			}
+		}
+		for range 3 {
+			if ok, retryAt := check("shop", at.Add(30*time.Minute)); ok || !retryAt.Equal(at.Add(time.Hour)) {
+				t.Fatalf("101st = %v, retry at %v; want refused until %v", ok, retryAt, at.Add(time.Hour))
+			}
+		}
+		if ok, _ := check("other", at.Add(30*time.Minute)); !ok {
+			t.Fatal("another IP was limited")
+		}
+		if ok, _ := check("shop", at.Add(time.Hour-time.Nanosecond)); ok {
+			t.Fatal("allowance freed before the oldest check left the hour")
+		}
+		// Refused checks were not counted, so exactly one slot frees per expired check.
+		if ok, _ := check("shop", at.Add(time.Hour)); !ok {
+			t.Fatal("allowance not freed after the oldest check left the hour")
+		}
+		if ok, retryAt := check("shop", at.Add(time.Hour)); ok || !retryAt.Equal(at.Add(time.Hour+time.Second)) {
+			t.Fatalf("after one slot = %v, retry at %v", ok, retryAt)
+		}
+	})
+
 	t.Run("Reset links preserve access until consumption and revoke all credentials", func(t *testing.T) {
 		s := newSubject(t)
 		u := staff("reset@example.com")

@@ -226,3 +226,41 @@ func TestResetRevokesSessionsFromOverlappingOldPasswordLogins(t *testing.T) {
 		}
 	}
 }
+
+// users-and-access R53: separate connections cannot oversubscribe one IP's email checks.
+func TestConcurrentLoginChecksCannotExceedTheLimitPerIP(t *testing.T) {
+	pool := open(t, testdb.URL(t))
+	s := store.NewStore(pool)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	attempts := store.LoginChecksPerHour + 10
+	results := make(chan error, attempts)
+	allowedCount := make(chan bool, attempts)
+	start := make(chan struct{})
+	var group sync.WaitGroup
+	for range attempts {
+		group.Go(func() {
+			<-start
+			ok, _, err := s.ReserveLoginCheck(context.Background(), store.LoginCheckParams{IPHash: []byte("shared-ip"), At: now})
+			results <- err
+			allowedCount <- ok
+		})
+	}
+	close(start)
+	group.Wait()
+	close(results)
+	close(allowedCount)
+	for err := range results {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	allowed := 0
+	for ok := range allowedCount {
+		if ok {
+			allowed++
+		}
+	}
+	if allowed != store.LoginChecksPerHour {
+		t.Fatalf("allowed %d checks, want %d", allowed, store.LoginChecksPerHour)
+	}
+}
