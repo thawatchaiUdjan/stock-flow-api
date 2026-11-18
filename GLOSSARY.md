@@ -120,6 +120,12 @@ _Avoid_: Done, fulfilled, paid
 The status of an Order called off before it was Completed, whose stock went back.
 _Avoid_: Voided, deleted
 
+### Deleting
+
+**Deleted**:
+The status of a Product, User or Order the Shop has removed from sight and use. The record still exists, and what points at it still shows it.
+_Avoid_: Removed, Trashed, Erased
+
 ### Dashboard & reports
 
 **Sales**:

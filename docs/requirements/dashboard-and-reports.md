@@ -1,6 +1,6 @@
 # Dashboard & reports
 
-Status: Confirmed (2026-11-07, agent under ADR 0005)
+Status: Confirmed (2026-11-07, agent under ADR 0005); amended by [business ADR 0013](../business-adr/0013-soft-delete.md)
 
 ## Purpose
 
@@ -9,7 +9,7 @@ The Owner and Admins see at a glance how sales are going and what needs restocki
 ## Rules
 
 - **R1** The Shop's days run on Bangkok time (UTC+7). Every "today", date and range of dates in the system is a day in that time.
-- **R2** Sales are the totals of Completed Orders, counted on the day each was completed. Pending and Cancelled Orders are not Sales.
+- **R2** Sales are the totals of Completed Orders, counted on the day each was completed. Pending and Cancelled Orders are not Sales, and neither is a Deleted Order (R10).
 - **R3** The Dashboard shows today's Sales, the number of Orders completed today, the number of Pending Orders, and the numbers of Active Products that are Low and that are Out of stock.
 - **R4** The Dashboard shows a chart of Sales for each of the last 14 days, today included.
 - **R5** The Dashboard lists up to 10 Active Products that are Out of stock or Low, Out of stock first, each linking to its Stock movements, and links to the Product List filtered to them.
@@ -17,6 +17,7 @@ The Owner and Admins see at a glance how sales are going and what needs restocki
 - **R7** Reports show, for a range of up to 366 days (this month so far by default): total Sales, the number of Orders completed, the average Sales per completed Order, and Sales for each day.
 - **R8** Reports list up to 20 Products with the highest Sales in the range, each with the quantity sold and its Sales.
 - **R9** Every figure matches the Orders as they stand when the page is opened.
+- **R10** A Deleted Order is in no Dashboard or Reports figure or list: not in Sales, the Orders completed, the newest Orders or the highest-selling Products (business ADR 0013).
 
 ## Out of scope
 

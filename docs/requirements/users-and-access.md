@@ -1,6 +1,6 @@
 # Users & access
 
-Status: Amended by business ADR 0003, business ADR 0004, [business ADR 0011](../business-adr/0011-email-first-time-setup-and-self-service-recovery.md) and [business ADR 0012](../business-adr/0012-email-first-login.md)
+Status: Amended by business ADR 0003, business ADR 0004, [business ADR 0011](../business-adr/0011-email-first-time-setup-and-self-service-recovery.md), [business ADR 0012](../business-adr/0012-email-first-login.md) and [business ADR 0013](../business-adr/0013-soft-delete.md)
 
 ## Purpose
 
@@ -10,7 +10,7 @@ Everyone who works in the Shop uses this module to log in. It decides who has a 
 
 - **R1** The system serves one Shop; all data in it belongs to that Shop.
 - **R2** A User logs in with an email and a password. Login asks for the email first, then the password (business ADR 0012).
-- **R3** An email belongs to one User only, and is compared without regard to letter case.
+- **R3** An email belongs to one User only, and is compared without regard to letter case. A Deleted User's email can be used again (business ADR 0013).
 - **R4** Nobody can sign up on their own.
 - **R5** A failed password step shows the same message, whatever the reason: a wrong email, a wrong password, an Inactive User, or a User with no password yet. Login's email step answers under R50–R52 (business ADR 0012).
 - **R6** A User may be logged in on several devices at once.
@@ -37,7 +37,7 @@ Everyone who works in the Shop uses this module to log in. It decides who has a 
 - **R14** A User has a name, an email, a Role and a status. The name is required and may be in any language.
 - **R15** A User's email cannot change after the User is created.
 - **R16** A User is Active or Inactive, and only the Owner sets this. An Inactive User cannot log in, and their sessions end at once.
-- **R17** A User is never deleted, so that what they did stays attributed to them.
+- **R17** A User can be Deleted only by the Owner and only once Inactive (R54), so that what they did stays attributed to them (business ADR 0013).
 - **R18** The Owner's own status, Role and name cannot be changed in the system (ADR 0004).
 - **R19** A password has at least 6 characters.
 - **R20** Every User sets their own password, the first time and after a reset. Nobody else sets or sees it.
@@ -74,6 +74,7 @@ Everyone who works in the Shop uses this module to log in. It decides who has a 
 - **R51** For an Active Admin or Staff User without a password, Login's email step sends a First-time code within R43's limits and continues to the code step. If R43 limits the send or delivery fails, it still continues to the code step and says that no new code was sent (business ADR 0012).
 - **R52** For the first Owner before installation setup, Login's email step says to use the installation Setup link and sends nothing (R34, business ADR 0012).
 - **R53** Login's email step is limited to 100 checks per IP address per rolling hour. Over the limit, it answers that the check is limited and when to retry, revealing nothing about the email (business ADR 0012).
+- **R54** Only the Owner deletes a User, and only an Inactive one; the Owner cannot be Deleted. A Deleted User is not in the Users list, cannot be changed or restored, and is an unknown email to Login (R50). Their Orders, Stock movements and Login log entries keep their name and email (business ADR 0013).
 
 ## Out of scope
 
