@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -19,8 +20,8 @@ SET name = coalesce($1::text, name),
     price = coalesce($4::bigint, price),
     minimum_stock = coalesce($5::integer, minimum_stock),
     status = coalesce($6::text, status)
-WHERE id = $7
-RETURNING id, name, sku, unit, price, minimum_stock, stock, status, stock_state
+WHERE id = $7 AND deleted_at IS NULL
+RETURNING id, name, sku, unit, price, minimum_stock, stock, status, stock_state, deleted_at, deleted_by
 `
 
 type ChangeProductParams struct {
@@ -56,13 +57,15 @@ func (q *Queries) ChangeProduct(ctx context.Context, arg ChangeProductParams) (P
 		&i.Stock,
 		&i.Status,
 		&i.StockState,
+		&i.DeletedAt,
+		&i.DeletedBy,
 	)
 	return i, err
 }
 
 const countProducts = `-- name: CountProducts :one
 SELECT count(*) FROM products
-WHERE status = $1
+WHERE deleted_at IS NULL AND status = $1
     AND ($2::text IS NULL
         OR strpos(lower(name), lower($2)) > 0
         OR strpos(lower(sku), lower($2)) > 0)
@@ -83,9 +86,10 @@ func (q *Queries) CountProducts(ctx context.Context, arg CountProductsParams) (i
 }
 
 const getProduct = `-- name: GetProduct :one
-SELECT id, name, sku, unit, price, minimum_stock, stock, status, stock_state FROM products WHERE id = $1
+SELECT id, name, sku, unit, price, minimum_stock, stock, status, stock_state, deleted_at, deleted_by FROM products WHERE id = $1 AND deleted_at IS NULL
 `
 
+// Every query here but MarkProductDeleted sees only the Products not Deleted (products R17).
 func (q *Queries) GetProduct(ctx context.Context, id int64) (Product, error) {
 	row := q.db.QueryRow(ctx, getProduct, id)
 	var i Product
@@ -99,6 +103,8 @@ func (q *Queries) GetProduct(ctx context.Context, id int64) (Product, error) {
 		&i.Stock,
 		&i.Status,
 		&i.StockState,
+		&i.DeletedAt,
+		&i.DeletedBy,
 	)
 	return i, err
 }
@@ -106,7 +112,7 @@ func (q *Queries) GetProduct(ctx context.Context, id int64) (Product, error) {
 const insertProduct = `-- name: InsertProduct :one
 INSERT INTO products (name, sku, unit, price, minimum_stock)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, sku, unit, price, minimum_stock, stock, status, stock_state
+RETURNING id, name, sku, unit, price, minimum_stock, stock, status, stock_state, deleted_at, deleted_by
 `
 
 type InsertProductParams struct {
@@ -138,13 +144,15 @@ func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) (P
 		&i.Stock,
 		&i.Status,
 		&i.StockState,
+		&i.DeletedAt,
+		&i.DeletedBy,
 	)
 	return i, err
 }
 
 const listProducts = `-- name: ListProducts :many
-SELECT id, name, sku, unit, price, minimum_stock, stock, status, stock_state FROM products
-WHERE status = $1
+SELECT id, name, sku, unit, price, minimum_stock, stock, status, stock_state, deleted_at, deleted_by FROM products
+WHERE deleted_at IS NULL AND status = $1
     AND ($2::text IS NULL
         OR strpos(lower(name), lower($2)) > 0
         OR strpos(lower(sku), lower($2)) > 0)
@@ -191,6 +199,8 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 			&i.Stock,
 			&i.Status,
 			&i.StockState,
+			&i.DeletedAt,
+			&i.DeletedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -200,4 +210,25 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 		return nil, err
 	}
 	return items, nil
+}
+
+const markProductDeleted = `-- name: MarkProductDeleted :execrows
+UPDATE products SET deleted_at = $1::timestamptz, deleted_by = $2::bigint
+WHERE id = $3 AND deleted_at IS NULL AND status = 'archived'
+`
+
+type MarkProductDeletedParams struct {
+	At     time.Time
+	UserID int64
+	ID     int64
+}
+
+// Only an Archived Product (products R17): an Active one matches nothing and the caller
+// reads which refusal it is. The database's check says the same.
+func (q *Queries) MarkProductDeleted(ctx context.Context, arg MarkProductDeletedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markProductDeleted, arg.At, arg.UserID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

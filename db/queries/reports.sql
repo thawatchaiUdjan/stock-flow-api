@@ -7,7 +7,7 @@ SELECT to_char(completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD')::text AS 
     count(*)::bigint AS orders_completed,
     sum(total)::bigint AS sales
 FROM orders
-WHERE status = 'completed'
+WHERE status = 'completed' AND deleted_at IS NULL
     AND completed_at >= sqlc.arg(from_at)::timestamptz
     AND completed_at < sqlc.arg(to_at)::timestamptz
 GROUP BY 1
@@ -24,7 +24,7 @@ SELECT products.id, products.name, products.sku,
 FROM order_lines
 JOIN orders ON orders.id = order_lines.order_id
 JOIN products ON products.id = order_lines.product_id
-WHERE orders.status = 'completed'
+WHERE orders.status = 'completed' AND orders.deleted_at IS NULL
     AND orders.completed_at >= sqlc.arg(from_at)::timestamptz
     AND orders.completed_at < sqlc.arg(to_at)::timestamptz
 GROUP BY products.id

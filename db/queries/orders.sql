@@ -11,7 +11,13 @@ VALUES (sqlc.arg(order_id), sqlc.arg(product_id), sqlc.arg(quantity), sqlc.arg(p
 -- Holds the Order until the transaction ends, so a Complete and a Cancel at the same moment
 -- run one after the other and the second finds the Order no longer Pending (orders R13).
 -- name: LockOrder :one
-SELECT id, status FROM orders WHERE number = $1 FOR UPDATE;
+SELECT id, status FROM orders WHERE number = $1 AND deleted_at IS NULL FOR UPDATE;
+
+-- Only a finished Order (orders R20): the caller holds it with LockOrder and reads which
+-- refusal it is. The database's check says the same.
+-- name: MarkOrderDeleted :exec
+UPDATE orders SET deleted_at = sqlc.arg(at)::timestamptz, deleted_by = sqlc.arg(user_id)::bigint
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL AND status <> 'pending';
 
 -- name: SetOrderCompleted :exec
 UPDATE orders SET status = 'completed', completed_by = sqlc.arg(user_id)::bigint, completed_at = sqlc.arg(at)::timestamptz
@@ -31,7 +37,7 @@ FROM orders
 JOIN users creator ON creator.id = orders.created_by
 LEFT JOIN users completer ON completer.id = orders.completed_by
 LEFT JOIN users canceller ON canceller.id = orders.cancelled_by
-WHERE orders.number = $1;
+WHERE orders.number = $1 AND orders.deleted_at IS NULL;
 
 -- In the order they were given, with the Products' names and SKUs as they are now.
 -- name: ListOrderLines :many
@@ -50,7 +56,8 @@ SELECT orders.id, orders.number, orders.created_at, orders.customer,
     (SELECT count(*) FROM order_lines WHERE order_lines.order_id = orders.id)::integer AS line_count,
     orders.total, orders.status
 FROM orders
-WHERE (sqlc.narg(status)::text IS NULL OR orders.status = sqlc.narg(status))
+WHERE orders.deleted_at IS NULL
+    AND (sqlc.narg(status)::text IS NULL OR orders.status = sqlc.narg(status))
     AND (sqlc.narg(search)::text IS NULL
         OR orders.number::text = sqlc.narg(search)
         OR strpos(lower(orders.customer), lower(sqlc.narg(search))) > 0)
@@ -59,7 +66,8 @@ LIMIT sqlc.arg(row_limit) OFFSET sqlc.arg(row_offset);
 
 -- name: CountOrders :one
 SELECT count(*) FROM orders
-WHERE (sqlc.narg(status)::text IS NULL OR orders.status = sqlc.narg(status))
+WHERE orders.deleted_at IS NULL
+    AND (sqlc.narg(status)::text IS NULL OR orders.status = sqlc.narg(status))
     AND (sqlc.narg(search)::text IS NULL
         OR orders.number::text = sqlc.narg(search)
         OR strpos(lower(orders.customer), lower(sqlc.narg(search))) > 0);

@@ -76,7 +76,7 @@ func (f *Fake) GetUserByEmail(_ context.Context, email string) (store.User, erro
 		return store.User{}, f.Err
 	}
 	for _, user := range f.users {
-		if strings.EqualFold(user.Email, email) {
+		if !user.DeletedAt.Valid && strings.EqualFold(user.Email, email) {
 			return user, nil
 		}
 	}
@@ -107,7 +107,7 @@ func (f *Fake) CreateOwner(_ context.Context, arg store.CreateOwnerParams) error
 		return errors.New("violates users_name_check")
 	}
 	for _, user := range f.users {
-		if user.Role == "owner" || strings.EqualFold(user.Email, arg.Email) {
+		if user.Role == "owner" || (!user.DeletedAt.Valid && strings.EqualFold(user.Email, arg.Email)) {
 			return nil
 		}
 	}
@@ -132,7 +132,7 @@ func (f *Fake) CreateUser(_ context.Context, arg store.CreateUserParams) (store.
 	}
 	owned := false
 	for _, user := range f.users {
-		if strings.EqualFold(user.Email, arg.Email) {
+		if !user.DeletedAt.Valid && strings.EqualFold(user.Email, arg.Email) {
 			return store.CreateUserRow{}, store.ErrNotFound
 		}
 		owned = owned || user.Role == "owner"
@@ -154,6 +154,9 @@ func (f *Fake) ListUsers(context.Context) ([]store.ListUsersRow, error) {
 	}
 	rows := make([]store.ListUsersRow, 0, len(f.users))
 	for _, user := range f.users {
+		if user.DeletedAt.Valid {
+			continue
+		}
 		rows = append(rows, store.ListUsersRow{
 			ID: user.ID, Name: user.Name, Email: user.Email, Role: user.Role, Status: user.Status,
 			PasswordSet: user.PasswordHash.Valid,
@@ -455,7 +458,17 @@ func (f *Fake) user(id int64) (store.User, bool) {
 	return store.User{}, false
 }
 
+// userRef is the User of id, unless Deleted: what a lookup by id sees.
 func (f *Fake) userRef(id int64) *store.User {
+	if u := f.userRow(id); u != nil && !u.DeletedAt.Valid {
+		return u
+	}
+	return nil
+}
+
+// userRow is the User of id, Deleted or not: what a join sees, so that an Order still names
+// the User who made it.
+func (f *Fake) userRow(id int64) *store.User {
 	for i := range f.users {
 		if f.users[i].ID == id {
 			return &f.users[i]

@@ -17,7 +17,7 @@ var bangkok = time.FixedZone("Asia/Bangkok", 7*60*60)
 func (f *Fake) completedIn(from, to time.Time) []store.Order {
 	var found []store.Order
 	for _, o := range f.orders {
-		if o.Status == store.OrderCompleted && !o.CompletedAt.Time.Before(from) && o.CompletedAt.Time.Before(to) {
+		if o.Status == store.OrderCompleted && !o.DeletedAt.Valid && !o.CompletedAt.Time.Before(from) && o.CompletedAt.Time.Before(to) {
 			found = append(found, o)
 		}
 	}

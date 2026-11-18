@@ -189,6 +189,7 @@ func (f *Fake) findOrders(status, search pgtype.Text) []store.Order {
 	var found []store.Order
 	for _, o := range slices.Backward(f.orders) {
 		switch {
+		case o.DeletedAt.Valid:
 		case status.Valid && o.Status != status.String:
 		case search.Valid && strconv.FormatInt(o.Number, 10) != search.String &&
 			!strings.Contains(strings.ToLower(o.Customer), strings.ToLower(search.String)):
@@ -202,7 +203,7 @@ func (f *Fake) findOrders(status, search pgtype.Text) []store.Order {
 // detail is the Order with its lines, and its Users' and Products' names as they are now.
 func (f *Fake) detail(o store.Order) store.OrderDetail {
 	name := func(id pgtype.Int8) pgtype.Text {
-		if u := f.userRef(id.Int64); id.Valid && u != nil {
+		if u := f.userRow(id.Int64); id.Valid && u != nil {
 			return pgtype.Text{String: u.Name, Valid: true}
 		}
 		return pgtype.Text{}
@@ -225,7 +226,7 @@ func (f *Fake) detail(o store.Order) store.OrderDetail {
 }
 
 func (f *Fake) orderByNumber(number int64) *store.Order {
-	i := slices.IndexFunc(f.orders, func(o store.Order) bool { return o.Number == number })
+	i := slices.IndexFunc(f.orders, func(o store.Order) bool { return o.Number == number && !o.DeletedAt.Valid })
 	if i < 0 {
 		return nil
 	}

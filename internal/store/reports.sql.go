@@ -11,7 +11,7 @@ import (
 )
 
 const listProductsToRestock = `-- name: ListProductsToRestock :many
-SELECT id, name, sku, unit, price, minimum_stock, stock, status, stock_state FROM products
+SELECT id, name, sku, unit, price, minimum_stock, stock, status, stock_state, deleted_at, deleted_by FROM products
 WHERE status = 'active' AND stock_state IN ('out-of-stock', 'low')
 ORDER BY stock, lower(name) COLLATE "C", name COLLATE "C", id
 LIMIT $1
@@ -39,6 +39,8 @@ func (q *Queries) ListProductsToRestock(ctx context.Context, rowLimit int32) ([]
 			&i.Stock,
 			&i.Status,
 			&i.StockState,
+			&i.DeletedAt,
+			&i.DeletedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -55,7 +57,7 @@ SELECT to_char(completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD')::text AS 
     count(*)::bigint AS orders_completed,
     sum(total)::bigint AS sales
 FROM orders
-WHERE status = 'completed'
+WHERE status = 'completed' AND deleted_at IS NULL
     AND completed_at >= $1::timestamptz
     AND completed_at < $2::timestamptz
 GROUP BY 1
@@ -104,7 +106,7 @@ SELECT products.id, products.name, products.sku,
 FROM order_lines
 JOIN orders ON orders.id = order_lines.order_id
 JOIN products ON products.id = order_lines.product_id
-WHERE orders.status = 'completed'
+WHERE orders.status = 'completed' AND orders.deleted_at IS NULL
     AND orders.completed_at >= $1::timestamptz
     AND orders.completed_at < $2::timestamptz
 GROUP BY products.id

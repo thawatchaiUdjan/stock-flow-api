@@ -5,8 +5,9 @@ INSERT INTO products (name, sku, unit, price, minimum_stock)
 VALUES (sqlc.arg(name), sqlc.arg(sku), sqlc.arg(unit), sqlc.arg(price), sqlc.arg(minimum_stock))
 RETURNING *;
 
+-- Every query here but MarkProductDeleted sees only the Products not Deleted (products R17).
 -- name: GetProduct :one
-SELECT * FROM products WHERE id = $1;
+SELECT * FROM products WHERE id = $1 AND deleted_at IS NULL;
 
 -- A NULL argument leaves its column as it is. Stock is not here: it changes only through
 -- Stock movements (products R6, context ADR 0006).
@@ -18,7 +19,7 @@ SET name = coalesce(sqlc.narg(name)::text, name),
     price = coalesce(sqlc.narg(price)::bigint, price),
     minimum_stock = coalesce(sqlc.narg(minimum_stock)::integer, minimum_stock),
     status = coalesce(sqlc.narg(status)::text, status)
-WHERE id = sqlc.arg(id)
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL
 RETURNING *;
 
 -- A nil list of stock states reaches Postgres as NULL, whose cardinality is NULL, not 0.
@@ -28,7 +29,7 @@ RETURNING *;
 -- (products R14).
 -- name: ListProducts :many
 SELECT * FROM products
-WHERE status = sqlc.arg(status)
+WHERE deleted_at IS NULL AND status = sqlc.arg(status)
     AND (sqlc.narg(search)::text IS NULL
         OR strpos(lower(name), lower(sqlc.narg(search))) > 0
         OR strpos(lower(sku), lower(sqlc.narg(search))) > 0)
@@ -38,8 +39,14 @@ LIMIT sqlc.arg(row_limit) OFFSET sqlc.arg(row_offset);
 
 -- name: CountProducts :one
 SELECT count(*) FROM products
-WHERE status = sqlc.arg(status)
+WHERE deleted_at IS NULL AND status = sqlc.arg(status)
     AND (sqlc.narg(search)::text IS NULL
         OR strpos(lower(name), lower(sqlc.narg(search))) > 0
         OR strpos(lower(sku), lower(sqlc.narg(search))) > 0)
     AND (coalesce(cardinality(sqlc.arg(stock_states)::text[]), 0) = 0 OR stock_state = ANY(sqlc.arg(stock_states)::text[]));
+
+-- Only an Archived Product (products R17): an Active one matches nothing and the caller
+-- reads which refusal it is. The database's check says the same.
+-- name: MarkProductDeleted :execrows
+UPDATE products SET deleted_at = sqlc.arg(at)::timestamptz, deleted_by = sqlc.arg(user_id)::bigint
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL AND status = 'archived';
