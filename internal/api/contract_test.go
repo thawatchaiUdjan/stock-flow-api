@@ -562,9 +562,9 @@ func TestTheContractCarriesTheStockOfInsufficientStock(t *testing.T) {
 	}
 }
 
-// The ticket's five operations, who may call them, and what each can answer (orders R5,
-// R11, R12, R17, users-and-access R11).
-func TestTheContractPublishesTheFiveOrderOperations(t *testing.T) {
+// The Order operations, who may call them, and what each can answer (orders R5, R11, R12,
+// R17, R20, users-and-access R11).
+func TestTheContractPublishesTheOrderOperations(t *testing.T) {
 	ops := operations(t)
 
 	for id, want := range map[string]struct {
@@ -577,6 +577,7 @@ func TestTheContractPublishesTheFiveOrderOperations(t *testing.T) {
 		"create-order":   {http.MethodPost, "/orders", []string{"201", "401", "404", "409", "422"}, []string{"insufficient-stock", "product-archived"}},
 		"complete-order": {http.MethodPost, "/orders/{number}/complete", []string{"200", "401", "404", "409", "422"}, []string{"order-not-pending"}},
 		"cancel-order":   {http.MethodPost, "/orders/{number}/cancel", []string{"200", "401", "403", "404", "409", "422"}, []string{"order-not-pending"}},
+		"delete-order":   {http.MethodDelete, "/orders/{number}", []string{"204", "401", "403", "404", "409", "422"}, []string{"order-pending"}},
 	} {
 		op, ok := ops[id]
 		if !ok {
