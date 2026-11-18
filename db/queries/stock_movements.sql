@@ -1,3 +1,6 @@
+-- Deleted Products are held too: cancelling a Pending Order gives stock back to a Product
+-- Archived and then Deleted since (orders R12, business ADR 0013). Receive, Adjustment and
+-- Order refuse it as Archived.
 -- Holds each Product until the transaction ends, so movements for one Product run one
 -- after the other, each on the stock the last one left (stock-movements R7). Rows are
 -- locked in the order of the ORDER BY: always by id, so two transactions naming the same

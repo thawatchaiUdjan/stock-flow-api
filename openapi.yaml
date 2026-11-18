@@ -408,6 +408,9 @@ components:
             password-setup-invalid: The password-setup grant is expired, consumed, replaced or ineligible.
             password-reset-invalid: The Reset link is expired, consumed, replaced or ineligible.
             login-check-limited: Too many Login email checks came from this IP address in the last hour. Retry-After says when to try again.
+            product-not-archived: The Product is Active: only an Archived Product can be deleted.
+            user-not-inactive: The User is Active: only an Inactive User can be deleted.
+            order-pending: The Order is Pending and still holds stock: cancel it before deleting it.
           enum:
             - about:blank
             - login-failed
@@ -425,6 +428,9 @@ components:
             - password-setup-invalid
             - password-reset-invalid
             - login-check-limited
+            - product-not-archived
+            - user-not-inactive
+            - order-pending
           type: string
       type: object
     HealthOutputBody:
@@ -1831,6 +1837,62 @@ paths:
       tags:
         - Orders
   /orders/{number}:
+    delete:
+      description: "Takes a completed or cancelled Order out of the Orders List and out of the Dashboard and Reports, for good: nothing restores it. Its stock movements stay, and no stock changes. Answers 409 `order-pending` when it is pending. Answers a plain 404 when there is no such Order. It also answers 404 when the Order is deleted already. Owner and Admins only: answers 403 to Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: delete-order
+      parameters:
+        - description: The Order's number.
+          in: path
+          name: number
+          required: true
+          schema:
+            description: The Order's number.
+            format: int64
+            type: integer
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Delete an Order
+      tags:
+        - Orders
     get:
       description: Every Role sees every Order, with its lines. Answers a plain 404 when there is no such Order. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session.
       operationId: get-order
@@ -2136,6 +2198,62 @@ paths:
       tags:
         - Products
   /products/{id}:
+    delete:
+      description: "Takes an Archived Product out of every list and lookup, for good: nothing restores it. Its Orders and Stock movements keep showing it, and its SKU can be used again. Answers 409 `product-not-archived` when it is Active, and a plain 404 when there is no such Product or it is Deleted already. Owner and Admins only: answers 403 to Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: delete-product
+      parameters:
+        - description: The Product's id.
+          in: path
+          name: id
+          required: true
+          schema:
+            description: The Product's id.
+            format: int64
+            type: integer
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Delete a Product
+      tags:
+        - Products
     get:
       description: Answers a plain 404 when there is no such Product. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session.
       operationId: get-product
@@ -2677,6 +2795,62 @@ paths:
       tags:
         - Users
   /users/{id}:
+    delete:
+      description: "Takes an Inactive User out of the Users list and out of Login, for good: nothing restores them. What they did stays under their name, and their email can be used again. Answers 409 `user-not-inactive` when the User is Active. Answers 403 `target-is-owner` when the target is the Owner, and a plain 404 when there is no such User. Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: delete-user
+      parameters:
+        - description: The User's id.
+          in: path
+          name: id
+          required: true
+          schema:
+            description: The User's id.
+            format: int64
+            type: integer
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Delete a User
+      tags:
+        - Users
     patch:
       description: "Changes the fields the body names and leaves the rest. Answers 403 `target-is-owner` when the target is the Owner, and a plain 404 when there is no such User. Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
       operationId: update-user

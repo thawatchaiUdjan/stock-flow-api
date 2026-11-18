@@ -1,6 +1,6 @@
 # Orders
 
-Status: Confirmed (2026-11-07, agent under ADR 0005)
+Status: Confirmed (2026-11-07, agent under ADR 0005); amended by [business ADR 0013](../business-adr/0013-soft-delete.md)
 
 ## Purpose
 
@@ -27,6 +27,7 @@ An Order records a sale to one customer. Staff create and complete Orders throug
 - **R17** Opening an Order from the Orders List shows its lines, its total, who created it and, once it is no longer Pending, who completed or cancelled it and when. It follows the Orders List's access (Users & access R11).
 - **R18** Every Role sees every Order.
 - **R19** While an Order is being created, each Product offered shows its stock, and the Order's total updates as lines change.
+- **R20** Only the Owner and Admins delete an Order, and only a Completed or Cancelled one; a Pending Order is cancelled first. A Deleted Order is not in the Orders List, cannot be opened, and cannot be restored. Its Stock movements stay and its number is never reused (R2). Deleting does not change any Product's stock, and cancelling a Pending Order still gives stock back to a Product that was Archived and then Deleted (R12, business ADR 0013).
 
 ## Out of scope
 

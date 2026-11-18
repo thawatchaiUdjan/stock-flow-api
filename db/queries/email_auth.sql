@@ -1,13 +1,13 @@
 -- name: CreateEmailUser :one
 INSERT INTO users (name, email, role)
 VALUES ($1, $2, $3)
-ON CONFLICT (lower(email)) DO NOTHING
+ON CONFLICT (lower(email)) WHERE deleted_at IS NULL DO NOTHING
 RETURNING *;
 
 -- Every credential transition holds the User, after its legacy Setup link, so old
 -- and new password/status changes share the same lock order.
 -- name: LockEmailAuthUser :one
-SELECT * FROM users WHERE id = $1 FOR UPDATE;
+SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE;
 
 -- Resending must not reset failed attempts or a current block (users-and-access R41).
 -- name: IssueEmailCredential :exec
@@ -34,6 +34,7 @@ WHERE email_credentials.kind = sqlc.arg(kind)
   AND email_credentials.token_hash = sqlc.arg(token_hash)
   AND email_credentials.expires_at > sqlc.arg(at)
   AND users.status = 'active'
+  AND users.deleted_at IS NULL
   AND ((email_credentials.kind = 'setup-grant' AND users.password_hash IS NULL AND users.role <> 'owner')
     OR (email_credentials.kind = 'reset-link' AND users.password_hash IS NOT NULL));
 

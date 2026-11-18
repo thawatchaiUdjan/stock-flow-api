@@ -79,7 +79,8 @@ type updateUserOutput struct {
 	Body user
 }
 
-type resetPasswordInput struct {
+// userIDInput is an operation on one User, with no body.
+type userIDInput struct {
 	ID int64 `path:"id" doc:"The User's id."`
 }
 
@@ -181,7 +182,7 @@ func registerUsers(api huma.API, deps Deps) {
 		Security:    sessionSecurity,
 		Middlewares: huma.Middlewares{ownerOnly(api, deps)},
 		Errors:      []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict},
-	}, func(ctx context.Context, input *resetPasswordInput) (*resetPasswordOutput, error) {
+	}, func(ctx context.Context, input *userIDInput) (*resetPasswordOutput, error) {
 		link := auth.NewSetupLink(deps.Now())
 		err := deps.Store.ResetPassword(ctx, store.IssueSetupLinkParams{
 			UserID: input.ID, TokenHash: auth.HashToken(link.Token), ExpiresAt: link.ExpiresAt,
@@ -190,6 +191,28 @@ func registerUsers(api huma.API, deps Deps) {
 			return nil, targetError(ctx, "reset password", err)
 		}
 		return &resetPasswordOutput{Body: setupLink{Token: link.Token, ExpiresAt: link.ExpiresAt}}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-user",
+		Method:      http.MethodDelete,
+		Path:        "/users/{id}",
+		Summary:     "Delete a User",
+		Description: "Takes an Inactive User out of the Users list and out of Login, for good: nothing restores them. " +
+			"What they did stays under their name, and their email can be used again. " +
+			"Answers 409 `user-not-inactive` when the User is Active. " + targetErrors + " " + ownerOnlyErrors,
+		Tags:          []string{"Users"},
+		Security:      sessionSecurity,
+		Middlewares:   huma.Middlewares{ownerOnly(api, deps)},
+		DefaultStatus: http.StatusNoContent,
+		Errors:        []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict},
+	}, func(ctx context.Context, input *userIDInput) (*struct{}, error) {
+		// users-and-access R54
+		err := deps.Store.DeleteUser(ctx, store.DeleteParams{ID: input.ID, UserID: sessionOf(ctx).UserID, At: deps.Now()})
+		if err != nil {
+			return nil, targetError(ctx, "delete user", err)
+		}
+		return nil, nil
 	})
 }
 
@@ -202,6 +225,8 @@ func targetError(ctx context.Context, doing string, err error) huma.StatusError 
 		return domainError(http.StatusForbidden, codeTargetIsOwner, "The Owner's own User cannot be changed.")
 	case errors.Is(err, store.ErrUserInactive): // users-and-access R32
 		return domainError(http.StatusConflict, codeUserInactive, "This User is Inactive. Set them Active first.")
+	case errors.Is(err, store.ErrUserNotInactive): // users-and-access R54
+		return domainError(http.StatusConflict, codeUserNotInactive, "This User is Active. Set them Inactive first.")
 	}
 	return internalError(ctx, doing, err)
 }

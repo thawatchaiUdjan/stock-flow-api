@@ -83,7 +83,7 @@ func (f *Fake) CreateEmailUser(_ context.Context, arg store.CreateEmailUserParam
 		return store.User{}, errors.New("violates users_role_check")
 	}
 	for _, user := range f.users {
-		if strings.EqualFold(user.Email, arg.Email) {
+		if !user.DeletedAt.Valid && strings.EqualFold(user.Email, arg.Email) {
 			return store.User{}, store.ErrNotFound
 		}
 		if arg.Role == "owner" && user.Role == "owner" {

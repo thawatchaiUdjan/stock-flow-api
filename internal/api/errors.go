@@ -28,6 +28,9 @@ const (
 	codePasswordSetupInvalid = "password-setup-invalid"
 	codePasswordResetInvalid = "password-reset-invalid"
 	codeLoginCheckLimited    = "login-check-limited"
+	codeProductNotArchived   = "product-not-archived"
+	codeUserNotInactive      = "user-not-inactive"
+	codeOrderPending         = "order-pending"
 )
 
 // errorCodes is the published list. Every code above must be in it.
@@ -47,6 +50,9 @@ var errorCodes = []struct{ code, meaning string }{
 	{codePasswordSetupInvalid, "The password-setup grant is expired, consumed, replaced or ineligible."},
 	{codePasswordResetInvalid, "The Reset link is expired, consumed, replaced or ineligible."},
 	{codeLoginCheckLimited, "Too many Login email checks came from this IP address in the last hour. Retry-After says when to try again."},
+	{codeProductNotArchived, "The Product is Active: only an Archived Product can be deleted."},
+	{codeUserNotInactive, "The User is Active: only an Inactive User can be deleted."},
+	{codeOrderPending, "The Order is Pending and still holds stock: cancel it before deleting it."},
 }
 
 func domainError(status int, code, detail string) *huma.ErrorModel {
