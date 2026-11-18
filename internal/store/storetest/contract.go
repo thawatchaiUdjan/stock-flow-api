@@ -808,4 +808,5 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 	runStockMovements(t, newSubject)
 	runOrders(t, newSubject)
 	runReports(t, newSubject)
+	runSoftDelete(t, newSubject)
 }

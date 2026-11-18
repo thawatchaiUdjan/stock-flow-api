@@ -14,7 +14,8 @@ import (
 
 const countOrders = `-- name: CountOrders :one
 SELECT count(*) FROM orders
-WHERE ($1::text IS NULL OR orders.status = $1)
+WHERE orders.deleted_at IS NULL
+    AND ($1::text IS NULL OR orders.status = $1)
     AND ($2::text IS NULL
         OR orders.number::text = $2
         OR strpos(lower(orders.customer), lower($2)) > 0)
@@ -136,7 +137,8 @@ SELECT orders.id, orders.number, orders.created_at, orders.customer,
     (SELECT count(*) FROM order_lines WHERE order_lines.order_id = orders.id)::integer AS line_count,
     orders.total, orders.status
 FROM orders
-WHERE ($1::text IS NULL OR orders.status = $1)
+WHERE orders.deleted_at IS NULL
+    AND ($1::text IS NULL OR orders.status = $1)
     AND ($2::text IS NULL
         OR orders.number::text = $2
         OR strpos(lower(orders.customer), lower($2)) > 0)
@@ -198,7 +200,7 @@ func (q *Queries) ListOrders(ctx context.Context, arg ListOrdersParams) ([]ListO
 }
 
 const lockOrder = `-- name: LockOrder :one
-SELECT id, status FROM orders WHERE number = $1 FOR UPDATE
+SELECT id, status FROM orders WHERE number = $1 AND deleted_at IS NULL FOR UPDATE
 `
 
 type LockOrderRow struct {
@@ -215,6 +217,24 @@ func (q *Queries) LockOrder(ctx context.Context, number int64) (LockOrderRow, er
 	return i, err
 }
 
+const markOrderDeleted = `-- name: MarkOrderDeleted :exec
+UPDATE orders SET deleted_at = $1::timestamptz, deleted_by = $2::bigint
+WHERE id = $3 AND deleted_at IS NULL AND status <> 'pending'
+`
+
+type MarkOrderDeletedParams struct {
+	At     time.Time
+	UserID int64
+	ID     int64
+}
+
+// Only a finished Order (orders R20): the caller holds it with LockOrder and reads which
+// refusal it is. The database's check says the same.
+func (q *Queries) MarkOrderDeleted(ctx context.Context, arg MarkOrderDeletedParams) error {
+	_, err := q.db.Exec(ctx, markOrderDeleted, arg.At, arg.UserID, arg.ID)
+	return err
+}
+
 const readOrder = `-- name: ReadOrder :one
 SELECT orders.id, orders.number, orders.customer, orders.note, orders.total, orders.status,
     orders.created_by, creator.name AS created_by_name, orders.created_at,
@@ -224,7 +244,7 @@ FROM orders
 JOIN users creator ON creator.id = orders.created_by
 LEFT JOIN users completer ON completer.id = orders.completed_by
 LEFT JOIN users canceller ON canceller.id = orders.cancelled_by
-WHERE orders.number = $1
+WHERE orders.number = $1 AND orders.deleted_at IS NULL
 `
 
 type ReadOrderRow struct {

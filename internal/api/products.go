@@ -214,6 +214,29 @@ func registerProducts(api huma.API, deps Deps) {
 		}
 		return &productOutput{Body: productOf(row)}, nil
 	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-product",
+		Method:      http.MethodDelete,
+		Path:        "/products/{id}",
+		Summary:     "Delete a Product",
+		Description: "Takes an Archived Product out of every list and lookup, for good: nothing restores it. " +
+			"Its Orders and Stock movements keep showing it, and its SKU can be used again. " +
+			"Answers 409 `product-not-archived` when it is Active, and a plain 404 when there is no such Product " +
+			"or it is Deleted already. " + ownerOrAdminErrors,
+		Tags:          []string{"Products"},
+		Security:      sessionSecurity,
+		Middlewares:   huma.Middlewares{ownerOrAdmin(api, deps)},
+		DefaultStatus: http.StatusNoContent,
+		Errors:        []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict},
+	}, func(ctx context.Context, input *productIDInput) (*struct{}, error) {
+		// products R17
+		err := deps.Store.DeleteProduct(ctx, store.DeleteParams{ID: input.ID, UserID: sessionOf(ctx).UserID, At: deps.Now()})
+		if err != nil {
+			return nil, productError(ctx, "delete product", err)
+		}
+		return nil, nil
+	})
 }
 
 // productError is the answer of an operation on a Product, when it fails.
@@ -223,6 +246,8 @@ func productError(ctx context.Context, doing string, err error) huma.StatusError
 		return huma.Error404NotFound("There is no such Product.")
 	case errors.Is(err, store.ErrSKUTaken): // products R3
 		return domainError(http.StatusConflict, codeSKUTaken, "Another Product has this SKU.")
+	case errors.Is(err, store.ErrProductNotArchived): // products R17
+		return domainError(http.StatusConflict, codeProductNotArchived, "This Product is Active. Archive it first.")
 	}
 	return internalError(ctx, doing, err)
 }

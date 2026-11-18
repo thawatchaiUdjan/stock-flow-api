@@ -55,6 +55,8 @@ type Order struct {
 	CompletedAt pgtype.Timestamptz
 	CancelledBy pgtype.Int8
 	CancelledAt pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
+	DeletedBy   pgtype.Int8
 }
 
 type OrderLine struct {
@@ -75,6 +77,8 @@ type Product struct {
 	Stock        int32
 	Status       string
 	StockState   string
+	DeletedAt    pgtype.Timestamptz
+	DeletedBy    pgtype.Int8
 }
 
 type Session struct {
@@ -108,4 +112,6 @@ type User struct {
 	Role         string
 	Status       string
 	PasswordHash pgtype.Text
+	DeletedAt    pgtype.Timestamptz
+	DeletedBy    pgtype.Int8
 }

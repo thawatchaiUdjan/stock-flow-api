@@ -46,6 +46,9 @@ type Store interface {
 	CountStockMovements(ctx context.Context, arg store.CountStockMovementsParams) (int64, error)
 	CreateProduct(ctx context.Context, arg store.InsertProductParams) (store.Product, error)
 	UpdateProduct(ctx context.Context, arg store.ChangeProductParams) (store.Product, error)
+	DeleteProduct(ctx context.Context, arg store.DeleteParams) error
+	DeleteUser(ctx context.Context, arg store.DeleteParams) error
+	DeleteOrder(ctx context.Context, arg store.DeleteOrderParams) error
 	ListOrders(ctx context.Context, arg store.ListOrdersParams) ([]store.ListOrdersRow, error)
 	CountOrders(ctx context.Context, arg store.CountOrdersParams) (int64, error)
 	GetOrder(ctx context.Context, number int64) (store.OrderDetail, error)

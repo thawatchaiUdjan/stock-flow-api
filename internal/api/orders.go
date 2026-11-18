@@ -294,6 +294,29 @@ func registerOrders(api huma.API, deps Deps) {
 		}
 		return &orderOutput{Body: orderOf(cancelled)}, nil
 	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-order",
+		Method:      http.MethodDelete,
+		Path:        "/orders/{number}",
+		Summary:     "Delete an Order",
+		Description: "Takes a completed or cancelled Order out of the Orders List and out of the Dashboard and Reports, for good: " +
+			"nothing restores it. Its stock movements stay, and no stock changes. " +
+			"Answers 409 `order-pending` when it is pending. " + orderNotFoundErrors + " It also answers 404 when the Order is deleted already. " +
+			ownerOrAdminErrors,
+		Tags:          []string{"Orders"},
+		Security:      sessionSecurity,
+		Middlewares:   huma.Middlewares{ownerOrAdmin(api, deps)},
+		DefaultStatus: http.StatusNoContent,
+		Errors:        []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict},
+	}, func(ctx context.Context, input *orderNumberInput) (*struct{}, error) {
+		// orders R20
+		err := deps.Store.DeleteOrder(ctx, store.DeleteOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, At: deps.Now()})
+		if err != nil {
+			return nil, orderError(ctx, "delete order", err)
+		}
+		return nil, nil
+	})
 }
 
 // orderError is the answer of an operation on one Order, when it fails.
@@ -303,6 +326,8 @@ func orderError(ctx context.Context, doing string, err error) huma.StatusError {
 		return huma.Error404NotFound("There is no such Order.")
 	case errors.Is(err, store.ErrOrderNotPending): // orders R13
 		return domainError(http.StatusConflict, codeOrderNotPending, "This Order is completed or cancelled already.")
+	case errors.Is(err, store.ErrOrderPending): // orders R20
+		return domainError(http.StatusConflict, codeOrderPending, "This Order is Pending. Cancel it first.")
 	case errors.Is(err, store.ErrStockTooLarge): // a Cancel's stock coming back
 		return huma.Error409Conflict("Giving this Order's stock back would take a Product's stock past 2147483647.")
 	}

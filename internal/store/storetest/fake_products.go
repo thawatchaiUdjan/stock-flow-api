@@ -57,7 +57,7 @@ func checkProduct(p store.Product) error {
 // skuUsed reports whether a Product other than except has the SKU, in any letter case.
 func (f *Fake) skuUsed(sku string, except int64) bool {
 	return slices.ContainsFunc(f.products, func(p store.Product) bool {
-		return p.ID != except && strings.EqualFold(p.Sku, sku)
+		return p.ID != except && !p.DeletedAt.Valid && strings.EqualFold(p.Sku, sku)
 	})
 }
 
@@ -90,7 +90,7 @@ func (f *Fake) GetProduct(_ context.Context, id int64) (store.Product, error) {
 		return store.Product{}, f.Err
 	}
 	for _, product := range f.products {
-		if product.ID == id {
+		if product.ID == id && !product.DeletedAt.Valid {
 			return product, nil
 		}
 	}
@@ -103,7 +103,7 @@ func (f *Fake) UpdateProduct(_ context.Context, arg store.ChangeProductParams) (
 	if f.Err != nil {
 		return store.Product{}, f.Err
 	}
-	i := slices.IndexFunc(f.products, func(p store.Product) bool { return p.ID == arg.ID })
+	i := slices.IndexFunc(f.products, func(p store.Product) bool { return p.ID == arg.ID && !p.DeletedAt.Valid })
 	if i < 0 {
 		return store.Product{}, store.ErrNotFound
 	}
@@ -143,7 +143,7 @@ func (f *Fake) matchingProducts(status string, search string, hasSearch bool, st
 	var found []store.Product
 	for _, p := range f.products {
 		switch {
-		case p.Status != status:
+		case p.DeletedAt.Valid || p.Status != status:
 		case hasSearch && !strings.Contains(strings.ToLower(p.Name), strings.ToLower(search)) &&
 			!strings.Contains(strings.ToLower(p.Sku), strings.ToLower(search)):
 		case len(states) > 0 && !slices.Contains(states, p.StockState):

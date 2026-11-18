@@ -68,12 +68,19 @@ func TestOnlyTheseOperationsNeedNoSession(t *testing.T) {
 	}
 }
 
-// users-and-access R17: a User is never deleted, so nothing in the API deletes.
-func TestNoOperationDeletes(t *testing.T) {
+// business ADR 0013: only a Product, a User or an Order is deleted, and only softly. Stock
+// movements, the Login log and the rest never are (stock-movements R8, users-and-access R39).
+func TestOnlyProductsUsersAndOrdersAreDeleted(t *testing.T) {
+	var got []string
 	for id, op := range operations(t) {
 		if op.Method == http.MethodDelete {
-			t.Errorf("%s is a DELETE", id)
+			got = append(got, id)
 		}
+	}
+
+	slices.Sort(got)
+	if want := []string{"delete-order", "delete-product", "delete-user"}; !slices.Equal(got, want) {
+		t.Errorf("DELETE operations = %v, want %v", got, want)
 	}
 }
 
@@ -163,6 +170,9 @@ func TestEveryOperationNamesItsErrorCodes(t *testing.T) {
 		"request-password-reset":  "email-auth-unavailable",
 		"reset-email-password":    "password-reset-invalid",
 		"identify-login-email":    "login-check-limited",
+		"delete-product":          "product-not-archived",
+		"delete-user":             "user-not-inactive",
+		"delete-order":            "order-pending",
 	} {
 		if !strings.Contains(ops[id].Description, "`"+code+"`") {
 			t.Errorf("%s: description %q does not name %s", id, ops[id].Description, code)
@@ -177,7 +187,7 @@ func TestTheContractPublishesEveryErrorCode(t *testing.T) {
 	model := contract.OpenAPI().Components.Schemas.Map()["ErrorModel"]
 
 	typ := model.Properties["type"]
-	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken", "insufficient-stock", "product-archived", "order-not-pending", "email-auth-unavailable", "first-time-code-invalid", "password-setup-invalid", "password-reset-invalid", "login-check-limited"}
+	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken", "insufficient-stock", "product-archived", "order-not-pending", "email-auth-unavailable", "first-time-code-invalid", "password-setup-invalid", "password-reset-invalid", "login-check-limited", "product-not-archived", "user-not-inactive", "order-pending"}
 	if !slices.Equal(typ.Enum, want) {
 		t.Errorf("type enum = %v, want %v", typ.Enum, want)
 	}
@@ -596,11 +606,11 @@ func TestTheContractPublishesTheFiveOrderOperations(t *testing.T) {
 	}
 }
 
-// orders R14: an Order is never edited, so nothing but its own Complete and Cancel
-// changes one, and nothing deletes one.
+// orders R14, R20: an Order is never edited, so nothing but its own Complete, Cancel and
+// Delete changes one.
 func TestNoOperationEditsAnOrder(t *testing.T) {
 	for id, op := range operations(t) {
-		if !strings.HasPrefix(op.Path, "/orders") || op.Method == http.MethodGet {
+		if !strings.HasPrefix(op.Path, "/orders") || op.Method == http.MethodGet || id == "delete-order" {
 			continue
 		}
 		if op.Method != http.MethodPost || op.Path != "/orders" && !strings.HasSuffix(op.Path, "/complete") && !strings.HasSuffix(op.Path, "/cancel") {

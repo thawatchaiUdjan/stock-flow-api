@@ -13,8 +13,8 @@ import (
 const createEmailUser = `-- name: CreateEmailUser :one
 INSERT INTO users (name, email, role)
 VALUES ($1, $2, $3)
-ON CONFLICT (lower(email)) DO NOTHING
-RETURNING id, name, email, role, status, password_hash
+ON CONFLICT (lower(email)) WHERE deleted_at IS NULL DO NOTHING
+RETURNING id, name, email, role, status, password_hash, deleted_at, deleted_by
 `
 
 type CreateEmailUserParams struct {
@@ -33,6 +33,8 @@ func (q *Queries) CreateEmailUser(ctx context.Context, arg CreateEmailUserParams
 		&i.Role,
 		&i.Status,
 		&i.PasswordHash,
+		&i.DeletedAt,
+		&i.DeletedBy,
 	)
 	return i, err
 }
@@ -100,12 +102,13 @@ func (q *Queries) GetEmailCredential(ctx context.Context, userID int64) (EmailCr
 }
 
 const getEmailCredentialUser = `-- name: GetEmailCredentialUser :one
-SELECT users.id, users.name, users.email, users.role, users.status, users.password_hash FROM email_credentials
+SELECT users.id, users.name, users.email, users.role, users.status, users.password_hash, users.deleted_at, users.deleted_by FROM email_credentials
 JOIN users ON users.id = email_credentials.user_id
 WHERE email_credentials.kind = $1
   AND email_credentials.token_hash = $2
   AND email_credentials.expires_at > $3
   AND users.status = 'active'
+  AND users.deleted_at IS NULL
   AND ((email_credentials.kind = 'setup-grant' AND users.password_hash IS NULL AND users.role <> 'owner')
     OR (email_credentials.kind = 'reset-link' AND users.password_hash IS NOT NULL))
 `
@@ -126,6 +129,8 @@ func (q *Queries) GetEmailCredentialUser(ctx context.Context, arg GetEmailCreden
 		&i.Role,
 		&i.Status,
 		&i.PasswordHash,
+		&i.DeletedAt,
+		&i.DeletedBy,
 	)
 	return i, err
 }
@@ -156,7 +161,7 @@ func (q *Queries) IssueEmailCredential(ctx context.Context, arg IssueEmailCreden
 }
 
 const lockEmailAuthUser = `-- name: LockEmailAuthUser :one
-SELECT id, name, email, role, status, password_hash FROM users WHERE id = $1 FOR UPDATE
+SELECT id, name, email, role, status, password_hash, deleted_at, deleted_by FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
 `
 
 // Every credential transition holds the User, after its legacy Setup link, so old
@@ -171,6 +176,8 @@ func (q *Queries) LockEmailAuthUser(ctx context.Context, id int64) (User, error)
 		&i.Role,
 		&i.Status,
 		&i.PasswordHash,
+		&i.DeletedAt,
+		&i.DeletedBy,
 	)
 	return i, err
 }

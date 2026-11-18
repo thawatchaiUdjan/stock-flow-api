@@ -15,7 +15,7 @@ UPDATE users
 SET name = coalesce(nullif($1::text, ''), name),
     role = coalesce(nullif($2::text, ''), role),
     status = coalesce(nullif($3::text, ''), status)
-WHERE id = $4
+WHERE id = $4 AND deleted_at IS NULL
 RETURNING id, name, email, role, status, (password_hash IS NOT NULL)::boolean AS password_set
 `
 
@@ -85,7 +85,7 @@ const createUser = `-- name: CreateUser :one
 WITH new_user AS (
     INSERT INTO users (name, email, role)
     VALUES ($1, $2, $3)
-    ON CONFLICT (lower(email)) DO NOTHING
+    ON CONFLICT (lower(email)) WHERE deleted_at IS NULL DO NOTHING
     RETURNING id, name, email, role, status
 ), link AS (
     INSERT INTO setup_links (user_id, token_hash, expires_at)
@@ -134,7 +134,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 }
 
 const getOwner = `-- name: GetOwner :one
-SELECT id, name, email, role, status, password_hash FROM users WHERE role = 'owner'
+SELECT id, name, email, role, status, password_hash, deleted_at, deleted_by FROM users WHERE role = 'owner'
 `
 
 func (q *Queries) GetOwner(ctx context.Context) (User, error) {
@@ -147,12 +147,14 @@ func (q *Queries) GetOwner(ctx context.Context) (User, error) {
 		&i.Role,
 		&i.Status,
 		&i.PasswordHash,
+		&i.DeletedAt,
+		&i.DeletedBy,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, name, email, role, status, password_hash FROM users WHERE lower(email) = lower($1)
+SELECT id, name, email, role, status, password_hash, deleted_at, deleted_by FROM users WHERE lower(email) = lower($1) AND deleted_at IS NULL
 `
 
 // users-and-access R3: emails compare without regard to letter case.
@@ -166,6 +168,8 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.Role,
 		&i.Status,
 		&i.PasswordHash,
+		&i.DeletedAt,
+		&i.DeletedBy,
 	)
 	return i, err
 }
@@ -173,6 +177,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 const listUsers = `-- name: ListUsers :many
 SELECT id, name, email, role, status, (password_hash IS NOT NULL)::boolean AS password_set
 FROM users
+WHERE deleted_at IS NULL
 ORDER BY id
 `
 
@@ -213,7 +218,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 }
 
 const lockUser = `-- name: LockUser :one
-SELECT role, status FROM users WHERE id = $1 FOR UPDATE
+SELECT role, status FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
 `
 
 type LockUserRow struct {
@@ -227,6 +232,24 @@ func (q *Queries) LockUser(ctx context.Context, id int64) (LockUserRow, error) {
 	var i LockUserRow
 	err := row.Scan(&i.Role, &i.Status)
 	return i, err
+}
+
+const markUserDeleted = `-- name: MarkUserDeleted :exec
+UPDATE users SET deleted_at = $1::timestamptz, deleted_by = $2::bigint
+WHERE id = $3 AND deleted_at IS NULL AND status = 'inactive' AND role <> 'owner'
+`
+
+type MarkUserDeletedParams struct {
+	At     time.Time
+	UserID int64
+	ID     int64
+}
+
+// Only an Inactive User who is not the Owner (users-and-access R54): the caller has held
+// the User and read which refusal it is. The database's check says the same.
+func (q *Queries) MarkUserDeleted(ctx context.Context, arg MarkUserDeletedParams) error {
+	_, err := q.db.Exec(ctx, markUserDeleted, arg.At, arg.UserID, arg.ID)
+	return err
 }
 
 const setUserPassword = `-- name: SetUserPassword :one
