@@ -35,6 +35,7 @@ A Product, a User or an Order can be **Deleted**. The row stays in the database,
 - A Stock movement can name an Order that no longer opens; web must not link to it.
 - Reusing a User's email gives the new User no link to the old one's history.
 - A Deleted Product's id and an Order's number are never reused.
+- A Deleted Product is always Archived, so Receive, Adjustment and Order refuse it as Archived (`product-archived`) rather than as unknown. A Pending Order that sells it can still be cancelled, and its stock goes back to the Deleted Product (orders R12).
 
 ## Alternatives considered
 
