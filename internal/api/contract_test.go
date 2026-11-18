@@ -597,13 +597,15 @@ func TestTheContractPublishesTheOrderOperations(t *testing.T) {
 				t.Errorf("%s: description %q does not name %s", id, op.Description, code)
 			}
 		}
-		// orders R5, R11, R18: only Cancel is refused to anyone.
-		if id != "cancel-order" && op.Responses["403"] != nil {
+		// orders R5, R11, R12, R20: only Cancel and Delete are refused to anyone (Staff).
+		if id != "cancel-order" && id != "delete-order" && op.Responses["403"] != nil {
 			t.Errorf("%s declares 403, but every Role may call it", id)
 		}
 	}
-	if !strings.Contains(ops["cancel-order"].Description, "Staff") {
-		t.Errorf("cancel-order: description %q does not say Staff are refused", ops["cancel-order"].Description)
+	for _, id := range []string{"cancel-order", "delete-order"} {
+		if !strings.Contains(ops[id].Description, "Staff") {
+			t.Errorf("%s: description %q does not say Staff are refused", id, ops[id].Description)
+		}
 	}
 }
 
