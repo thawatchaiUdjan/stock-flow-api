@@ -20,7 +20,7 @@ Every change to a Product's stock is a Stock movement, so the stock shown always
 - **R10** The Stock Movements page lists Stock movements newest first, and can be filtered by Product, by kind and by a range of the Shop's days (Dashboard & reports R1).
 - **R11** Each entry shows the time, the Product and its SKU, the kind, the change in stock, the stock after, the User and the note. One made by an Order links to that Order.
 - **R12** Every Role sees every Stock movement.
-- **R13** Stock movements of a Deleted Product or Order stay in the list (R8). One made by a Deleted Order names its number but no longer opens it (business ADR 0013).
+- **R13** Stock movements of a Deleted Product or Order stay in the list (R8). One made by a Deleted Order names its number but no longer opens it (business ADR 0013): the entry's Order says whether it is deleted, so no link is offered without a request per entry.
 
 ## Out of scope
 

@@ -342,3 +342,31 @@ func TestADeletedOrderIsNotInTheDashboardOrTheSalesReport(t *testing.T) {
 		t.Errorf("report = %+v, want only the Thai tea Order", report)
 	}
 }
+
+// stock-movements R13: a movement made by a Deleted Order stays and names its number, and
+// says the Order is deleted so a client does not link to it; one made by a live Order says
+// it is not.
+func TestAMovementOfADeletedOrderStaysWithItsNumberAndSaysTheOrderIsDeleted(t *testing.T) {
+	h := newHarness(t)
+	s := h.shop()
+	tea := h.seed(store.Product{Name: "Thai tea", Sku: "TEA-01", Price: 100, Stock: 10})
+	live := h.mustCreateOrder(s.staff, lineIn{ProductID: tea.ID, Quantity: 1})
+	gone := h.mustCreateOrder(s.staff, lineIn{ProductID: tea.ID, Quantity: 2})
+	if rec := h.completeOrder(gone.Number, s.owner); rec.Code != http.StatusOK {
+		t.Fatalf("complete: status = %d; body %s", rec.Code, rec.Body)
+	}
+	if rec := h.deleteOrder(gone.Number, s.owner); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete: status = %d; body %s", rec.Code, rec.Body)
+	}
+
+	byNumber := map[int64]bool{}
+	for _, m := range h.listMovements("kind=order", s.staff).Movements {
+		if m.Order == nil {
+			t.Fatalf("movement %d has no order", m.ID)
+		}
+		byNumber[m.Order.Number] = m.Order.Deleted
+	}
+	if len(byNumber) != 2 || byNumber[live.Number] || !byNumber[gone.Number] {
+		t.Errorf("deleted by Order number = %v, want only %d deleted", byNumber, gone.Number)
+	}
+}

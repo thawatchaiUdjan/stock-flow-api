@@ -28,6 +28,8 @@ type stockMovementUser struct {
 type stockMovementOrder struct {
 	ID     int64 `json:"id" doc:"Identifies the Order."`
 	Number int64 `json:"number" doc:"The Order's number."`
+	// stock-movements R13.
+	Deleted bool `json:"deleted" doc:"True when the Order has been deleted: the number stays, but the Order can no longer be opened, so do not link to it."`
 }
 
 type stockMovement struct {
@@ -63,7 +65,7 @@ func stockMovementOf(row store.ListStockMovementsRow) stockMovement {
 		Note: row.Note,
 	}
 	if row.OrderID.Valid {
-		m.Order = &stockMovementOrder{ID: row.OrderID.Int64, Number: row.OrderNumber.Int64}
+		m.Order = &stockMovementOrder{ID: row.OrderID.Int64, Number: row.OrderNumber.Int64, Deleted: row.OrderDeleted}
 	}
 	return m
 }

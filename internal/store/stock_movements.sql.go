@@ -45,7 +45,8 @@ SELECT stock_movements.id, stock_movements.kind, stock_movements.product_id,
     products.name AS product_name, products.sku AS product_sku,
     stock_movements.change, stock_movements.stock_after, stock_movements.at,
     stock_movements.user_id, users.name AS user_name, stock_movements.note,
-    stock_movements.order_id, orders.number AS order_number
+    stock_movements.order_id, orders.number AS order_number,
+    (orders.deleted_at IS NOT NULL)::boolean AS order_deleted
 FROM stock_movements
 JOIN products ON products.id = stock_movements.product_id
 JOIN users ON users.id = stock_movements.user_id
@@ -54,21 +55,23 @@ WHERE stock_movements.id = $1
 `
 
 type GetStockMovementRow struct {
-	ID          int64
-	Kind        string
-	ProductID   int64
-	ProductName string
-	ProductSku  string
-	Change      int32
-	StockAfter  int32
-	At          time.Time
-	UserID      int64
-	UserName    string
-	Note        string
-	OrderID     pgtype.Int8
-	OrderNumber pgtype.Int8
+	ID           int64
+	Kind         string
+	ProductID    int64
+	ProductName  string
+	ProductSku   string
+	Change       int32
+	StockAfter   int32
+	At           time.Time
+	UserID       int64
+	UserName     string
+	Note         string
+	OrderID      pgtype.Int8
+	OrderNumber  pgtype.Int8
+	OrderDeleted bool
 }
 
+// A Deleted Order still names its number but is flagged so it is not linked (stock-movements R13).
 // The columns of ListStockMovements, so a row of one converts to a row of the other.
 func (q *Queries) GetStockMovement(ctx context.Context, id int64) (GetStockMovementRow, error) {
 	row := q.db.QueryRow(ctx, getStockMovement, id)
@@ -87,6 +90,7 @@ func (q *Queries) GetStockMovement(ctx context.Context, id int64) (GetStockMovem
 		&i.Note,
 		&i.OrderID,
 		&i.OrderNumber,
+		&i.OrderDeleted,
 	)
 	return i, err
 }
@@ -130,7 +134,8 @@ SELECT stock_movements.id, stock_movements.kind, stock_movements.product_id,
     products.name AS product_name, products.sku AS product_sku,
     stock_movements.change, stock_movements.stock_after, stock_movements.at,
     stock_movements.user_id, users.name AS user_name, stock_movements.note,
-    stock_movements.order_id, orders.number AS order_number
+    stock_movements.order_id, orders.number AS order_number,
+    (orders.deleted_at IS NOT NULL)::boolean AS order_deleted
 FROM stock_movements
 JOIN products ON products.id = stock_movements.product_id
 JOIN users ON users.id = stock_movements.user_id
@@ -155,19 +160,20 @@ type ListStockMovementsParams struct {
 }
 
 type ListStockMovementsRow struct {
-	ID          int64
-	Kind        string
-	ProductID   int64
-	ProductName string
-	ProductSku  string
-	Change      int32
-	StockAfter  int32
-	At          time.Time
-	UserID      int64
-	UserName    string
-	Note        string
-	OrderID     pgtype.Int8
-	OrderNumber pgtype.Int8
+	ID           int64
+	Kind         string
+	ProductID    int64
+	ProductName  string
+	ProductSku   string
+	Change       int32
+	StockAfter   int32
+	At           time.Time
+	UserID       int64
+	UserName     string
+	Note         string
+	OrderID      pgtype.Int8
+	OrderNumber  pgtype.Int8
+	OrderDeleted bool
 }
 
 // Newest first by id, which follows the order the movements were made: the cursor
@@ -205,6 +211,7 @@ func (q *Queries) ListStockMovements(ctx context.Context, arg ListStockMovements
 			&i.Note,
 			&i.OrderID,
 			&i.OrderNumber,
+			&i.OrderDeleted,
 		); err != nil {
 			return nil, err
 		}

@@ -1235,6 +1235,9 @@ components:
     StockMovementOrder:
       additionalProperties: false
       properties:
+        deleted:
+          description: "True when the Order has been deleted: the number stays, but the Order can no longer be opened, so do not link to it."
+          type: boolean
         id:
           description: Identifies the Order.
           format: int64
@@ -1246,6 +1249,7 @@ components:
       required:
         - id
         - number
+        - deleted
       type: object
     StockMovementProduct:
       additionalProperties: false
