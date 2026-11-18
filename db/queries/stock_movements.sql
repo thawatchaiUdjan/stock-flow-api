@@ -21,13 +21,15 @@ VALUES (sqlc.arg(kind), sqlc.arg(product_id), sqlc.arg(change), sqlc.arg(stock_a
     sqlc.arg(user_id), sqlc.arg(note), sqlc.narg(order_id))
 RETURNING id;
 
+-- A Deleted Order still names its number but is flagged so it is not linked (stock-movements R13).
 -- The columns of ListStockMovements, so a row of one converts to a row of the other.
 -- name: GetStockMovement :one
 SELECT stock_movements.id, stock_movements.kind, stock_movements.product_id,
     products.name AS product_name, products.sku AS product_sku,
     stock_movements.change, stock_movements.stock_after, stock_movements.at,
     stock_movements.user_id, users.name AS user_name, stock_movements.note,
-    stock_movements.order_id, orders.number AS order_number
+    stock_movements.order_id, orders.number AS order_number,
+    (orders.deleted_at IS NOT NULL)::boolean AS order_deleted
 FROM stock_movements
 JOIN products ON products.id = stock_movements.product_id
 JOIN users ON users.id = stock_movements.user_id
@@ -43,7 +45,8 @@ SELECT stock_movements.id, stock_movements.kind, stock_movements.product_id,
     products.name AS product_name, products.sku AS product_sku,
     stock_movements.change, stock_movements.stock_after, stock_movements.at,
     stock_movements.user_id, users.name AS user_name, stock_movements.note,
-    stock_movements.order_id, orders.number AS order_number
+    stock_movements.order_id, orders.number AS order_number,
+    (orders.deleted_at IS NOT NULL)::boolean AS order_deleted
 FROM stock_movements
 JOIN products ON products.id = stock_movements.product_id
 JOIN users ON users.id = stock_movements.user_id

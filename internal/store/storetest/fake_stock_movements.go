@@ -150,6 +150,7 @@ func (f *Fake) entry(m store.StockMovement) store.ListStockMovementsRow {
 	}
 	if o := f.orderByID(m.OrderID.Int64); o != nil {
 		row.OrderNumber = pgtype.Int8{Int64: o.Number, Valid: true}
+		row.OrderDeleted = o.DeletedAt.Valid
 	}
 	return row
 }

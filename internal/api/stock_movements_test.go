@@ -30,8 +30,9 @@ type movementBody struct {
 	} `json:"user"`
 	Note  string `json:"note"`
 	Order *struct {
-		ID     int64 `json:"id"`
-		Number int64 `json:"number"`
+		ID      int64 `json:"id"`
+		Number  int64 `json:"number"`
+		Deleted bool  `json:"deleted"`
 	} `json:"order"`
 }
 

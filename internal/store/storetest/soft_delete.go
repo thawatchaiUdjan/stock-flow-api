@@ -134,6 +134,11 @@ func runSoftDelete(t *testing.T, newSubject func(t *testing.T) Subject) {
 			t.Fatal(err)
 		}
 		stock, movements := stockOf(t, s, tea.ID), len(listMovements(t, s, store.ListStockMovementsParams{}))
+		for _, m := range listMovements(t, s, store.ListStockMovementsParams{}) {
+			if m.OrderDeleted {
+				t.Errorf("movement %d of a live Order is flagged deleted", m.ID)
+			}
+		}
 		window := store.SalesByDayParams{FromAt: at.Add(-24 * time.Hour), ToAt: at.Add(24 * time.Hour)}
 		if sales, err := s.Store.SalesByDay(ctx, window); err != nil || len(sales) != 1 {
 			t.Fatalf("sales before = %+v, %v; want the Completed Order's day", sales, err)
@@ -170,6 +175,12 @@ func runSoftDelete(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}
 		if got, n := stockOf(t, s, tea.ID), len(listMovements(t, s, store.ListStockMovementsParams{})); got != stock || n != movements {
 			t.Errorf("stock %d and %d movements, want %d and %d unchanged", got, n, stock, movements)
+		}
+		// stock-movements R13: the movements stay, name the number and say the Order is deleted.
+		for _, m := range listMovements(t, s, store.ListStockMovementsParams{}) {
+			if m.OrderID.Valid && (!m.OrderDeleted || m.OrderNumber.Int64 < 1) {
+				t.Errorf("movement %d: order number %d, deleted %v; want its number and deleted", m.ID, m.OrderNumber.Int64, m.OrderDeleted)
+			}
 		}
 		if next := createOrder(t, s, newOrder(user, "", line(tea, 1))); next.Number != 3 {
 			t.Errorf("next number = %d, want 3", next.Number)
