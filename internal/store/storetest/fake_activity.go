@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -16,6 +17,10 @@ import (
 func (f *Fake) checkActivity(e store.ActivityEntry) error {
 	if f.ActivityErr != nil {
 		return f.ActivityErr
+	}
+	// Postgres text holds no NUL byte.
+	if strings.ContainsRune(e.By.UserAgent, 0) || strings.ContainsRune(e.By.IP, 0) {
+		return errors.New("invalid byte sequence for encoding UTF8")
 	}
 	kinds := []string{store.ActorUser, store.ActorCustomer, store.ActorSystem, store.ActorInstallation}
 	hasID := e.By.Actor.Kind == store.ActorUser || e.By.Actor.Kind == store.ActorCustomer

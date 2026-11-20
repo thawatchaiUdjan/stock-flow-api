@@ -27,9 +27,13 @@ type Fake struct {
 	// ActivityErr makes writing an Activity log entry fail, and the change with it.
 	ActivityErr error
 
-	mu            sync.Mutex
-	users         []store.User
-	sessions      map[string]store.Session
+	mu               sync.Mutex
+	users            []store.User
+	customers        []store.Customer
+	sessions         map[string]store.Session
+	customerSessions map[string]store.CustomerSession
+	// signups is each email's code or grant, keyed by the email in lower case.
+	signups       map[string]store.SignupCredential
 	links         map[int64]store.SetupLink
 	credentials   map[int64]store.EmailCredential
 	emailRequests []store.EmailRequestParams
@@ -48,7 +52,10 @@ var _ Store = (*Fake)(nil)
 
 // NewFake returns an empty Fake.
 func NewFake() *Fake {
-	return &Fake{sessions: map[string]store.Session{}, links: map[int64]store.SetupLink{}, credentials: map[int64]store.EmailCredential{}}
+	return &Fake{
+		sessions: map[string]store.Session{}, links: map[int64]store.SetupLink{}, credentials: map[int64]store.EmailCredential{},
+		customerSessions: map[string]store.CustomerSession{}, signups: map[string]store.SignupCredential{},
+	}
 }
 
 // AddUser seeds a User and returns it with its ID.
@@ -370,9 +377,17 @@ func (f *Fake) addEntry(arg store.AddLoginLogEntryParams) error {
 	if arg.CustomerID.Valid && (app != store.AppStorefront || arg.UserID.Valid) {
 		return errors.New("violates login_log_customer_check")
 	}
+	var customerName pgtype.Text
+	if arg.CustomerID.Valid {
+		c, ok := f.customer(arg.CustomerID.Int64)
+		if !ok {
+			return errors.New("violates login_log_customer_id_fkey")
+		}
+		customerName = pgtype.Text{String: c.Name, Valid: true}
+	}
 	entry := store.ListLoginLogRow{
 		ID: int64(len(f.log) + 1), At: arg.At, Email: arg.Email, UserID: arg.UserID,
-		Result: arg.Result, Ip: arg.Ip, UserAgent: arg.UserAgent, App: app, CustomerID: arg.CustomerID,
+		Result: arg.Result, Ip: arg.Ip, UserAgent: arg.UserAgent, App: app, CustomerID: arg.CustomerID, CustomerName: customerName,
 	}
 	if arg.UserID.Valid {
 		user, ok := f.user(arg.UserID.Int64)

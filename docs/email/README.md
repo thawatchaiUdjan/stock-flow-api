@@ -13,8 +13,9 @@ Follow the existing web design at commit `0d634468a78e0f137719255d2980b2bfcdf639
 | First-time code | [Open](previews/first-time-code.html) | [Open](previews/first-time-code.txt) | [Image](previews/first-time-code-phone.png) | [Image](previews/first-time-code-desktop.png) |
 | Reset link | [Open](previews/reset-link.html) | [Open](previews/reset-link.txt) | [Image](previews/reset-link-phone.png) | [Image](previews/reset-link-desktop.png) |
 | Reset completion | [Open](previews/reset-complete.html) | [Open](previews/reset-complete.txt) | [Image](previews/reset-complete-phone.png) | [Image](previews/reset-complete-desktop.png) |
+| Verification code (Customer sign-up, [customers R18](../requirements/customers.md)) | [Open](previews/verification-code.html) | [Open](previews/verification-code.txt) | Not captured | Not captured |
 
-All examples use fictional addresses and invalid demonstration credentials. Regenerate HTML/text from the repository root with `go run ./cmd/email-preview`; `go generate ./...` regenerates them too. After template changes, inspect all three actual variants at phone and desktop widths and refresh screenshots. Screenshots here were captured in headless Edge with explicit 390/800 px viewport emulation; all six had matching layout/scroll widths and were visually inspected. They are browser previews, not a claim of testing in Outlook, Gmail or every mail client.
+All examples use fictional addresses and invalid demonstration credentials. Regenerate HTML/text from the repository root with `go run ./cmd/email-preview`; `go generate ./...` regenerates them too. After template changes, inspect every variant (the Verification code's screenshots are not captured yet) at phone and desktop widths and refresh screenshots. Screenshots here were captured in headless Edge with explicit 390/800 px viewport emulation; all six had matching layout/scroll widths and were visually inspected. They are browser previews, not a claim of testing in Outlook, Gmail or every mail client.
 
 ## Configuration
 

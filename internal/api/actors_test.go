@@ -272,10 +272,11 @@ type loginLogV2Body struct {
 // users-and-access R36: /v2/login-log shows both apps; the legacy log only StockFlow's.
 func TestLoginLogV2ShowsBothAppsAndLegacyOnlyStockFlow(t *testing.T) {
 	a := newActorsHarness(t)
+	somying := a.store.AddCustomer(store.Customer{Name: "Somying", Email: "somying@example.com", Phone: "0812345678", Status: "active"})
 	for i, result := range []string{store.ResultFailedLogin, store.ResultLogin} {
 		entry := store.AddLoginLogEntryParams{
 			At: a.clock.Now().Add(time.Duration(i) * time.Second), Email: "somying@example.com", Result: result, Ip: "203.0.113.7",
-			App: pgtype.Text{String: store.AppStorefront, Valid: true}, CustomerID: pgtype.Int8{Int64: 7, Valid: i == 1},
+			App: pgtype.Text{String: store.AppStorefront, Valid: true}, CustomerID: pgtype.Int8{Int64: somying.ID, Valid: i == 1},
 		}
 		if err := a.store.AddLoginLogEntry(context.Background(), entry); err != nil {
 			t.Fatal(err)
@@ -290,7 +291,7 @@ func TestLoginLogV2ShowsBothAppsAndLegacyOnlyStockFlow(t *testing.T) {
 	if *all.Total != 4 || *storefront.Total != 2 || *stockflow.Total != 2 {
 		t.Fatalf("totals: all %d, Storefront %d, StockFlow %d, want 4, 2, 2", *all.Total, *storefront.Total, *stockflow.Total)
 	}
-	if e := storefront.Entries[0]; e.App != "storefront" || e.Result != "login" || e.Actor == nil || e.Actor.Kind != "customer" || e.Actor.ID == nil || *e.Actor.ID != 7 {
+	if e := storefront.Entries[0]; e.App != "storefront" || e.Result != "login" || e.Actor == nil || e.Actor.Kind != "customer" || e.Actor.ID == nil || *e.Actor.ID != somying.ID || e.Actor.Name != "Somying" {
 		t.Errorf("Storefront login = %+v", e)
 	}
 	if e := storefront.Entries[1]; e.Result != "failed-login" || e.Actor != nil {

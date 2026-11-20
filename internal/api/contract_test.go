@@ -53,7 +53,7 @@ func TestTheContractPublishesEveryOperationOfLoggingIn(t *testing.T) {
 // users-and-access R4: nobody can sign up. What needs no session is this list and no
 // more, so an operation that makes a User can't be reached without logging in.
 func TestOnlyTheseOperationsNeedNoSession(t *testing.T) {
-	public := []string{"create-session", "get-health", "identify-login-email", "list-storefront-products", "read-setup-link", "request-first-time-code", "request-password-reset", "reset-email-password", "set-email-password", "set-password", "verify-first-time-code"}
+	public := []string{"complete-signup", "create-customer-session", "create-session", "get-health", "identify-login-email", "list-storefront-products", "read-setup-link", "request-first-time-code", "request-password-reset", "request-signup-code", "reset-email-password", "set-email-password", "set-password", "verify-first-time-code", "verify-signup-code"}
 
 	var got []string
 	for id, op := range operations(t) {
@@ -173,6 +173,12 @@ func TestEveryOperationNamesItsErrorCodes(t *testing.T) {
 		"delete-product":          "product-not-archived",
 		"delete-user":             "user-not-inactive",
 		"delete-order":            "order-pending",
+		"request-signup-code":     "customer-email-taken",
+		"verify-signup-code":      "signup-code-invalid",
+		"complete-signup":         "signup-invalid",
+		"create-customer-session": "login-failed",
+		"end-customer-session":    "session-ended",
+		"get-current-customer":    "session-ended",
 	} {
 		if !strings.Contains(ops[id].Description, "`"+code+"`") {
 			t.Errorf("%s: description %q does not name %s", id, ops[id].Description, code)
@@ -187,7 +193,7 @@ func TestTheContractPublishesEveryErrorCode(t *testing.T) {
 	model := contract.OpenAPI().Components.Schemas.Map()["ErrorModel"]
 
 	typ := model.Properties["type"]
-	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken", "insufficient-stock", "product-archived", "order-not-pending", "email-auth-unavailable", "first-time-code-invalid", "password-setup-invalid", "password-reset-invalid", "login-check-limited", "product-not-archived", "user-not-inactive", "order-pending", "login-blocked"}
+	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken", "insufficient-stock", "product-archived", "order-not-pending", "email-auth-unavailable", "first-time-code-invalid", "password-setup-invalid", "password-reset-invalid", "login-check-limited", "product-not-archived", "user-not-inactive", "order-pending", "login-blocked", "customer-email-taken", "signup-code-invalid", "signup-invalid"}
 	if !slices.Equal(typ.Enum, want) {
 		t.Errorf("type enum = %v, want %v", typ.Enum, want)
 	}

@@ -48,6 +48,19 @@ func addUser(t *testing.T, pool *pgxpool.Pool, user store.User) store.User {
 	return user
 }
 
+func addCustomer(t *testing.T, pool *pgxpool.Pool, c store.Customer) store.Customer {
+	t.Helper()
+	err := pool.QueryRow(context.Background(),
+		`INSERT INTO customers (name, email, phone, password_hash, status, created_at, deleted_at, deleted_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+		c.Name, c.Email, c.Phone, c.PasswordHash, c.Status, c.CreatedAt, c.DeletedAt, c.DeletedBy,
+	).Scan(&c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
 // addProduct seeds a Product with a stock, which the port has no operation to set.
 func addProduct(t *testing.T, pool *pgxpool.Pool, product store.Product) store.Product {
 	t.Helper()
@@ -101,6 +114,7 @@ func TestRealStoreKeepsTheStoreContract(t *testing.T) {
 		return storetest.Subject{
 			Store:          store.NewStore(pool),
 			AddUser:        func(t *testing.T, user store.User) store.User { return addUser(t, pool, user) },
+			AddCustomer:    func(t *testing.T, c store.Customer) store.Customer { return addCustomer(t, pool, c) },
 			AddProduct:     func(t *testing.T, product store.Product) store.Product { return addProduct(t, pool, product) },
 			AddOnlineOrder: func(t *testing.T, seed storetest.OnlineOrderSeed) int64 { return addOnlineOrder(t, pool, seed) },
 		}

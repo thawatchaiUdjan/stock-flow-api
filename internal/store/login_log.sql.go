@@ -67,9 +67,10 @@ func (q *Queries) CountLoginLog(ctx context.Context, arg CountLoginLogParams) (i
 
 const listLoginLog = `-- name: ListLoginLog :many
 SELECT login_log.id, login_log.at, login_log.email, login_log.user_id, users.name AS user_name,
-    login_log.result, login_log.ip, login_log.user_agent, login_log.app, login_log.customer_id
+    login_log.result, login_log.ip, login_log.user_agent, login_log.app, login_log.customer_id, customers.name AS customer_name
 FROM login_log
 LEFT JOIN users ON users.id = login_log.user_id
+LEFT JOIN customers ON customers.id = login_log.customer_id
 WHERE ($1::bigint IS NULL OR login_log.user_id = $1)
     AND ($2::text IS NULL OR login_log.result = $2)
     AND ($3::text IS NULL OR login_log.app = $3)
@@ -88,16 +89,17 @@ type ListLoginLogParams struct {
 }
 
 type ListLoginLogRow struct {
-	ID         int64
-	At         time.Time
-	Email      string
-	UserID     pgtype.Int8
-	UserName   pgtype.Text
-	Result     string
-	Ip         string
-	UserAgent  string
-	App        string
-	CustomerID pgtype.Int8
+	ID           int64
+	At           time.Time
+	Email        string
+	UserID       pgtype.Int8
+	UserName     pgtype.Text
+	Result       string
+	Ip           string
+	UserAgent    string
+	App          string
+	CustomerID   pgtype.Int8
+	CustomerName pgtype.Text
 }
 
 // Newest first by id, which follows the order the entries were written: the cursor
@@ -130,6 +132,7 @@ func (q *Queries) ListLoginLog(ctx context.Context, arg ListLoginLogParams) ([]L
 			&i.UserAgent,
 			&i.App,
 			&i.CustomerID,
+			&i.CustomerName,
 		); err != nil {
 			return nil, err
 		}
