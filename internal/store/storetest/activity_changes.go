@@ -159,6 +159,7 @@ func runActivityOfUsersAndOrders(t *testing.T, newSubject func(t *testing.T) Sub
 		s := newSubject(t)
 		boss := s.AddUser(t, ownerUser("malee@example.com"))
 		user := s.AddUser(t, staff("somchai@example.com"))
+		gone := s.AddUser(t, store.User{Name: "Gone", Email: "gone@example.com", Role: "staff", Status: "inactive"})
 		tea := s.AddProduct(t, priced("Thai tea", "TEA-01", 4500, 10))
 		good := userBy(boss.ID, at)
 		order, err := s.Store.CreateOrder(ctx, newOrder(user, "", line(tea, 1)), good)
@@ -178,6 +179,8 @@ func runActivityOfUsersAndOrders(t *testing.T, newSubject func(t *testing.T) Sub
 
 		failures := map[string]error{}
 		_, failures["create user"] = s.Store.CreateUser(ctx, store.CreateUserParams{Name: "New", Email: "new@example.com", Role: "staff", TokenHash: []byte("l"), ExpiresAt: at.Add(time.Hour)}, bad)
+		_, failures["create email user"] = s.Store.CreateEmailUser(ctx, store.CreateEmailUserParams{Name: "Mail", Email: "mail@example.com", Role: "staff"}, bad)
+		failures["delete user"] = s.Store.DeleteUser(ctx, store.DeleteParams{ID: gone.ID, UserID: boss.ID, At: at}, bad)
 		_, failures["update user"] = s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Name: "Changed"}, bad)
 		failures["reset password"] = s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("l2"), ExpiresAt: at.Add(time.Hour)}, bad)
 		_, failures["complete order"] = s.Store.CompleteOrder(ctx, finish(order.Number, user), bad)
@@ -196,8 +199,13 @@ func runActivityOfUsersAndOrders(t *testing.T, newSubject func(t *testing.T) Sub
 		if got, err := s.Store.GetUserByEmail(ctx, "somchai@example.com"); err != nil || got.Name != "Somchai" {
 			t.Errorf("user = %+v, %v, want it unchanged", got, err)
 		}
-		if _, err := s.Store.GetUserByEmail(ctx, "new@example.com"); err == nil {
-			t.Error("the new User was saved although its entry failed")
+		for _, email := range []string{"new@example.com", "mail@example.com"} {
+			if _, err := s.Store.GetUserByEmail(ctx, email); err == nil {
+				t.Errorf("%s was saved although its entry failed", email)
+			}
+		}
+		if got, err := s.Store.GetUserByEmail(ctx, "gone@example.com"); err != nil || got.ID != gone.ID {
+			t.Errorf("the inactive User = %+v, %v, want them not Deleted", got, err)
 		}
 		if got, err := s.Store.GetOrder(ctx, order.Number); err != nil || got.Status != store.OrderPending {
 			t.Errorf("order = %+v, %v, want it Pending", got.ReadOrderRow, err)
