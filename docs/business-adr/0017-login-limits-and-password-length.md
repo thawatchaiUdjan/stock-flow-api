@@ -1,13 +1,13 @@
-# 0017: Failed logins are limited, and new passwords have 8 characters or more
+# 0017: Failed logins are limited, and passwords keep a 6-character minimum
 
 Status: Accepted
 Date: 2026-11-20
 Affects: api, web
-Authorised by: Requirements owner (thawatchaiUdjan), `/grill-with-docs` session of 2026-11-20, as in business ADR 0014. The design presented to the owner included these limits for Users and Customers, and the owner approved writing it. Merge not authorised.
+Authorised by: Requirements owner (thawatchaiUdjan), `/grill-with-docs` session of 2026-11-20, as in business ADR 0014. The design presented to the owner included these limits for Users and Customers, and the owner approved writing it. On review the same day, the owner kept the 6-character minimum for Users and Customers alike and rejected raising it to 8. Merge not authorised.
 
 ## Context
 
-Nothing limits failed logins, and a password needs only 6 characters (Users & access R19). The [security notes](../security-notes.md) rate the first High, and Users & access holds both as open questions 1 and 2. The Storefront puts a public sign-up in front of anyone on the internet, so neither can wait.
+Nothing limits failed logins, and a password needs only 6 characters (Users & access R19). The [security notes](../security-notes.md) rate the first High, and Users & access holds both as open questions 1 and 2. The Storefront puts a public sign-up in front of anyone on the internet, so failed logins can no longer go unlimited, and Customers need the same password rule as Users.
 
 ## Decision
 
@@ -15,16 +15,17 @@ Nothing limits failed logins, and a password needs only 6 characters (Users & ac
 - **Per address.** After 50 failed logins from one IP address within an hour, logins from it are blocked until fewer than 50 remain in the last hour.
 - **What a blocked person sees.** The refusal says logins are temporarily blocked and when to try again, and nothing about the email. Forgot password still works. The Login log records each blocked attempt.
 - **Users and Customers alike**, counted separately for StockFlow and the Storefront.
-- **Passwords** set from now on have 8 to 128 characters. Existing shorter passwords still work until replaced.
+- **Passwords** keep the 6-character minimum, for Users and Customers alike, and gain a maximum of 128 characters. No existing password is affected.
 
 ## Consequences
 
-- Amend Users & access R19 and add R55–R57; remove the lockout exclusion from *Out of scope* and close open questions 1 and 2. Customers R9 and R11 follow the same limits.
+- Amend Users & access R19 and add R55–R57; remove the lockout exclusion from *Out of scope* and close open questions 1 and 2. Customers R9 and R11 follow the same rules.
 - Someone can block a known email for 15 minutes by failing on purpose; Forgot password is not blocked.
-- No list of refused common passwords is added.
+- Six characters remain weak; the login limits are what slow guessing. No list of refused common passwords is added. Revisit both before real data goes in.
 
 ## Alternatives considered
 
 - A lock the Owner clears: a stranger could lock the Owner out, with nobody left to clear it.
 - Per address only: an attacker rotating addresses is not slowed.
+- An 8-character minimum: proposed by the agent, rejected by the owner, who wants the same 6 characters as today.
 - Forcing existing passwords to change: sends every User through recovery for a practice project.

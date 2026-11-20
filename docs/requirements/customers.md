@@ -18,7 +18,7 @@ People who buy from the Shop have a Customer account so they can log in to the S
 - **R8** A Verification code has six digits, expires 10 minutes after it is sent, and works once; sending a new one makes the previous one stop working. Five wrong attempts block codes for that email for 10 minutes. Sends share Users & access R43's limits, counted separately for Customers.
 - **R9** A Customer logs in with an email and a password on one step. A failed login shows the same message whatever the reason: a wrong email, a wrong password, an Inactive Customer, or a Customer without a password. Failed logins are limited as Users & access R55–R57 say (business ADR 0017).
 - **R10** A Customer may be logged in on several devices; a session ends 7 days after login, and logging out ends it on that device only.
-- **R11** A password has 8 to 128 characters (business ADR 0017).
+- **R11** A password has 6 to 128 characters, as a User's does (Users & access R19, business ADR 0017).
 - **R12** A Customer with a password recovers it through Forgot password: a Reset link that works once, expires 30 minutes after it is sent, and only the newest works. Saving the new password ends all their sessions and emails them that it changed. A request says the same thing whatever the email (Users & access R44).
 - **R13** A Customer changes their own name, phone number and saved Delivery address. They cannot change their email, or their password while logged in; they use Forgot password.
 - **R14** The Owner and Admins reach the Customers list. It shows each Customer's name, email, phone number, status, whether they have set a password, when they joined and how many Orders they have placed, newest first. It is searched by name, email or phone number and filtered by status.

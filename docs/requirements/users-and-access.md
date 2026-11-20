@@ -41,7 +41,7 @@ Everyone who works in the Shop uses this module to log in. It decides who has a 
 - **R16** A User is Active or Inactive, and only the Owner sets this. An Inactive User cannot log in, and their sessions end at once.
 - **R17** A User can be Deleted only by the Owner and only once Inactive (R54), so that what they did stays attributed to them (business ADR 0013).
 - **R18** The Owner's own status, Role and name cannot be changed in the system (ADR 0004).
-- **R19** A new password has 8 to 128 characters. A shorter one set before business ADR 0017 still works until it is replaced.
+- **R19** A password has 6 to 128 characters (business ADR 0017).
 - **R20** Every User sets their own password, the first time and after a reset. Nobody else sets or sees it.
 - **R21** A session ends 7 days after login, however much it is used.
 - **R22** A page the User's Role cannot reach does not appear in their navigation. Opened directly, it says they have no access and links to their landing page.
@@ -93,4 +93,4 @@ Everyone who works in the Shop uses this module to log in. It decides who has a 
 
 ## Open questions
 
-None. The owner confirmed the email setup/recovery design on 2026-11-11 in business ADR 0011 and accepted user enumeration for Login's email step on 2026-11-17 in business ADR 0012. The former questions on limiting failed logins and on password length (raised 2026-11-08 by the [security review](../security-notes.md)) were decided on 2026-11-20 in business ADR 0017 under the owner's task-scoped delegation, as R19 and R55–R57. The record becomes authoritative on merge; runtime rollout and web adoption are separate work.
+None. The owner confirmed the email setup/recovery design on 2026-11-11 in business ADR 0011 and accepted user enumeration for Login's email step on 2026-11-17 in business ADR 0012. The former questions on limiting failed logins and on password length (raised 2026-11-08 by the [security review](../security-notes.md)) were decided on 2026-11-20 in business ADR 0017 under the owner's task-scoped delegation, as R19 (the 6-character minimum stays, with a 128-character maximum) and R55–R57. The record becomes authoritative on merge; runtime rollout and web adoption are separate work.
