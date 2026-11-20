@@ -1,6 +1,6 @@
 # Stock movements
 
-Status: Confirmed (2026-11-07, agent under ADR 0005); amended by [business ADR 0013](../business-adr/0013-soft-delete.md)
+Status: Confirmed (2026-11-07, agent under ADR 0005); amended by [business ADR 0013](../business-adr/0013-soft-delete.md) and [business ADR 0014](../business-adr/0014-customers-and-the-storefront.md)
 
 ## Purpose
 
@@ -9,7 +9,7 @@ Every change to a Product's stock is a Stock movement, so the stock shown always
 ## Rules
 
 - **R1** A Product's stock is the sum of its Stock movements (ADR 0006).
-- **R2** A Stock movement has a kind, a Product, a change in stock, the stock after it, the time, the User who made it and an optional note of up to 200 characters.
+- **R2** A Stock movement has a kind, a Product, a change in stock, the stock after it, the time, who made it (a User; the Customer, for an Online order's movements; or the system, for a cancellation it made, Orders R25) and an optional note of up to 200 characters.
 - **R3** There are four kinds: Receive and Adjustment, made by a User on the Stock Movements page, and Order and Cancellation, made by Orders (Orders R7, R12).
 - **R4** A Receive adds a whole number of units, at least 1, to one Product's stock. Every Role can Receive.
 - **R5** An Adjustment changes one Product's stock up or down by a whole number of units other than 0, and needs a note saying why. Only the Owner and Admins make Adjustments.
@@ -18,7 +18,7 @@ Every change to a Product's stock is a Stock movement, so the stock shown always
 - **R8** A Stock movement cannot be edited or deleted. A mistake is corrected by an Adjustment.
 - **R9** Receive and Adjustment are not offered for an Archived Product (Products R12).
 - **R10** The Stock Movements page lists Stock movements newest first, and can be filtered by Product, by kind and by a range of the Shop's days (Dashboard & reports R1).
-- **R11** Each entry shows the time, the Product and its SKU, the kind, the change in stock, the stock after, the User and the note. One made by an Order links to that Order.
+- **R11** Each entry shows the time, the Product and its SKU, the kind, the change in stock, the stock after, who made it and the note. One made by an Order links to that Order.
 - **R12** Every Role sees every Stock movement.
 - **R13** Stock movements of a Deleted Product or Order stay in the list (R8). One made by a Deleted Order names its number but no longer opens it (business ADR 0013): the entry's Order says whether it is deleted, so no link is offered without a request per entry.
 

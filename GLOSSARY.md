@@ -10,9 +10,13 @@ The shared vocabulary of stock-flow, a small inventory and order system for one 
 The one business a stock-flow system serves.
 _Avoid_: Store, tenant, organization
 
+**StockFlow**:
+The app the Shop's Users work in, apart from the Storefront.
+_Avoid_: Back office, admin panel
+
 **User**:
-A person who can log in to the system. Every User has exactly one Role.
-_Avoid_: Account, member
+A person who works in the Shop and can log in to StockFlow. Every User has exactly one Role.
+_Avoid_: Account, member, employee
 
 **Role**:
 The level of a User, which sets what that User may reach.
@@ -43,8 +47,8 @@ A one-time link through which the first Owner sets their password at installatio
 _Avoid_: Invite link, reset link, temporary password
 
 **Login log**:
-The permanent list of logins, failed logins and logouts.
-_Avoid_: Audit log, login history
+The permanent list of logins, failed logins, blocked logins and logouts of Users and Customers.
+_Avoid_: Login history, sign-in log
 
 **First-time code**:
 A one-time code emailed to a new User to verify their email before they set their first password.
@@ -120,10 +124,74 @@ _Avoid_: Done, fulfilled, paid
 The status of an Order called off before it was Completed, whose stock went back.
 _Avoid_: Voided, deleted
 
+### Storefront
+
+**Storefront**:
+The Shop's public website, where anyone browses Products and Customers place Online orders.
+_Avoid_: Online store, shop page, customer portal
+
+**Customer**:
+A person who buys from the Shop and can log in to the Storefront. A Customer is not a User and has no Role.
+_Avoid_: Client, buyer, member, shopper, account
+
+**Verification code**:
+A one-time code emailed to a Customer to confirm their email before they set their password.
+_Avoid_: OTP, First-time code, activation code
+
+**Cart**:
+The Products and quantities a Customer has picked on the Storefront and not yet ordered.
+_Avoid_: Basket, bag, draft order
+
+**Online order**:
+An Order a Customer places on the Storefront.
+_Avoid_: Web order, e-order, customer order
+
+**In-shop order**:
+An Order a User creates in StockFlow.
+_Avoid_: Offline order, walk-in order, POS order
+
+**Pickup**:
+The way of receiving an Online order by collecting it at the Shop.
+_Avoid_: Collection, self-pickup, click and collect
+
+**Delivery**:
+The way of receiving an Online order by having it sent to a Delivery address.
+_Avoid_: Shipping, dispatch
+
+**Delivery address**:
+Where, and to whom, an Online order with Delivery is sent.
+_Avoid_: Shipping address, destination
+
+**Pay online**:
+The way of paying for an Online order through the payment page before it is Completed.
+_Avoid_: Prepaid, card payment, e-payment
+
+**Pay on receipt**:
+The way of paying for an Online order when the Customer receives it.
+_Avoid_: Cash on delivery, COD, pay later
+
+**Unpaid**:
+The payment state of a Pay online Order whose payment has not arrived.
+_Avoid_: Awaiting payment, outstanding
+
+**Paid**:
+The payment state of a Pay online Order whose payment has arrived.
+_Avoid_: Settled, charged
+
+**Refunded**:
+The payment state of a Paid Order that was Cancelled and whose payment went back to the Customer.
+_Avoid_: Reversed, returned
+
+### Activity log
+
+**Activity log**:
+The permanent list of changes made to Products, Orders, Users and Customers: who made each, when, and what changed.
+_Avoid_: Audit log, audit trail, history, change log
+
 ### Deleting
 
 **Deleted**:
-The status of a Product, User or Order the Shop has removed from sight and use. The record still exists, and what points at it still shows it.
+The status of a Product, User, Customer or Order the Shop has removed from sight and use. The record still exists, and what points at it still shows it.
 _Avoid_: Removed, Trashed, Erased
 
 ### Dashboard & reports
