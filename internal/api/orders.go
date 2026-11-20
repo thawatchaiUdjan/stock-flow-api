@@ -203,7 +203,7 @@ func registerOrders(api huma.API, deps Deps) {
 	}, func(ctx context.Context, input *orderNumberInput) (*orderOutput, error) {
 		got, err := deps.Store.GetOrder(ctx, input.Number)
 		if err == nil && got.Channel != store.ChannelInShop {
-			err = store.ErrNotFound // business ADR 0014
+			err = store.ErrNotFound // business ADR 0014, as inShopOrder
 		}
 		if err != nil {
 			return nil, orderError(ctx, "get order", err)

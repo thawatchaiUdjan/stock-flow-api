@@ -248,6 +248,12 @@ func TestStockMovementsNameTheActorAndLegacyListsOnlyUsers(t *testing.T) {
 	if m := v2.Movements[1]; m.Kind != "order" || m.Actor.Kind != "user" || m.Actor.ID == nil || m.Actor.Name != "Somchai" {
 		t.Errorf("User movement = %+v", m)
 	}
+	// A User cancelling the Online order makes a User movement the legacy list must not show:
+	// it links to an Order the legacy operations cannot open.
+	if rec := a.do(http.MethodPost, fmt.Sprintf("/v2/orders/%d/cancel", a.online), nil, a.owner); rec.Code != http.StatusOK {
+		t.Fatalf("cancel the Online order: status = %d; body %s", rec.Code, rec.Body)
+	}
+	legacy = decode[movementV2Body](t, a.do(http.MethodGet, "/stock-movements?offset=0", nil, a.staff))
 	if len(legacy.Movements) != 1 || legacy.Movements[0].Kind != "order" || *legacy.Total != 1 {
 		t.Errorf("legacy movements = %+v, want only the User's", legacy)
 	}

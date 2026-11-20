@@ -14,21 +14,24 @@ import (
 
 const countStockMovements = `-- name: CountStockMovements :one
 SELECT count(*) FROM stock_movements
+LEFT JOIN orders ON orders.id = stock_movements.order_id
 WHERE ($1::bigint IS NULL OR stock_movements.product_id = $1)
     AND ($2::text IS NULL OR stock_movements.kind = $2)
     AND ($3::timestamptz IS NULL OR stock_movements.at >= $3)
     AND ($4::timestamptz IS NULL OR stock_movements.at < $4)
-    AND (NOT $5::boolean OR stock_movements.user_id IS NOT NULL)
+    AND (NOT $5::boolean OR (stock_movements.user_id IS NOT NULL AND (orders.channel IS NULL OR orders.channel = 'in-shop')))
 `
 
 type CountStockMovementsParams struct {
-	ProductID pgtype.Int8
-	Kind      pgtype.Text
-	FromAt    pgtype.Timestamptz
-	UntilAt   pgtype.Timestamptz
-	UsersOnly bool
+	ProductID  pgtype.Int8
+	Kind       pgtype.Text
+	FromAt     pgtype.Timestamptz
+	UntilAt    pgtype.Timestamptz
+	InShopOnly bool
 }
 
+// in_shop_only is the legacy list: movements a User made, and none of an Online order, which
+// the legacy operations cannot open (business ADR 0014).
 // navigation-and-lists R6, context ADR 0009: count filters before page selection.
 func (q *Queries) CountStockMovements(ctx context.Context, arg CountStockMovementsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countStockMovements,
@@ -36,7 +39,7 @@ func (q *Queries) CountStockMovements(ctx context.Context, arg CountStockMovemen
 		arg.Kind,
 		arg.FromAt,
 		arg.UntilAt,
-		arg.UsersOnly,
+		arg.InShopOnly,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -150,20 +153,20 @@ WHERE ($1::bigint IS NULL OR stock_movements.product_id = $1)
     AND ($3::timestamptz IS NULL OR stock_movements.at >= $3)
     AND ($4::timestamptz IS NULL OR stock_movements.at < $4)
     AND ($5::bigint IS NULL OR stock_movements.id < $5)
-    AND (NOT $6::boolean OR stock_movements.user_id IS NOT NULL)
+    AND (NOT $6::boolean OR (stock_movements.user_id IS NOT NULL AND (orders.channel IS NULL OR orders.channel = 'in-shop')))
 ORDER BY stock_movements.id DESC
 LIMIT $8 OFFSET $7::integer
 `
 
 type ListStockMovementsParams struct {
-	ProductID pgtype.Int8
-	Kind      pgtype.Text
-	FromAt    pgtype.Timestamptz
-	UntilAt   pgtype.Timestamptz
-	Before    pgtype.Int8
-	UsersOnly bool
-	RowOffset int32
-	RowLimit  int32
+	ProductID  pgtype.Int8
+	Kind       pgtype.Text
+	FromAt     pgtype.Timestamptz
+	UntilAt    pgtype.Timestamptz
+	Before     pgtype.Int8
+	InShopOnly bool
+	RowOffset  int32
+	RowLimit   int32
 }
 
 type ListStockMovementsRow struct {
@@ -195,7 +198,7 @@ func (q *Queries) ListStockMovements(ctx context.Context, arg ListStockMovements
 		arg.FromAt,
 		arg.UntilAt,
 		arg.Before,
-		arg.UsersOnly,
+		arg.InShopOnly,
 		arg.RowOffset,
 		arg.RowLimit,
 	)

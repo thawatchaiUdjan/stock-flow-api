@@ -158,9 +158,9 @@ func (f *Fake) entry(m store.StockMovement) store.ListStockMovementsRow {
 }
 
 // navigation-and-lists R6: the fake applies the same filters before counting or paging.
-func matchesStockMovements(row store.StockMovement, arg store.CountStockMovementsParams) bool {
+func (f *Fake) matchesStockMovements(row store.StockMovement, arg store.CountStockMovementsParams) bool {
 	return (!arg.ProductID.Valid || row.ProductID == arg.ProductID.Int64) && (!arg.Kind.Valid || row.Kind == arg.Kind.String) && (!arg.FromAt.Valid || !row.At.Before(arg.FromAt.Time)) && (!arg.UntilAt.Valid || row.At.Before(arg.UntilAt.Time)) &&
-		(!arg.UsersOnly || row.UserID.Valid)
+		(!arg.InShopOnly || (row.UserID.Valid && f.inShopMovement(row)))
 }
 
 func (f *Fake) CountStockMovements(_ context.Context, arg store.CountStockMovementsParams) (int64, error) {
@@ -171,7 +171,7 @@ func (f *Fake) CountStockMovements(_ context.Context, arg store.CountStockMoveme
 	}
 	var total int64
 	for _, row := range f.movements {
-		if matchesStockMovements(row, arg) {
+		if f.matchesStockMovements(row, arg) {
 			total++
 		}
 	}
@@ -188,7 +188,7 @@ func (f *Fake) ListStockMovements(_ context.Context, arg store.ListStockMovement
 	var skipped int32
 	for i := len(f.movements) - 1; i >= 0 && len(rows) < int(arg.RowLimit); i-- {
 		row := f.movements[i]
-		if !matchesStockMovements(row, store.CountStockMovementsParams{ProductID: arg.ProductID, Kind: arg.Kind, FromAt: arg.FromAt, UntilAt: arg.UntilAt, UsersOnly: arg.UsersOnly}) || (arg.Before.Valid && row.ID >= arg.Before.Int64) {
+		if !f.matchesStockMovements(row, store.CountStockMovementsParams{ProductID: arg.ProductID, Kind: arg.Kind, FromAt: arg.FromAt, UntilAt: arg.UntilAt, InShopOnly: arg.InShopOnly}) || (arg.Before.Valid && row.ID >= arg.Before.Int64) {
 			continue
 		}
 		if skipped < arg.RowOffset {
@@ -198,4 +198,11 @@ func (f *Fake) ListStockMovements(_ context.Context, arg store.ListStockMovement
 		rows = append(rows, f.entry(row))
 	}
 	return rows, nil
+}
+
+// inShopMovement is false for a movement of an Online order, which the legacy operations
+// cannot open (business ADR 0014).
+func (f *Fake) inShopMovement(m store.StockMovement) bool {
+	o := f.orderByID(m.OrderID.Int64)
+	return o == nil || o.Channel == store.ChannelInShop
 }

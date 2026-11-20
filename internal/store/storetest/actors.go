@@ -68,7 +68,7 @@ func runActors(t *testing.T, newSubject func(t *testing.T) Subject) {
 		if cancelled.Status != store.OrderCancelled || cancelled.CancelledBy.Valid || !cancelled.CancelledBySystem {
 			t.Errorf("cancelled = %+v, want cancelled by the system", cancelled.ReadOrderRow)
 		}
-		byUser, err := s.Store.ListStockMovements(ctx, store.ListStockMovementsParams{UsersOnly: true, RowLimit: 100})
+		byUser, err := s.Store.ListStockMovements(ctx, store.ListStockMovementsParams{InShopOnly: true, RowLimit: 100})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -83,9 +83,34 @@ func runActors(t *testing.T, newSubject func(t *testing.T) Subject) {
 		if back.Kind != store.KindCancellation || back.UserID.Valid || !back.System || back.StockAfter != 10 {
 			t.Errorf("cancellation = %+v, want the system's, stock back to 10", back)
 		}
-		count, err := s.Store.CountStockMovements(ctx, store.CountStockMovementsParams{UsersOnly: true})
+		count, err := s.Store.CountStockMovements(ctx, store.CountStockMovementsParams{InShopOnly: true})
 		if err != nil || count != 1 {
 			t.Errorf("users-only count = %d, %v, want 1", count, err)
+		}
+	})
+
+	t.Run("leaves the movements of an Online order out of the legacy list", func(t *testing.T) {
+		s := newSubject(t)
+		user := s.AddUser(t, staff("somchai@example.com"))
+		tea := s.AddProduct(t, priced("Thai tea", "TEA-01", 4500, 10))
+		createOrder(t, s, newOrder(user, "", line(tea, 1)))
+		online := s.AddOnlineOrder(t, OnlineOrderSeed{Customer: "Somying", ProductID: tea.ID, Quantity: 2, Price: 4500, At: at})
+		// A User cancels the Online order: their movement links to an Order the legacy operations cannot open.
+		if _, err := s.Store.CancelOrder(ctx, store.FinishOrderParams{Number: online, UserID: user.ID, Now: clock(at)}); err != nil {
+			t.Fatal(err)
+		}
+
+		legacy, err := s.Store.ListStockMovements(ctx, store.ListStockMovementsParams{InShopOnly: true, RowLimit: 100})
+		if err != nil {
+			t.Fatal(err)
+		}
+		all, err := s.Store.ListStockMovements(ctx, store.ListStockMovementsParams{RowLimit: 100})
+		if err != nil {
+			t.Fatal(err)
+		}
+		count, err := s.Store.CountStockMovements(ctx, store.CountStockMovementsParams{InShopOnly: true})
+		if len(legacy) != 1 || legacy[0].Kind != store.KindOrder || len(all) != 2 || err != nil || count != 1 {
+			t.Errorf("legacy = %+v (count %d, %v), all = %+v, want only the In-shop order's movement", legacy, count, err, all)
 		}
 	})
 

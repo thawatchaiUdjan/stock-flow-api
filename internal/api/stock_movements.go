@@ -143,24 +143,24 @@ type movementPage struct {
 	total      *int64
 }
 
-// listMovements reads a page of the Stock movements: those Users made when usersOnly, else
-// every one (stock-movements R10, navigation-and-lists R6).
-func listMovements(ctx context.Context, deps Deps, input *listStockMovementsInput, usersOnly bool) (movementPage, error) {
+// listMovements reads a page of the Stock movements: those Users made, other than of an
+// Online order, when inShopOnly, else every one (stock-movements R10, navigation-and-lists R6).
+func listMovements(ctx context.Context, deps Deps, input *listStockMovementsInput, inShopOnly bool) (movementPage, error) {
 	limit := input.Limit
 	rowLimit := limit
 	if !input.Offset.Set {
 		rowLimit++
 	}
 	filter := store.CountStockMovementsParams{
-		ProductID: pgtype.Int8{Int64: input.ProductID, Valid: input.ProductID != 0},
-		Kind:      pgtype.Text{String: input.Kind, Valid: input.Kind != ""},
-		FromAt:    startOfShopDay(input.From, 0),
-		UntilAt:   startOfShopDay(input.To, 1), // to is a whole day: the movements before the next day starts
-		UsersOnly: usersOnly,
+		ProductID:  pgtype.Int8{Int64: input.ProductID, Valid: input.ProductID != 0},
+		Kind:       pgtype.Text{String: input.Kind, Valid: input.Kind != ""},
+		FromAt:     startOfShopDay(input.From, 0),
+		UntilAt:    startOfShopDay(input.To, 1), // to is a whole day: the movements before the next day starts
+		InShopOnly: inShopOnly,
 	}
 	// One more than the page, to know whether another page follows.
 	rows, err := deps.Store.ListStockMovements(ctx, store.ListStockMovementsParams{
-		ProductID: filter.ProductID, Kind: filter.Kind, FromAt: filter.FromAt, UntilAt: filter.UntilAt, UsersOnly: usersOnly,
+		ProductID: filter.ProductID, Kind: filter.Kind, FromAt: filter.FromAt, UntilAt: filter.UntilAt, InShopOnly: inShopOnly,
 		Before:    pgtype.Int8{Int64: input.Before, Valid: input.Before != 0},
 		RowOffset: int32(input.Offset.Value),
 		RowLimit:  int32(rowLimit),
@@ -203,7 +203,8 @@ func registerStockMovements(api huma.API, deps Deps) {
 		Middlewares: huma.Middlewares{anyRole(api, deps)},
 		Errors:      []int{http.StatusUnauthorized, http.StatusUnprocessableEntity, http.StatusInternalServerError},
 	}, func(ctx context.Context, input *listStockMovementsInput) (*listStockMovementsOutput, error) {
-		// business ADR 0014: the legacy list is of the movements Users made.
+		// business ADR 0014: the legacy list is of the movements Users made, bar those of an
+		// Online order, which the legacy operations cannot open.
 		page, err := listMovements(ctx, deps, input, true)
 		if err != nil {
 			return nil, err

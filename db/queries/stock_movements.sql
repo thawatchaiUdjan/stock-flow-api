@@ -56,15 +56,18 @@ WHERE (sqlc.narg(product_id)::bigint IS NULL OR stock_movements.product_id = sql
     AND (sqlc.narg(from_at)::timestamptz IS NULL OR stock_movements.at >= sqlc.narg(from_at))
     AND (sqlc.narg(until_at)::timestamptz IS NULL OR stock_movements.at < sqlc.narg(until_at))
     AND (sqlc.narg(before)::bigint IS NULL OR stock_movements.id < sqlc.narg(before))
-    AND (NOT sqlc.arg(users_only)::boolean OR stock_movements.user_id IS NOT NULL)
+    AND (NOT sqlc.arg(in_shop_only)::boolean OR (stock_movements.user_id IS NOT NULL AND (orders.channel IS NULL OR orders.channel = 'in-shop')))
 ORDER BY stock_movements.id DESC
 LIMIT sqlc.arg(row_limit) OFFSET sqlc.arg(row_offset)::integer;
 
+-- in_shop_only is the legacy list: movements a User made, and none of an Online order, which
+-- the legacy operations cannot open (business ADR 0014).
 -- navigation-and-lists R6, context ADR 0009: count filters before page selection.
 -- name: CountStockMovements :one
 SELECT count(*) FROM stock_movements
+LEFT JOIN orders ON orders.id = stock_movements.order_id
 WHERE (sqlc.narg(product_id)::bigint IS NULL OR stock_movements.product_id = sqlc.narg(product_id))
     AND (sqlc.narg(kind)::text IS NULL OR stock_movements.kind = sqlc.narg(kind))
     AND (sqlc.narg(from_at)::timestamptz IS NULL OR stock_movements.at >= sqlc.narg(from_at))
     AND (sqlc.narg(until_at)::timestamptz IS NULL OR stock_movements.at < sqlc.narg(until_at))
-    AND (NOT sqlc.arg(users_only)::boolean OR stock_movements.user_id IS NOT NULL);
+    AND (NOT sqlc.arg(in_shop_only)::boolean OR (stock_movements.user_id IS NOT NULL AND (orders.channel IS NULL OR orders.channel = 'in-shop')));

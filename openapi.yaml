@@ -133,7 +133,7 @@ components:
             - system
           type: string
         name:
-          description: The User's or Customer's name now; for the system, System.
+          description: The User's or Customer's name now; for the system, System. For a Customer the API cannot look up yet, the name on the Order (empty when it has none) or the email entered at login.
           type: string
       required:
         - kind

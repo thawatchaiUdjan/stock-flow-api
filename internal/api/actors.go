@@ -11,7 +11,7 @@ import (
 type actor struct {
 	Kind string `json:"kind" enum:"user,customer,system" doc:"A User in StockFlow, a Customer on the Storefront, or the system."`
 	ID   *int64 `json:"id" doc:"The User's or Customer's id; null for the system, and for a Customer the API cannot name yet."`
-	Name string `json:"name" doc:"The User's or Customer's name now; for the system, System."`
+	Name string `json:"name" doc:"The User's or Customer's name now; for the system, System. For a Customer the API cannot look up yet, the name on the Order (empty when it has none) or the email entered at login."`
 }
 
 const systemActorName = "System"
