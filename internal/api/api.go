@@ -103,6 +103,7 @@ func New(deps Deps) (http.Handler, huma.API) {
 	registerActivityLog(api, deps)
 	registerOrdersV2(api, deps)
 	registerHistoryV2(api, deps)
+	registerStorefront(api, deps)
 	registerStockMovements(api, deps)
 	registerOrders(api, deps)
 	registerReports(api, deps)
