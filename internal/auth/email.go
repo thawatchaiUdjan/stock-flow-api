@@ -23,7 +23,17 @@ func NewFirstTimeCode() string {
 // cannot resist offline enumeration. Binding the email prevents cross-User reuse.
 // ADR 0024 requires the independent secret and purpose binding.
 func HashFirstTimeCode(secret []byte, email, code string) []byte {
+	return hashCode("first-time-code", secret, email, code)
+}
+
+// HashSignupCode is the same for a Customer's Verification code (customers R8). Its own
+// purpose keeps a code for one email's sign-up from ever passing as a User's code.
+func HashSignupCode(secret []byte, email, code string) []byte {
+	return hashCode("signup-code", secret, email, code)
+}
+
+func hashCode(purpose string, secret []byte, email, code string) []byte {
 	h := hmac.New(sha256.New, secret)
-	h.Write([]byte("first-time-code\x00" + strings.ToLower(email) + "\x00" + code))
+	h.Write([]byte(purpose + "\x00" + strings.ToLower(email) + "\x00" + code))
 	return h.Sum(nil)
 }

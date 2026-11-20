@@ -9,9 +9,10 @@ VALUES (sqlc.arg(at), sqlc.arg(email), sqlc.narg(user_id), sqlc.arg(result), sql
 -- Owner pages through never shift a page. A NULL filter matches everything.
 -- name: ListLoginLog :many
 SELECT login_log.id, login_log.at, login_log.email, login_log.user_id, users.name AS user_name,
-    login_log.result, login_log.ip, login_log.user_agent, login_log.app, login_log.customer_id
+    login_log.result, login_log.ip, login_log.user_agent, login_log.app, login_log.customer_id, customers.name AS customer_name
 FROM login_log
 LEFT JOIN users ON users.id = login_log.user_id
+LEFT JOIN customers ON customers.id = login_log.customer_id
 WHERE (sqlc.narg(user_id)::bigint IS NULL OR login_log.user_id = sqlc.narg(user_id))
     AND (sqlc.narg(result)::text IS NULL OR login_log.result = sqlc.narg(result))
     AND (sqlc.narg(app)::text IS NULL OR login_log.app = sqlc.narg(app))

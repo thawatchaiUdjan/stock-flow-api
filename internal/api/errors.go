@@ -32,6 +32,9 @@ const (
 	codeUserNotInactive      = "user-not-inactive"
 	codeOrderPending         = "order-pending"
 	codeLoginBlocked         = "login-blocked"
+	codeCustomerEmailTaken   = "customer-email-taken"
+	codeSignupCodeInvalid    = "signup-code-invalid"
+	codeSignupInvalid        = "signup-invalid"
 )
 
 // errorCodes is the published list. Every code above must be in it.
@@ -55,6 +58,9 @@ var errorCodes = []struct{ code, meaning string }{
 	{codeUserNotInactive, "The User is Active: only an Inactive User can be deleted."},
 	{codeOrderPending, "The Order is Pending and still holds stock: cancel it before deleting it."},
 	{codeLoginBlocked, "Too many failed logins for this email or from this IP address; logins are temporarily blocked, even with the right password. Retry-After says when to try again. Says nothing about the email."},
+	{codeCustomerEmailTaken, "A Customer has this email already, in any letter case. Nothing was sent; the Storefront offers Log in and Forgot password."},
+	{codeSignupCodeInvalid, "The Verification code cannot be used: it is wrong, expired, used, replaced or blocked after five wrong attempts."},
+	{codeSignupInvalid, "The sign-up grant is expired, used or was never issued: verify a new code."},
 }
 
 func domainError(status int, code, detail string) *huma.ErrorModel {

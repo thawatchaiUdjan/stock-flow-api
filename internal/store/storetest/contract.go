@@ -28,6 +28,9 @@ type Store interface {
 type Subject struct {
 	Store   Store
 	AddUser func(t *testing.T, user store.User) store.User
+	// AddCustomer seeds a Customer in any status, with any password, because the port has no
+	// operation for it yet (a Deleted Customer: the Customers ticket).
+	AddCustomer func(t *testing.T, customer store.Customer) store.Customer
 	// AddProduct seeds a Product with any stock and Minimum stock, because the port has no
 	// operation that sets stock (context ADR 0006).
 	AddProduct func(t *testing.T, product store.Product) store.Product
@@ -58,6 +61,7 @@ func staff(email string) store.User {
 // the fake can't be more permissive than Postgres (docs/agents/testing.md).
 func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 	runEmailAuth(t, newSubject)
+	runCustomers(t, newSubject)
 	ctx := context.Background()
 
 	t.Run("finds a User by email whatever its letter case", func(t *testing.T) {

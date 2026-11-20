@@ -173,6 +173,40 @@ components:
         - change
         - note
       type: object
+    CompleteSignupInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/CompleteSignupInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        name:
+          description: The Customer's name, up to 120 characters, in any language.
+          maxLength: 120
+          pattern: "[^\\t-\\r \x85   - \u2028\u2029  　]"
+          patternDescription: contain a character that is not whitespace
+          type: string
+        password:
+          maxLength: 128
+          minLength: 6
+          type: string
+        phone:
+          description: 9 or 10 digits, starting with 0.
+          pattern: ^0[0-9]{8,9}$
+          patternDescription: be 9 or 10 digits starting with 0
+          type: string
+        token:
+          description: The sign-up grant a verified code was exchanged for.
+          type: string
+      required:
+        - token
+        - name
+        - phone
+        - password
+      type: object
     CreateEmailUserOutputBody:
       additionalProperties: false
       properties:
@@ -334,6 +368,35 @@ components:
         - user
         - setupLink
       type: object
+    CurrentCustomer:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/CurrentCustomer.json
+          format: uri
+          readOnly: true
+          type: string
+        email:
+          description: The Customer's email, as it was entered when they signed up.
+          type: string
+        id:
+          description: Identifies the Customer.
+          format: int64
+          type: integer
+        name:
+          description: The Customer's name, in any language.
+          type: string
+        phone:
+          description: "The Customer's phone number: 9 or 10 digits, starting with 0."
+          type: string
+      required:
+        - id
+        - name
+        - email
+        - phone
+      type: object
     CurrentUser:
       additionalProperties: false
       properties:
@@ -361,6 +424,25 @@ components:
         - name
         - email
         - role
+      type: object
+    CustomerLogInInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/CustomerLogInInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        email:
+          description: Compared without regard to letter case.
+          type: string
+        password:
+          type: string
+      required:
+        - email
+        - password
       type: object
     DashboardOutputBody:
       additionalProperties: false
@@ -553,6 +635,9 @@ components:
             user-not-inactive: The User is Active: only an Inactive User can be deleted.
             order-pending: The Order is Pending and still holds stock: cancel it before deleting it.
             login-blocked: Too many failed logins for this email or from this IP address; logins are temporarily blocked, even with the right password. Retry-After says when to try again. Says nothing about the email.
+            customer-email-taken: A Customer has this email already, in any letter case. Nothing was sent; the Storefront offers Log in and Forgot password.
+            signup-code-invalid: The Verification code cannot be used: it is wrong, expired, used, replaced or blocked after five wrong attempts.
+            signup-invalid: The sign-up grant is expired, used or was never issued: verify a new code.
           enum:
             - about:blank
             - login-failed
@@ -574,6 +659,9 @@ components:
             - user-not-inactive
             - order-pending
             - login-blocked
+            - customer-email-taken
+            - signup-code-invalid
+            - signup-invalid
           type: string
       type: object
     HealthOutputBody:
@@ -1487,6 +1575,43 @@ components:
         - quantitySold
         - sales
       type: object
+    RequestSignupCodeInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/RequestSignupCodeInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        email:
+          description: Compared without regard to letter case.
+          format: email
+          type: string
+      required:
+        - email
+      type: object
+    RequestSignupCodeOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/RequestSignupCodeOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        codeDelivery:
+          description: sent means provider acceptance, not inbox delivery; suppressed means no new code went out because of the send limits; failed means the provider refused. A previous unexpired code keeps working.
+          enum:
+            - sent
+            - failed
+            - suppressed
+          type: string
+      required:
+        - codeDelivery
+      type: object
     RestockProduct:
       additionalProperties: false
       properties:
@@ -2000,7 +2125,53 @@ components:
         - token
         - expiresAt
       type: object
+    VerifySignupCodeInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/VerifySignupCodeInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        code:
+          maxLength: 6
+          minLength: 6
+          pattern: ^[0-9]{6}$
+          type: string
+        email:
+          format: email
+          type: string
+      required:
+        - email
+        - code
+      type: object
+    VerifySignupCodeOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/VerifySignupCodeOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        expiresAt:
+          format: date-time
+          type: string
+        token:
+          description: Single-use sign-up grant. Keep out of paths, query strings and logs.
+          type: string
+      required:
+        - token
+        - expiresAt
+      type: object
   securitySchemes:
+    customer_session:
+      in: cookie
+      name: customer_session
+      type: apiKey
     session:
       in: cookie
       name: session
@@ -4416,6 +4587,124 @@ paths:
       summary: List the Stock movements of every actor
       tags:
         - Stock movements
+  /v2/storefront/login:
+    post:
+      description: "Starts a Customer session, which reaches only the Storefront. Every failure answers the same 401 `login-failed`, in the same time: a wrong email, a wrong password, an Inactive Customer, or a Customer with no password. After 5 failed logins for an email within 15 minutes, or 50 from an IP address within an hour, on the Storefront, answers 429 `login-blocked` with Retry-After, and records a `blocked` Login log entry. The Storefront's failures are counted apart from StockFlow's."
+      operationId: create-customer-session
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerLogInInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentCustomer"
+          description: OK
+          headers:
+            Set-Cookie:
+              schema:
+                description: Starts the Customer session.
+                type: string
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "429":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Too Many Requests
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      summary: Log a Customer in with an email and a password
+      tags:
+        - Storefront sessions
+  /v2/storefront/logout:
+    post:
+      description: The Customer's sessions on other devices stay live. Answers a plain 401 with no `customer_session` cookie, and 401 `session-ended` with a cookie that matches no live Customer session.
+      operationId: end-customer-session
+      responses:
+        "204":
+          description: No Content
+          headers:
+            Set-Cookie:
+              schema:
+                description: Removes the Customer session cookie.
+                type: string
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - customer_session: []
+      summary: End this device's Customer session
+      tags:
+        - Storefront sessions
+  /v2/storefront/me:
+    get:
+      description: Answers a plain 401 with no `customer_session` cookie, and 401 `session-ended` with a cookie that matches no live Customer session.
+      operationId: get-current-customer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentCustomer"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - customer_session: []
+      summary: Get the Customer who is logged in
+      tags:
+        - Storefront sessions
   /v2/storefront/products:
     get:
       description: "Public: needs no login. The Active Products only, sorted by name, searched by name or SKU, one bounded page at a time. Archived and Deleted Products never appear."
@@ -4471,6 +4760,144 @@ paths:
       summary: Browse the Storefront catalogue
       tags:
         - Storefront
+  /v2/storefront/signup/complete:
+    post:
+      description: "Creates the Customer, Active, and records the sign-up in the Activity log with the Customer as the actor. Starts no session: log in next. Answers 410 `signup-invalid` for an expired or used grant, 409 `customer-email-taken` when a Customer has the email by now, and 503 `email-auth-unavailable` when email is not configured."
+      operationId: complete-signup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteSignupInputBody"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentCustomer"
+          description: Created
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Conflict
+        "410":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Gone
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+        "503":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Service Unavailable
+      summary: Finish signing up with a name, a phone number and a password
+      tags:
+        - Storefront sign-up
+  /v2/storefront/signup/request:
+    post:
+      description: Nothing exists until the sign-up is completed. Answers 409 `customer-email-taken` when a Customer has the email, and sends nothing. Sends are limited as the Users' are (one per 60 seconds, five per email and 30 per IP address per hour), counted separately for Customers; a limited request still answers 202, with `codeDelivery` suppressed. Answers 503 `email-auth-unavailable` when email is not configured.
+      operationId: request-signup-code
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestSignupCodeInputBody"
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestSignupCodeOutputBody"
+          description: Accepted
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+        "503":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Service Unavailable
+      summary: Email a Verification code to start signing up
+      tags:
+        - Storefront sign-up
+  /v2/storefront/signup/verify:
+    post:
+      description: "Answers 410 `signup-code-invalid` for a wrong, expired, used, replaced or blocked code: five wrong attempts block codes for the email for 10 minutes. Answers 503 `email-auth-unavailable` when email is not configured. No Customer exists yet and no session starts."
+      operationId: verify-signup-code
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifySignupCodeInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifySignupCodeOutputBody"
+          description: OK
+        "410":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Gone
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+        "503":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Service Unavailable
+      summary: Exchange a Verification code for a sign-up grant
+      tags:
+        - Storefront sign-up
   /v2/users:
     post:
       description: "Answers 409 `email-taken` when the address is already registered, and 503 `email-auth-unavailable` when email access is not configured. Creation remains successful if sending fails. Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."

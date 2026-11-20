@@ -67,9 +67,7 @@ func loginLogEntryV2Of(row store.ListLoginLogRow) loginLogEntryV2 {
 		a := userActor(row.UserID, row.UserName)
 		entry.Actor = &a
 	case row.CustomerID.Valid:
-		// The Customer has no record yet (the Customers ticket adds it): the email entered
-		// stands in for the name.
-		entry.Actor = &actor{Kind: store.ActorCustomer, ID: &row.CustomerID.Int64, Name: row.Email}
+		entry.Actor = &actor{Kind: store.ActorCustomer, ID: &row.CustomerID.Int64, Name: row.CustomerName.String}
 	}
 	return entry
 }

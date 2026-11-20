@@ -9,6 +9,8 @@ const (
 	FirstTimeCode Kind = "first-time-code"
 	ResetLink     Kind = "reset-link"
 	ResetComplete Kind = "reset-complete"
+	// VerificationCode is a Customer's code to confirm their email on sign-up (customers R5, R18).
+	VerificationCode Kind = "verification-code"
 )
 
 // Message contains only the data for one transactional email, never a password.

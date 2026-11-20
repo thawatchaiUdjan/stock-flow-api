@@ -80,6 +80,15 @@ func loginLogEntry(ctx context.Context, deps Deps, result, email string, userID 
 	}
 }
 
+// customerLoginLogEntry is loginLogEntry for the Storefront: the Customer the email matches
+// (0 when it matches none), and the app (users-and-access R36).
+func customerLoginLogEntry(ctx context.Context, deps Deps, result, email string, customerID int64) store.AddLoginLogEntryParams {
+	entry := loginLogEntry(ctx, deps, result, email, 0)
+	entry.App = pgtype.Text{String: store.AppStorefront, Valid: true}
+	entry.CustomerID = pgtype.Int8{Int64: customerID, Valid: customerID != 0}
+	return entry
+}
+
 type loginLogUser struct {
 	ID   int64  `json:"id" doc:"Identifies the User."`
 	Name string `json:"name" doc:"The User's name now."`

@@ -37,6 +37,14 @@ type Store interface {
 	ReadEmailPasswordUser(context.Context, store.EmailPasswordParams) (store.User, error)
 	SetEmailPassword(context.Context, store.EmailPasswordParams, store.ActivityBy) (store.User, error)
 	ReserveEmailRequest(context.Context, store.EmailRequestParams) (bool, error)
+	GetCustomerByEmail(ctx context.Context, email string) (store.Customer, error)
+	IssueSignupCode(context.Context, store.SignupCodeParams) error
+	VerifySignupCode(context.Context, store.VerifyFirstTimeCodeParams) (bool, error)
+	ReadSignupGrant(context.Context, store.SignupGrantParams) error
+	CompleteSignup(context.Context, store.CompleteSignupParams, store.ActivityBy) (store.Customer, error)
+	StartCustomerSession(ctx context.Context, arg store.StartCustomerSessionParams) (bool, error)
+	GetCustomerSession(ctx context.Context, tokenHash []byte) (store.GetCustomerSessionRow, error)
+	EndCustomerSession(ctx context.Context, arg store.EndCustomerSessionParams) error
 	ReserveLoginCheck(context.Context, store.LoginCheckParams) (bool, time.Time, error)
 	LoginBlockedUntil(context.Context, store.LoginBlockParams) (time.Time, error)
 	GetProduct(ctx context.Context, id int64) (store.Product, error)
@@ -104,6 +112,7 @@ func New(deps Deps) (http.Handler, huma.API) {
 	registerOrdersV2(api, deps)
 	registerHistoryV2(api, deps)
 	registerStorefront(api, deps)
+	registerStorefrontAuth(api, deps)
 	registerStockMovements(api, deps)
 	registerOrders(api, deps)
 	registerReports(api, deps)

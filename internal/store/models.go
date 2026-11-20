@@ -28,6 +28,24 @@ type ActivityLog struct {
 	UserAgent   string
 }
 
+type Customer struct {
+	ID           int64
+	Name         string
+	Email        string
+	Phone        string
+	PasswordHash pgtype.Text
+	Status       string
+	CreatedAt    time.Time
+	DeletedAt    pgtype.Timestamptz
+	DeletedBy    pgtype.Int8
+}
+
+type CustomerSession struct {
+	TokenHash  []byte
+	CustomerID int64
+	ExpiresAt  time.Time
+}
+
 type EmailCredential struct {
 	UserID         int64
 	Kind           string
@@ -113,6 +131,15 @@ type SetupLink struct {
 	UserID    int64
 	TokenHash []byte
 	ExpiresAt time.Time
+}
+
+type SignupCredential struct {
+	Email          string
+	Kind           string
+	TokenHash      []byte
+	ExpiresAt      time.Time
+	FailedAttempts int32
+	BlockedUntil   time.Time
 }
 
 type StockMovement struct {

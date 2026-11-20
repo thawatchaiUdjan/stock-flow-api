@@ -28,10 +28,13 @@ func render(output string) error {
 	if err := os.MkdirAll(output, 0755); err != nil {
 		return err
 	}
-	for _, kind := range []email.Kind{email.FirstTimeCode, email.ResetLink, email.ResetComplete} {
+	for _, kind := range []email.Kind{email.FirstTimeCode, email.ResetLink, email.ResetComplete, email.VerificationCode} {
 		link := "https://stock-flow.example/password-setup"
 		if kind == email.ResetLink {
 			link = "https://stock-flow.example/reset-password#token=preview-token-not-valid"
+		}
+		if kind == email.VerificationCode {
+			link = "https://stock-flow.example/signup"
 		}
 		if kind == email.ResetComplete {
 			link = "https://stock-flow.example/login"

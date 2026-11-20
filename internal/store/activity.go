@@ -156,6 +156,18 @@ func (by ActivityBy) AsUser(u UserSnapshot) ActivityBy {
 	return by
 }
 
+// AsCustomer is by with the actor a Customer who acts on themselves, as at sign-up: the
+// Customer exists only once the change is made (activity-log R2).
+func (by ActivityBy) AsCustomer(c Customer) ActivityBy {
+	by.Actor = ActivityActor{Kind: ActorCustomer, ID: c.ID, Name: c.Name, Email: c.Email}
+	return by
+}
+
+// CustomerCreated is the entry of a Customer who signed up (activity-log R4).
+func CustomerCreated(c Customer, by ActivityBy) ActivityEntry {
+	return ActivityEntry{By: by, Action: ActionCreated, SubjectKind: SubjectCustomer, SubjectID: c.ID, SubjectName: c.Name, SubjectRef: c.Email}
+}
+
 // UserSnapshot is a User as an entry records them (activity-log R2, R11): their email and
 // name, as they were, and what a change may have altered.
 type UserSnapshot struct {
