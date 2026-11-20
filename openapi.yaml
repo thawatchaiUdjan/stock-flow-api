@@ -116,6 +116,30 @@ components:
         - name
         - ref
       type: object
+    Actor:
+      additionalProperties: false
+      properties:
+        id:
+          description: The User's or Customer's id; null for the system, and for a Customer the API cannot name yet.
+          format: int64
+          type:
+            - integer
+            - "null"
+        kind:
+          description: A User in StockFlow, a Customer on the Storefront, or the system.
+          enum:
+            - user
+            - customer
+            - system
+          type: string
+        name:
+          description: The User's or Customer's name now; for the system, System.
+          type: string
+      required:
+        - kind
+        - id
+        - name
+      type: object
     AdjustStockBody:
       additionalProperties: false
       properties:
@@ -651,6 +675,36 @@ components:
         - entries
         - nextBefore
       type: object
+    ListLoginLogV2OutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/ListLoginLogV2OutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        entries:
+          description: Newest first.
+          items:
+            $ref: "#/components/schemas/LoginLogEntryV2"
+          type: array
+        nextBefore:
+          description: Pass as before for the next page. Null on the last page.
+          format: int64
+          type:
+            - integer
+            - "null"
+        total:
+          description: "Always present on numbered success: exact count for all current filters before offset/limit, including 0. Omitted in legacy cursor mode."
+          format: int64
+          minimum: 0
+          type: integer
+      required:
+        - entries
+        - nextBefore
+      type: object
     ListOrdersOutputBody:
       additionalProperties: false
       properties:
@@ -665,6 +719,29 @@ components:
           description: This page's Orders, newest first.
           items:
             $ref: "#/components/schemas/OrderSummary"
+          type: array
+        total:
+          description: How many Orders match, whatever the page.
+          format: int64
+          type: integer
+      required:
+        - orders
+        - total
+      type: object
+    ListOrdersV2OutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/ListOrdersV2OutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        orders:
+          description: This page's Orders, newest first.
+          items:
+            $ref: "#/components/schemas/OrderSummaryV2"
           type: array
         total:
           description: How many Orders match, whatever the page.
@@ -711,6 +788,36 @@ components:
           description: Newest first.
           items:
             $ref: "#/components/schemas/StockMovement"
+          type: array
+        nextBefore:
+          description: Pass as before for the next page. Null on the last page.
+          format: int64
+          type:
+            - integer
+            - "null"
+        total:
+          description: "Always present on numbered success: exact count for all current filters before offset/limit, including 0. Omitted in legacy cursor mode."
+          format: int64
+          minimum: 0
+          type: integer
+      required:
+        - movements
+        - nextBefore
+      type: object
+    ListStockMovementsV2OutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/ListStockMovementsV2OutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        movements:
+          description: Newest first.
+          items:
+            $ref: "#/components/schemas/StockMovementV2"
           type: array
         nextBefore:
           description: Pass as before for the next page. Null on the last page.
@@ -802,6 +909,55 @@ components:
         - at
         - email
         - user
+        - result
+        - ip
+        - userAgent
+      type: object
+    LoginLogEntryV2:
+      additionalProperties: false
+      properties:
+        actor:
+          description: The User or Customer the email matches, or null when it matches none.
+          oneOf:
+            - $ref: "#/components/schemas/Actor"
+            - type: "null"
+        app:
+          description: StockFlow, for a User, or the Storefront, for a Customer.
+          enum:
+            - stockflow
+            - storefront
+          type: string
+        at:
+          description: When it happened.
+          format: date-time
+          type: string
+        email:
+          description: What was entered, as it was typed, even when it matches nobody. For a logout, the email of who logged out.
+          type: string
+        id:
+          description: Identifies the entry. Later entries have higher ids.
+          format: int64
+          type: integer
+        ip:
+          description: The visitor's IP address.
+          type: string
+        result:
+          description: A successful login, a failed login, a logout, or a login refused because of too many failed logins.
+          enum:
+            - login
+            - failed-login
+            - logout
+            - blocked
+          type: string
+        userAgent:
+          description: The browser or device, as it called itself. Empty when it sent nothing.
+          type: string
+      required:
+        - id
+        - at
+        - app
+        - email
+        - actor
         - result
         - ip
         - userAgent
@@ -904,6 +1060,20 @@ components:
         - at
         - by
       type: object
+    OrderFinishV2:
+      additionalProperties: false
+      properties:
+        at:
+          description: When.
+          format: date-time
+          type: string
+        by:
+          $ref: "#/components/schemas/Actor"
+          description: "Who: a User, a Customer or, for a cancellation, the system."
+      required:
+        - at
+        - by
+      type: object
     OrderLine:
       additionalProperties: false
       properties:
@@ -988,6 +1158,55 @@ components:
         - total
         - status
       type: object
+    OrderSummaryV2:
+      additionalProperties: false
+      properties:
+        channel:
+          description: In-shop or Online.
+          enum:
+            - in-shop
+            - online
+          type: string
+        createdAt:
+          description: When it was created.
+          format: date-time
+          type: string
+        customer:
+          description: The customer's name. Empty when there is none.
+          type: string
+        id:
+          description: Identifies the Order.
+          format: int64
+          type: integer
+        lineCount:
+          description: How many lines it has.
+          format: int32
+          type: integer
+        number:
+          description: The Order's number.
+          format: int64
+          type: integer
+        status:
+          description: Pending, completed or cancelled.
+          enum:
+            - pending
+            - completed
+            - cancelled
+          type: string
+        total:
+          description: The sum of its lines' amounts, in whole satang.
+          format: int64
+          type: integer
+      required:
+        - id
+        - number
+        - channel
+        - createdAt
+        - customer
+        - lineCount
+        - total
+        - status
+      type: object
     OrderUser:
       additionalProperties: false
       properties:
@@ -1001,6 +1220,83 @@ components:
       required:
         - id
         - name
+      type: object
+    OrderV2:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/OrderV2.json
+          format: uri
+          readOnly: true
+          type: string
+        cancelled:
+          description: When and by whom it was cancelled, or null.
+          oneOf:
+            - $ref: "#/components/schemas/OrderFinishV2"
+            - type: "null"
+        channel:
+          description: "In-shop: created by a User in StockFlow. Online: placed by a Customer on the Storefront."
+          enum:
+            - in-shop
+            - online
+          type: string
+        completed:
+          description: When and by whom it was completed, or null.
+          oneOf:
+            - $ref: "#/components/schemas/OrderFinishV2"
+            - type: "null"
+        createdAt:
+          description: When it was created.
+          format: date-time
+          type: string
+        createdBy:
+          $ref: "#/components/schemas/Actor"
+          description: "Who created it: a User for an In-shop order, the Customer for an Online order."
+        customer:
+          description: The customer's name, up to 120 characters. Empty when there is none.
+          type: string
+        id:
+          description: Identifies the Order. A Stock movement made by it carries this id.
+          format: int64
+          type: integer
+        lines:
+          description: In the order they were given. A Product is on one line at most.
+          items:
+            $ref: "#/components/schemas/OrderLine"
+          type: array
+        note:
+          description: Up to 200 characters. Empty when there is none.
+          type: string
+        number:
+          description: "The Order's number, shared by both channels: counting up from 1, never reused."
+          format: int64
+          type: integer
+        status:
+          description: Pending until completed or cancelled; completed and cancelled are final.
+          enum:
+            - pending
+            - completed
+            - cancelled
+          type: string
+        total:
+          description: The sum of the lines' amounts, in whole satang.
+          format: int64
+          type: integer
+      required:
+        - id
+        - number
+        - channel
+        - createdAt
+        - createdBy
+        - customer
+        - note
+        - lines
+        - total
+        - status
+        - completed
+        - cancelled
       type: object
     Product:
       additionalProperties: false
@@ -1428,6 +1724,58 @@ components:
         - id
         - name
       type: object
+    StockMovementV2:
+      additionalProperties: false
+      properties:
+        actor:
+          $ref: "#/components/schemas/Actor"
+          description: "Who made it: a User, a Customer or the system."
+        at:
+          description: When it was made.
+          format: date-time
+          type: string
+        change:
+          description: "The change in stock: above 0 adds units, below 0 takes them. Never 0."
+          format: int32
+          type: integer
+        id:
+          description: Identifies the movement. Later movements have higher ids.
+          format: int64
+          type: integer
+        kind:
+          description: receive and adjustment are made on the Stock Movements page; order and cancellation by Orders.
+          enum:
+            - receive
+            - adjustment
+            - order
+            - cancellation
+          type: string
+        note:
+          description: Why, in up to 200 characters. Empty when there is none; an adjustment always has one.
+          type: string
+        order:
+          description: The Order that made it, or null for receive and adjustment.
+          oneOf:
+            - $ref: "#/components/schemas/StockMovementOrder"
+            - type: "null"
+        product:
+          $ref: "#/components/schemas/StockMovementProduct"
+          description: The Product whose stock changed.
+        stockAfter:
+          description: The Product's stock just after this movement. Never below 0.
+          format: int32
+          type: integer
+      required:
+        - id
+        - at
+        - kind
+        - product
+        - change
+        - stockAfter
+        - actor
+        - note
+        - order
+      type: object
     UpdateProductBody:
       additionalProperties: false
       properties:
@@ -1595,7 +1943,7 @@ components:
       type: apiKey
 info:
   title: stock-flow API
-  version: 0.2.0
+  version: 0.3.0
 openapi: 3.1.0
 paths:
   /dashboard:
@@ -3251,6 +3599,108 @@ paths:
       summary: List the Activity log
       tags:
         - Activity log
+  /v2/login-log:
+    get:
+      description: "Every login, failed login, blocked login and logout of Users in StockFlow and of Customers on the Storefront, newest first, one page at a time. Entries cannot be changed or removed, and no operation does. Omit offset to preserve legacy cursor paging, including before/nextBefore and the default limit of 50. An explicitly supplied offset, including offset=0, selects numbered mode; offset and before together return 422. Numbered success includes a bounded page and total, always present and exact for all current filters before offset/limit, including total: 0 for no matches. An out-of-range page is empty with the actual matching total. total is omitted from legacy responses. Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: list-login-log-v2
+      parameters:
+        - description: Only the entries of this User.
+          explode: false
+          in: query
+          name: userId
+          schema:
+            description: Only the entries of this User.
+            format: int64
+            minimum: 1
+            type: integer
+        - description: Only the entries with this result.
+          explode: false
+          in: query
+          name: result
+          schema:
+            description: Only the entries with this result.
+            enum:
+              - login
+              - failed-login
+              - logout
+              - blocked
+            type: string
+        - description: Only the entries of this app. Leave out for both.
+          explode: false
+          in: query
+          name: app
+          schema:
+            description: Only the entries of this app. Leave out for both.
+            enum:
+              - stockflow
+              - storefront
+            type: string
+        - description: "The previous page's nextBefore: only the entries older than that. Leave out for the newest."
+          explode: false
+          in: query
+          name: before
+          schema:
+            description: "The previous page's nextBefore: only the entries older than that. Leave out for the newest."
+            format: int64
+            minimum: 1
+            type: integer
+        - description: Explicitly selects numbered mode, including 0. Omit for legacy cursor mode.
+          explode: false
+          in: query
+          name: offset
+          schema:
+            description: Explicitly selects numbered mode, including 0. Omit for legacy cursor mode.
+            format: int64
+            maximum: 2147483647
+            minimum: 0
+            type: integer
+        - description: The most entries on a page.
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: The most entries on a page.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListLoginLogV2OutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: List the Login log of both apps
+      tags:
+        - Login log
   /v2/login/identify:
     post:
       description: Login's email step. Answers `password` for an Active User with a password; `no-account` alike for an unknown email and an Inactive User; `installation-link` for the Owner before installation setup, sending nothing; and `first-time-code` for an Active Admin or Staff User without a password, after sending a First-time code within the shared send limits (`codeDelivery` says whether one went out). Answers 429 `login-check-limited` with Retry-After after 100 checks from one IP address in a rolling hour, and 503 `email-auth-unavailable` only where a code would be sent and email access is not configured. Not recorded in the Login log.
@@ -3295,6 +3745,311 @@ paths:
       summary: Say what an email may do next on Login
       tags:
         - Email access
+  /v2/orders:
+    get:
+      description: Every Role sees every Order, newest first, one page at a time, filtered by status, search and channel. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session.
+      operationId: list-orders-v2
+      parameters:
+        - description: Only the Order with this number, and the Orders whose customer contains this text in any letter case. Leave out, or leave blank, for all.
+          explode: false
+          in: query
+          name: search
+          schema:
+            description: Only the Order with this number, and the Orders whose customer contains this text in any letter case. Leave out, or leave blank, for all.
+            type: string
+        - description: Only the Orders with this status. Leave out for all.
+          explode: false
+          in: query
+          name: status
+          schema:
+            description: Only the Orders with this status. Leave out for all.
+            enum:
+              - pending
+              - completed
+              - cancelled
+            type: string
+        - description: Only the Orders of this channel. Leave out for both.
+          explode: false
+          in: query
+          name: channel
+          schema:
+            description: Only the Orders of this channel. Leave out for both.
+            enum:
+              - in-shop
+              - online
+            type: string
+        - description: The most Orders on a page.
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: The most Orders on a page.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - description: How many matching Orders to skip, to reach a later page.
+          explode: false
+          in: query
+          name: offset
+          schema:
+            default: 0
+            description: How many matching Orders to skip, to reach a later page.
+            format: int64
+            minimum: 0
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListOrdersV2OutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: List the Orders, In-shop and Online
+      tags:
+        - Orders
+  /v2/orders/{number}:
+    delete:
+      description: "Takes a completed or cancelled Order out of the Orders List and out of the Dashboard and Reports, for good: nothing restores it. Its stock movements stay, and no stock changes. Answers 409 `order-pending` when it is pending. Answers a plain 404 when there is no such Order. It also answers 404 when the Order is deleted already. Owner and Admins only: answers 403 to Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: delete-order-v2
+      parameters:
+        - description: The Order's number.
+          in: path
+          name: number
+          required: true
+          schema:
+            description: The Order's number.
+            format: int64
+            type: integer
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Delete an Order, In-shop or Online
+      tags:
+        - Orders
+    get:
+      description: Every Role sees every Order, with its lines and who acted. Answers a plain 404 when there is no such Order. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session.
+      operationId: get-order-v2
+      parameters:
+        - description: The Order's number.
+          in: path
+          name: number
+          required: true
+          schema:
+            description: The Order's number.
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderV2"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Get an Order, In-shop or Online
+      tags:
+        - Orders
+  /v2/orders/{number}/cancel:
+    post:
+      description: "Records who cancelled it and when, and gives each line's quantity back to its Product's stock as one cancellation movement per line, even to a Product Archived since. Answers 409 `order-not-pending` when it is completed or cancelled already, and a plain 409 when giving the stock back would take it past 2147483647. Answers a plain 404 when there is no such Order. Owner and Admins only: answers 403 to Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: cancel-order-v2
+      parameters:
+        - description: The Order's number.
+          in: path
+          name: number
+          required: true
+          schema:
+            description: The Order's number.
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderV2"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Cancel an Order, In-shop or Online
+      tags:
+        - Orders
+  /v2/orders/{number}/complete:
+    post:
+      description: Every Role may, once the customer has paid and has the goods. Records who completed it and when; no stock changes. Answers 409 `order-not-pending` when it is completed or cancelled already. Answers a plain 404 when there is no such Order. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session.
+      operationId: complete-order-v2
+      parameters:
+        - description: The Order's number.
+          in: path
+          name: number
+          required: true
+          schema:
+            description: The Order's number.
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderV2"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Not Found
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Conflict
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: Complete an Order, In-shop or Online
+      tags:
+        - Orders
   /v2/password-reset/password:
     post:
       description: Answers 410 `password-reset-invalid` for expired, used, replaced or ineligible links, and 503 `email-auth-unavailable` when not configured. Ends all sessions and starts none. Notification failure does not undo the change.
@@ -3495,6 +4250,108 @@ paths:
       summary: Exchange a First-time code for a password-setup grant
       tags:
         - Email access
+  /v2/stock-movements:
+    get:
+      description: "Every Role sees every Stock movement, made by a User, a Customer or the system, newest first, one page at a time. No operation changes or removes one. Omit offset to preserve legacy cursor paging, including before/nextBefore and the default limit of 50. An explicitly supplied offset, including offset=0, selects numbered mode; offset and before together return 422. Numbered success includes a bounded page and total, always present and exact for all current filters before offset/limit, including total: 0 for no matches. An out-of-range page is empty with the actual matching total. total is omitted from legacy responses. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: list-stock-movements-v2
+      parameters:
+        - description: Only the movements of this Product.
+          explode: false
+          in: query
+          name: productId
+          schema:
+            description: Only the movements of this Product.
+            format: int64
+            minimum: 1
+            type: integer
+        - description: Only the movements of this kind.
+          explode: false
+          in: query
+          name: kind
+          schema:
+            description: Only the movements of this kind.
+            enum:
+              - receive
+              - adjustment
+              - order
+              - cancellation
+            type: string
+        - description: Only the movements on or after this day of the Shop, in Bangkok time (YYYY-MM-DD).
+          explode: false
+          in: query
+          name: from
+          schema:
+            description: Only the movements on or after this day of the Shop, in Bangkok time (YYYY-MM-DD).
+            format: date
+            type: string
+        - description: Only the movements on or before this day of the Shop, in Bangkok time (YYYY-MM-DD).
+          explode: false
+          in: query
+          name: to
+          schema:
+            description: Only the movements on or before this day of the Shop, in Bangkok time (YYYY-MM-DD).
+            format: date
+            type: string
+        - description: "The previous page's nextBefore: only the movements older than that. Leave out for the newest."
+          explode: false
+          in: query
+          name: before
+          schema:
+            description: "The previous page's nextBefore: only the movements older than that. Leave out for the newest."
+            format: int64
+            minimum: 1
+            type: integer
+        - description: Explicitly selects numbered mode, including 0. Omit for legacy cursor mode.
+          explode: false
+          in: query
+          name: offset
+          schema:
+            description: Explicitly selects numbered mode, including 0. Omit for legacy cursor mode.
+            format: int64
+            maximum: 2147483647
+            minimum: 0
+            type: integer
+        - description: The most movements on a page.
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: The most movements on a page.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListStockMovementsV2OutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: List the Stock movements of every actor
+      tags:
+        - Stock movements
   /v2/users:
     post:
       description: "Answers 409 `email-taken` when the address is already registered, and 503 `email-auth-unavailable` when email access is not configured. Creation remains successful if sending fails. Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."

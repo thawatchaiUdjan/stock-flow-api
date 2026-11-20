@@ -318,9 +318,19 @@ func (f *Fake) addEntry(arg store.AddLoginLogEntryParams) error {
 	if arg.Result != store.ResultLogin && arg.Result != store.ResultFailedLogin && arg.Result != store.ResultLogout && arg.Result != store.ResultBlocked {
 		return errors.New("violates login_log_result_check")
 	}
+	app := store.AppStockFlow // the column's default
+	if arg.App.Valid {
+		app = arg.App.String
+	}
+	if app != store.AppStockFlow && app != store.AppStorefront {
+		return errors.New("violates login_log_app_check")
+	}
+	if arg.CustomerID.Valid && (app != store.AppStorefront || arg.UserID.Valid) {
+		return errors.New("violates login_log_customer_check")
+	}
 	entry := store.ListLoginLogRow{
 		ID: int64(len(f.log) + 1), At: arg.At, Email: arg.Email, UserID: arg.UserID,
-		Result: arg.Result, Ip: arg.Ip, UserAgent: arg.UserAgent,
+		Result: arg.Result, Ip: arg.Ip, UserAgent: arg.UserAgent, App: app, CustomerID: arg.CustomerID,
 	}
 	if arg.UserID.Valid {
 		user, ok := f.user(arg.UserID.Int64)
@@ -342,7 +352,7 @@ func (f *Fake) LoginBlockedUntil(_ context.Context, arg store.LoginBlockParams) 
 	}
 	var byEmail, byIP []time.Time
 	for _, row := range f.log {
-		if row.Result != store.ResultFailedLogin {
+		if row.Result != store.ResultFailedLogin || row.App != arg.App {
 			continue
 		}
 		if strings.EqualFold(row.Email, arg.Email) {
@@ -362,7 +372,8 @@ func (f *Fake) LoginBlockedUntil(_ context.Context, arg store.LoginBlockParams) 
 
 // navigation-and-lists R6: the fake applies the same filters before counting or paging.
 func matchesLoginLog(row store.ListLoginLogRow, arg store.CountLoginLogParams) bool {
-	return (!arg.UserID.Valid || row.UserID == arg.UserID) && (!arg.Result.Valid || row.Result == arg.Result.String)
+	return (!arg.UserID.Valid || row.UserID == arg.UserID) && (!arg.Result.Valid || row.Result == arg.Result.String) &&
+		(!arg.App.Valid || row.App == arg.App.String)
 }
 
 func (f *Fake) CountLoginLog(_ context.Context, arg store.CountLoginLogParams) (int64, error) {
@@ -390,7 +401,7 @@ func (f *Fake) ListLoginLog(_ context.Context, arg store.ListLoginLogParams) ([]
 	var skipped int32
 	for i := len(f.log) - 1; i >= 0 && len(rows) < int(arg.RowLimit); i-- {
 		row := f.log[i]
-		if !matchesLoginLog(row, store.CountLoginLogParams{UserID: arg.UserID, Result: arg.Result}) || (arg.Before.Valid && row.ID >= arg.Before.Int64) {
+		if !matchesLoginLog(row, store.CountLoginLogParams{UserID: arg.UserID, Result: arg.Result, App: arg.App}) || (arg.Before.Valid && row.ID >= arg.Before.Int64) {
 			continue
 		}
 		if skipped < arg.RowOffset {

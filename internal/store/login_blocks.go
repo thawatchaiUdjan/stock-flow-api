@@ -14,10 +14,11 @@ const (
 	IPFailureWindow    = time.Hour
 )
 
-// LoginBlockParams names who is logging in: the email as typed and the IP address.
+// LoginBlockParams names who is logging in: the email as typed, the IP address and the app,
+// which counts separately (users-and-access R57).
 type LoginBlockParams struct {
-	Email, IP string
-	At        time.Time
+	App, Email, IP string
+	At             time.Time
 }
 
 // LoginBlockedUntil says until when logins for the email or from the address are blocked,
@@ -26,11 +27,11 @@ type LoginBlockParams struct {
 func (s *Store) LoginBlockedUntil(ctx context.Context, arg LoginBlockParams) (time.Time, error) {
 	// A block ends 15 minutes after the last failure, and 5 failures within 15 minutes of
 	// each other start it, so no failure older than 30 minutes matters.
-	byEmail, err := s.RecentFailedLoginsByEmail(ctx, RecentFailedLoginsByEmailParams{Email: arg.Email, Since: arg.At.Add(-2 * EmailFailureWindow)})
+	byEmail, err := s.RecentFailedLoginsByEmail(ctx, RecentFailedLoginsByEmailParams{App: arg.App, Email: arg.Email, Since: arg.At.Add(-2 * EmailFailureWindow)})
 	if err != nil {
 		return time.Time{}, fmt.Errorf("recent failed logins by email: %w", err)
 	}
-	byIP, err := s.RecentFailedLoginsByIP(ctx, RecentFailedLoginsByIPParams{Ip: arg.IP, Since: arg.At.Add(-IPFailureWindow)})
+	byIP, err := s.RecentFailedLoginsByIP(ctx, RecentFailedLoginsByIPParams{App: arg.App, Ip: arg.IP, Since: arg.At.Add(-IPFailureWindow)})
 	if err != nil {
 		return time.Time{}, fmt.Errorf("recent failed logins by ip: %w", err)
 	}

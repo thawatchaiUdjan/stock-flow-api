@@ -53,7 +53,7 @@ type StockChange struct {
 	Change    int32
 }
 
-// MoveStockParams is one or more Stock movements of one kind, made at once by one User.
+// MoveStockParams is one or more Stock movements of one kind, made at once by one User, or by the system when UserID is 0 (stock-movements R2).
 // Now gives their time. It is called once the Products are held, so a movement that waited
 // for another is never timed before it, and newest first by id is newest first by time.
 type MoveStockParams struct {
@@ -136,7 +136,7 @@ func moveStock(ctx context.Context, q *Queries, arg MoveStockParams, orderID int
 	for i, c := range arg.Changes {
 		id, err := q.InsertStockMovement(ctx, InsertStockMovementParams{
 			Kind: arg.Kind, ProductID: c.ProductID, Change: c.Change, StockAfter: int32(after[i]),
-			At: at, UserID: arg.UserID, Note: arg.Note, OrderID: orderLink(orderID),
+			At: at, UserID: userOrSystem(arg.UserID), Note: arg.Note, OrderID: orderLink(orderID),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("insert stock movement: %w", err)

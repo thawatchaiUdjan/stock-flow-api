@@ -23,18 +23,20 @@ WHERE id = sqlc.arg(id) AND deleted_at IS NULL AND status <> 'pending';
 UPDATE orders SET status = 'completed', completed_by = sqlc.arg(user_id)::bigint, completed_at = sqlc.arg(at)::timestamptz
 WHERE id = sqlc.arg(id);
 
+-- Cancelled by a User, or by the system when user_id is NULL (orders R12).
 -- name: SetOrderCancelled :exec
-UPDATE orders SET status = 'cancelled', cancelled_by = sqlc.arg(user_id)::bigint, cancelled_at = sqlc.arg(at)::timestamptz
+UPDATE orders SET status = 'cancelled', cancelled_by = sqlc.narg(user_id)::bigint, cancelled_by_system = sqlc.narg(user_id)::bigint IS NULL,
+    cancelled_at = sqlc.arg(at)::timestamptz
 WHERE id = sqlc.arg(id);
 
 -- The Users' names as they are now.
 -- name: ReadOrder :one
-SELECT orders.id, orders.number, orders.customer, orders.note, orders.total, orders.status,
+SELECT orders.id, orders.number, orders.channel, orders.customer, orders.note, orders.total, orders.status,
     orders.created_by, creator.name AS created_by_name, orders.created_at,
     orders.completed_by, completer.name AS completed_by_name, orders.completed_at,
-    orders.cancelled_by, canceller.name AS cancelled_by_name, orders.cancelled_at
+    orders.cancelled_by, canceller.name AS cancelled_by_name, orders.cancelled_by_system, orders.cancelled_at
 FROM orders
-JOIN users creator ON creator.id = orders.created_by
+LEFT JOIN users creator ON creator.id = orders.created_by
 LEFT JOIN users completer ON completer.id = orders.completed_by
 LEFT JOIN users canceller ON canceller.id = orders.cancelled_by
 WHERE orders.number = $1 AND orders.deleted_at IS NULL;
@@ -52,12 +54,13 @@ ORDER BY order_lines.id;
 -- customer's name in any letter case; strpos rather than LIKE, so "%" and "_" mean
 -- themselves (orders R16). A NULL filter matches everything.
 -- name: ListOrders :many
-SELECT orders.id, orders.number, orders.created_at, orders.customer,
+SELECT orders.id, orders.number, orders.channel, orders.created_at, orders.customer,
     (SELECT count(*) FROM order_lines WHERE order_lines.order_id = orders.id)::integer AS line_count,
     orders.total, orders.status
 FROM orders
 WHERE orders.deleted_at IS NULL
     AND (sqlc.narg(status)::text IS NULL OR orders.status = sqlc.narg(status))
+    AND (sqlc.narg(channel)::text IS NULL OR orders.channel = sqlc.narg(channel))
     AND (sqlc.narg(search)::text IS NULL
         OR orders.number::text = sqlc.narg(search)
         OR strpos(lower(orders.customer), lower(sqlc.narg(search))) > 0)
@@ -68,6 +71,7 @@ LIMIT sqlc.arg(row_limit) OFFSET sqlc.arg(row_offset);
 SELECT count(*) FROM orders
 WHERE orders.deleted_at IS NULL
     AND (sqlc.narg(status)::text IS NULL OR orders.status = sqlc.narg(status))
+    AND (sqlc.narg(channel)::text IS NULL OR orders.channel = sqlc.narg(channel))
     AND (sqlc.narg(search)::text IS NULL
         OR orders.number::text = sqlc.narg(search)
         OR strpos(lower(orders.customer), lower(sqlc.narg(search))) > 0);

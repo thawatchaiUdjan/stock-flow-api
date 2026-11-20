@@ -61,7 +61,7 @@ func stockMovementOf(row store.ListStockMovementsRow) stockMovement {
 		ID: row.ID, At: row.At, Kind: row.Kind,
 		Product: stockMovementProduct{ID: row.ProductID, Name: row.ProductName, SKU: row.ProductSku},
 		Change:  row.Change, StockAfter: row.StockAfter,
-		User: stockMovementUser{ID: row.UserID, Name: row.UserName},
+		User: stockMovementUser{ID: row.UserID.Int64, Name: row.UserName.String},
 		Note: row.Note,
 	}
 	if row.OrderID.Valid {
@@ -136,6 +136,57 @@ type stockMovementOutput struct {
 	Body stockMovement
 }
 
+// movementPage is one page of the Stock movements list, in either paging mode.
+type movementPage struct {
+	rows       []store.ListStockMovementsRow
+	nextBefore *int64
+	total      *int64
+}
+
+// listMovements reads a page of the Stock movements: those Users made when usersOnly, else
+// every one (stock-movements R10, navigation-and-lists R6).
+func listMovements(ctx context.Context, deps Deps, input *listStockMovementsInput, usersOnly bool) (movementPage, error) {
+	limit := input.Limit
+	rowLimit := limit
+	if !input.Offset.Set {
+		rowLimit++
+	}
+	filter := store.CountStockMovementsParams{
+		ProductID: pgtype.Int8{Int64: input.ProductID, Valid: input.ProductID != 0},
+		Kind:      pgtype.Text{String: input.Kind, Valid: input.Kind != ""},
+		FromAt:    startOfShopDay(input.From, 0),
+		UntilAt:   startOfShopDay(input.To, 1), // to is a whole day: the movements before the next day starts
+		UsersOnly: usersOnly,
+	}
+	// One more than the page, to know whether another page follows.
+	rows, err := deps.Store.ListStockMovements(ctx, store.ListStockMovementsParams{
+		ProductID: filter.ProductID, Kind: filter.Kind, FromAt: filter.FromAt, UntilAt: filter.UntilAt, UsersOnly: usersOnly,
+		Before:    pgtype.Int8{Int64: input.Before, Valid: input.Before != 0},
+		RowOffset: int32(input.Offset.Value),
+		RowLimit:  int32(rowLimit),
+	})
+	if err != nil {
+		return movementPage{}, internalError(ctx, "list stock movements", err)
+	}
+	var page movementPage
+	// navigation-and-lists R6, context ADR 0009: legacy cursor responses omit totals.
+	if input.Offset.Set {
+		total, err := deps.Store.CountStockMovements(ctx, filter)
+		if err != nil {
+			return movementPage{}, internalError(ctx, "count stock movements", err)
+		}
+		page.total = &total
+	}
+	if len(rows) > limit {
+		rows = rows[:limit]
+		if !input.Offset.Set {
+			page.nextBefore = &rows[limit-1].ID
+		}
+	}
+	page.rows = rows
+	return page, nil
+}
+
 const stockChangeErrors = "Answers a plain 404 when there is no such Product, 409 `product-archived` when it is Archived, " +
 	"and 422 when the stock would grow past 2147483647."
 
@@ -152,42 +203,15 @@ func registerStockMovements(api huma.API, deps Deps) {
 		Middlewares: huma.Middlewares{anyRole(api, deps)},
 		Errors:      []int{http.StatusUnauthorized, http.StatusUnprocessableEntity, http.StatusInternalServerError},
 	}, func(ctx context.Context, input *listStockMovementsInput) (*listStockMovementsOutput, error) {
-		limit := input.Limit
-		rowLimit := limit
-		if !input.Offset.Set {
-			rowLimit++
-		}
-		// One more than the page, to know whether another page follows. to is a whole
-		// day: the movements before the next day starts.
-		rows, err := deps.Store.ListStockMovements(ctx, store.ListStockMovementsParams{
-			ProductID: pgtype.Int8{Int64: input.ProductID, Valid: input.ProductID != 0},
-			Kind:      pgtype.Text{String: input.Kind, Valid: input.Kind != ""},
-			FromAt:    startOfShopDay(input.From, 0),
-			UntilAt:   startOfShopDay(input.To, 1),
-			Before:    pgtype.Int8{Int64: input.Before, Valid: input.Before != 0},
-			RowOffset: int32(input.Offset.Value),
-			RowLimit:  int32(rowLimit),
-		})
+		// business ADR 0014: the legacy list is of the movements Users made.
+		page, err := listMovements(ctx, deps, input, true)
 		if err != nil {
-			return nil, internalError(ctx, "list stock movements", err)
+			return nil, err
 		}
 		out := &listStockMovementsOutput{}
-		// navigation-and-lists R6, context ADR 0009: legacy responses omit totals.
-		if input.Offset.Set {
-			total, err := deps.Store.CountStockMovements(ctx, store.CountStockMovementsParams{ProductID: pgtype.Int8{Int64: input.ProductID, Valid: input.ProductID != 0}, Kind: pgtype.Text{String: input.Kind, Valid: input.Kind != ""}, FromAt: startOfShopDay(input.From, 0), UntilAt: startOfShopDay(input.To, 1)})
-			if err != nil {
-				return nil, internalError(ctx, "count stock movements", err)
-			}
-			out.Body.Total = &total
-		}
-		out.Body.Movements = make([]stockMovement, 0, len(rows))
-		if len(rows) > limit {
-			rows = rows[:limit]
-			if !input.Offset.Set {
-				out.Body.NextBefore = &rows[limit-1].ID
-			}
-		}
-		for _, row := range rows {
+		out.Body.NextBefore, out.Body.Total = page.nextBefore, page.total
+		out.Body.Movements = make([]stockMovement, 0, len(page.rows))
+		for _, row := range page.rows {
 			out.Body.Movements = append(out.Body.Movements, stockMovementOf(row))
 		}
 		return out, nil

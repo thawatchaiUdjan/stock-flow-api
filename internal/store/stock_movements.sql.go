@@ -18,6 +18,7 @@ WHERE ($1::bigint IS NULL OR stock_movements.product_id = $1)
     AND ($2::text IS NULL OR stock_movements.kind = $2)
     AND ($3::timestamptz IS NULL OR stock_movements.at >= $3)
     AND ($4::timestamptz IS NULL OR stock_movements.at < $4)
+    AND (NOT $5::boolean OR stock_movements.user_id IS NOT NULL)
 `
 
 type CountStockMovementsParams struct {
@@ -25,6 +26,7 @@ type CountStockMovementsParams struct {
 	Kind      pgtype.Text
 	FromAt    pgtype.Timestamptz
 	UntilAt   pgtype.Timestamptz
+	UsersOnly bool
 }
 
 // navigation-and-lists R6, context ADR 0009: count filters before page selection.
@@ -34,6 +36,7 @@ func (q *Queries) CountStockMovements(ctx context.Context, arg CountStockMovemen
 		arg.Kind,
 		arg.FromAt,
 		arg.UntilAt,
+		arg.UsersOnly,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -44,12 +47,12 @@ const getStockMovement = `-- name: GetStockMovement :one
 SELECT stock_movements.id, stock_movements.kind, stock_movements.product_id,
     products.name AS product_name, products.sku AS product_sku,
     stock_movements.change, stock_movements.stock_after, stock_movements.at,
-    stock_movements.user_id, users.name AS user_name, stock_movements.note,
+    stock_movements.user_id, users.name AS user_name, stock_movements.system, stock_movements.note,
     stock_movements.order_id, orders.number AS order_number,
     (orders.deleted_at IS NOT NULL)::boolean AS order_deleted
 FROM stock_movements
 JOIN products ON products.id = stock_movements.product_id
-JOIN users ON users.id = stock_movements.user_id
+LEFT JOIN users ON users.id = stock_movements.user_id
 LEFT JOIN orders ON orders.id = stock_movements.order_id
 WHERE stock_movements.id = $1
 `
@@ -63,8 +66,9 @@ type GetStockMovementRow struct {
 	Change       int32
 	StockAfter   int32
 	At           time.Time
-	UserID       int64
-	UserName     string
+	UserID       pgtype.Int8
+	UserName     pgtype.Text
+	System       bool
 	Note         string
 	OrderID      pgtype.Int8
 	OrderNumber  pgtype.Int8
@@ -87,6 +91,7 @@ func (q *Queries) GetStockMovement(ctx context.Context, id int64) (GetStockMovem
 		&i.At,
 		&i.UserID,
 		&i.UserName,
+		&i.System,
 		&i.Note,
 		&i.OrderID,
 		&i.OrderNumber,
@@ -96,9 +101,9 @@ func (q *Queries) GetStockMovement(ctx context.Context, id int64) (GetStockMovem
 }
 
 const insertStockMovement = `-- name: InsertStockMovement :one
-INSERT INTO stock_movements (kind, product_id, change, stock_after, at, user_id, note, order_id)
+INSERT INTO stock_movements (kind, product_id, change, stock_after, at, user_id, system, note, order_id)
 VALUES ($1, $2, $3, $4, $5,
-    $6, $7, $8)
+    $6, $6::bigint IS NULL, $7, $8)
 RETURNING id
 `
 
@@ -108,7 +113,7 @@ type InsertStockMovementParams struct {
 	Change     int32
 	StockAfter int32
 	At         time.Time
-	UserID     int64
+	UserID     pgtype.Int8
 	Note       string
 	OrderID    pgtype.Int8
 }
@@ -133,20 +138,21 @@ const listStockMovements = `-- name: ListStockMovements :many
 SELECT stock_movements.id, stock_movements.kind, stock_movements.product_id,
     products.name AS product_name, products.sku AS product_sku,
     stock_movements.change, stock_movements.stock_after, stock_movements.at,
-    stock_movements.user_id, users.name AS user_name, stock_movements.note,
+    stock_movements.user_id, users.name AS user_name, stock_movements.system, stock_movements.note,
     stock_movements.order_id, orders.number AS order_number,
     (orders.deleted_at IS NOT NULL)::boolean AS order_deleted
 FROM stock_movements
 JOIN products ON products.id = stock_movements.product_id
-JOIN users ON users.id = stock_movements.user_id
+LEFT JOIN users ON users.id = stock_movements.user_id
 LEFT JOIN orders ON orders.id = stock_movements.order_id
 WHERE ($1::bigint IS NULL OR stock_movements.product_id = $1)
     AND ($2::text IS NULL OR stock_movements.kind = $2)
     AND ($3::timestamptz IS NULL OR stock_movements.at >= $3)
     AND ($4::timestamptz IS NULL OR stock_movements.at < $4)
     AND ($5::bigint IS NULL OR stock_movements.id < $5)
+    AND (NOT $6::boolean OR stock_movements.user_id IS NOT NULL)
 ORDER BY stock_movements.id DESC
-LIMIT $7 OFFSET $6::integer
+LIMIT $8 OFFSET $7::integer
 `
 
 type ListStockMovementsParams struct {
@@ -155,6 +161,7 @@ type ListStockMovementsParams struct {
 	FromAt    pgtype.Timestamptz
 	UntilAt   pgtype.Timestamptz
 	Before    pgtype.Int8
+	UsersOnly bool
 	RowOffset int32
 	RowLimit  int32
 }
@@ -168,8 +175,9 @@ type ListStockMovementsRow struct {
 	Change       int32
 	StockAfter   int32
 	At           time.Time
-	UserID       int64
-	UserName     string
+	UserID       pgtype.Int8
+	UserName     pgtype.Text
+	System       bool
 	Note         string
 	OrderID      pgtype.Int8
 	OrderNumber  pgtype.Int8
@@ -187,6 +195,7 @@ func (q *Queries) ListStockMovements(ctx context.Context, arg ListStockMovements
 		arg.FromAt,
 		arg.UntilAt,
 		arg.Before,
+		arg.UsersOnly,
 		arg.RowOffset,
 		arg.RowLimit,
 	)
@@ -208,6 +217,7 @@ func (q *Queries) ListStockMovements(ctx context.Context, arg ListStockMovements
 			&i.At,
 			&i.UserID,
 			&i.UserName,
+			&i.System,
 			&i.Note,
 			&i.OrderID,
 			&i.OrderNumber,

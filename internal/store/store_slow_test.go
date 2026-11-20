@@ -62,6 +62,30 @@ func addProduct(t *testing.T, pool *pgxpool.Pool, product store.Product) store.P
 	return product
 }
 
+// addOnlineOrder inserts an Online order as the Online order ticket will make one: no
+// creator User, a snapshot customer name, one line at its price (orders R22).
+func addOnlineOrder(t *testing.T, pool *pgxpool.Pool, seed storetest.OnlineOrderSeed) int64 {
+	t.Helper()
+	ctx := context.Background()
+	var id, number int64
+	status, completedBy, completedAt := store.OrderPending, pgtype.Int8{}, pgtype.Timestamptz{}
+	if seed.CompletedBy != 0 {
+		status, completedBy, completedAt = store.OrderCompleted, pgtype.Int8{Int64: seed.CompletedBy, Valid: true}, pgtype.Timestamptz{Time: seed.At, Valid: true}
+	}
+	err := pool.QueryRow(ctx,
+		`INSERT INTO orders (channel, customer, total, status, created_at, completed_by, completed_at)
+		VALUES ('online', $1, $2, $3, $4, $5, $6) RETURNING id, number`,
+		seed.Customer, int64(seed.Quantity)*seed.Price, status, seed.At, completedBy, completedAt).Scan(&id, &number)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO order_lines (order_id, product_id, quantity, price) VALUES ($1, $2, $3, $4)`,
+		id, seed.ProductID, seed.Quantity, seed.Price); err != nil {
+		t.Fatal(err)
+	}
+	return number
+}
+
 func assertViolates(t *testing.T, err error, constraint string) {
 	t.Helper()
 	var pgErr *pgconn.PgError
@@ -75,9 +99,10 @@ func TestRealStoreKeepsTheStoreContract(t *testing.T) {
 	storetest.Run(t, func(t *testing.T) storetest.Subject {
 		pool := open(t, testdb.URL(t))
 		return storetest.Subject{
-			Store:      store.NewStore(pool),
-			AddUser:    func(t *testing.T, user store.User) store.User { return addUser(t, pool, user) },
-			AddProduct: func(t *testing.T, product store.Product) store.Product { return addProduct(t, pool, product) },
+			Store:          store.NewStore(pool),
+			AddUser:        func(t *testing.T, user store.User) store.User { return addUser(t, pool, user) },
+			AddProduct:     func(t *testing.T, product store.Product) store.Product { return addProduct(t, pool, product) },
+			AddOnlineOrder: func(t *testing.T, seed storetest.OnlineOrderSeed) int64 { return addOnlineOrder(t, pool, seed) },
 		}
 	})
 }
@@ -1067,5 +1092,79 @@ func TestTheSchemaRefusesToChangeOrRemoveAnActivityLogEntry(t *testing.T) {
 	var action string
 	if err := pool.QueryRow(ctx, `SELECT action FROM activity_log`).Scan(&action); err != nil || action != "added" {
 		t.Errorf("entry = %q, %v, want it untouched", action, err)
+	}
+}
+
+// business ADR 0014: the migration that adds channels, system actors and apps applies over
+// the Orders, Stock movements and Login log already stored, keeps them valid as In-shop,
+// User-made and StockFlow's, and its down puts the schema back.
+func TestTheActorChannelAndAppMigrationKeepsStoredRowsAndReverses(t *testing.T) {
+	ctx := context.Background()
+	url := testdb.URL(t)
+	pool := open(t, url)
+	db, err := sql.Open("pgx", url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../db/migrations"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec := func(statement string, args ...any) error { _, err := pool.Exec(ctx, statement, args...); return err }
+	must := func(statement string, args ...any) {
+		t.Helper()
+		if err := exec(statement, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Back to the schema before the migration, holding one of each row.
+	if _, err := provider.DownTo(ctx, 14); err != nil {
+		t.Fatal(err)
+	}
+	must(`INSERT INTO users (name, email, role) VALUES ('Somchai', 'somchai@example.com', 'staff')`)
+	must(`INSERT INTO products (name, sku, unit, price, stock) VALUES ('Thai tea', 'TEA-01', 'box', 100, 5)`)
+	must(`INSERT INTO orders (total, status, created_by, created_at, cancelled_by, cancelled_at)
+		VALUES (100, 'cancelled', 1, now(), 1, now())`)
+	must(`INSERT INTO stock_movements (kind, product_id, change, stock_after, at, user_id, order_id)
+		VALUES ('order', 1, -1, 4, now(), 1, 1)`)
+	must(`INSERT INTO login_log (at, email, user_id, result, ip, user_agent)
+		VALUES (now(), 'somchai@example.com', 1, 'login', '203.0.113.7', 'Firefox')`)
+
+	if _, err := provider.UpByOne(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var channel, app string
+	var system, bySystem bool
+	if err := pool.QueryRow(ctx, `SELECT channel, cancelled_by_system FROM orders`).Scan(&channel, &bySystem); err != nil || channel != "in-shop" || bySystem {
+		t.Errorf("stored Order: channel = %q, by system = %v, %v, want In-shop and by a User", channel, bySystem, err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT system FROM stock_movements`).Scan(&system); err != nil || system {
+		t.Errorf("stored movement: system = %v, %v, want a User's", system, err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT app FROM login_log`).Scan(&app); err != nil || app != "stockflow" {
+		t.Errorf("stored entry: app = %q, %v, want StockFlow", app, err)
+	}
+
+	// The new rules: exactly one actor, and an In-shop order has a creator.
+	assertViolates(t, exec(`INSERT INTO stock_movements (kind, product_id, change, stock_after, at, order_id, system)
+		VALUES ('cancellation', 1, 1, 5, now(), 1, false)`), "stock_movements_actor_check")
+	assertViolates(t, exec(`INSERT INTO stock_movements (kind, product_id, change, stock_after, at, user_id, order_id, system)
+		VALUES ('cancellation', 1, 1, 5, now(), 1, 1, true)`), "stock_movements_actor_check")
+	assertViolates(t, exec(`INSERT INTO orders (total, status, created_by, created_at, cancelled_at) VALUES (1, 'cancelled', 1, now(), now())`), "orders_finished_check")
+	assertViolates(t, exec(`INSERT INTO orders (total, created_at) VALUES (1, now())`), "orders_creator_check")
+	assertViolates(t, exec(`INSERT INTO login_log (at, email, result, ip, user_agent, customer_id)
+		VALUES (now(), 'x@example.com', 'login', '203.0.113.7', 'Firefox', 3)`), "login_log_customer_check")
+	must(`INSERT INTO orders (channel, total, status, created_at, cancelled_at, cancelled_by_system)
+		VALUES ('online', 1, 'cancelled', now(), now(), true)`)
+	must(`DELETE FROM orders WHERE channel = 'online'`)
+
+	if _, err := provider.Down(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var pgErr *pgconn.PgError
+	if err := exec(`INSERT INTO orders (total, created_at) VALUES (1, now())`); !errors.As(err, &pgErr) || pgErr.Code != "23502" {
+		t.Errorf("after down, an Order with no creator: err = %v, want a not-null violation", err)
 	}
 }
