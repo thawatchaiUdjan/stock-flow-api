@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -23,6 +24,20 @@ const (
 	SubjectOrder    = "order"
 	SubjectUser     = "user"
 	SubjectCustomer = "customer"
+)
+
+// What was done to a User or an Order (activity-log R4).
+const (
+	ActionCreated         = "created"
+	ActionNameChanged     = "name-changed"
+	ActionRoleChanged     = "role-changed"
+	ActionMadeInactive    = "made-inactive"
+	ActionMadeActive      = "made-active"
+	ActionPasswordSet     = "password-set"
+	ActionPasswordReset   = "password-reset"
+	ActionSetupLinkIssued = "setup-link-issued"
+	ActionCompleted       = "completed"
+	ActionCancelled       = "cancelled"
 )
 
 // What was done to a Product (activity-log R4).
@@ -126,4 +141,82 @@ func ProductEdited(before, after Product, by ActivityBy) []ActivityEntry {
 		entries = append(entries, productEntry(after, action, by, nil))
 	}
 	return entries
+}
+
+// RecordActivity writes an entry on this transaction, for a change that is made outside the
+// store, as the installation command makes the Owner (activity-log R3).
+func (q *Queries) RecordActivity(ctx context.Context, e ActivityEntry) error {
+	return q.addActivity(ctx, e)
+}
+
+// AsUser is by with the actor a User who acts on themselves, as when a password is set
+// through a Setup link or a Reset link: the person is only known once the link is read.
+func (by ActivityBy) AsUser(u UserSnapshot) ActivityBy {
+	by.Actor = ActivityActor{Kind: ActorUser, ID: u.ID, Name: u.Name, Email: u.Email, Role: u.Role}
+	return by
+}
+
+// UserSnapshot is a User as an entry records them (activity-log R2, R11): their email and
+// name, as they were, and what a change may have altered.
+type UserSnapshot struct {
+	ID                        int64
+	Name, Email, Role, Status string
+}
+
+func userEntry(u UserSnapshot, action string, by ActivityBy, changes []FieldChange) ActivityEntry {
+	return ActivityEntry{By: by, Action: action, SubjectKind: SubjectUser, SubjectID: u.ID, SubjectName: u.Name, SubjectRef: u.Email, Changes: changes}
+}
+
+// UserCreated is the entry of a new User, with their Role (activity-log R4).
+func UserCreated(u UserSnapshot, by ActivityBy) ActivityEntry {
+	return userEntry(u, ActionCreated, by, []FieldChange{{Field: "role", Before: nil, After: u.Role}})
+}
+
+// UserDeleted, UserPasswordSet, UserPasswordReset and UserSetupLinkIssued carry no field: a
+// password, code, link or token is never in an entry (activity-log R6).
+func UserDeleted(u UserSnapshot, by ActivityBy) ActivityEntry {
+	return userEntry(u, ActionDeleted, by, nil)
+}
+
+func UserPasswordSet(u UserSnapshot, by ActivityBy) ActivityEntry {
+	return userEntry(u, ActionPasswordSet, by, nil)
+}
+
+func UserPasswordReset(u UserSnapshot, by ActivityBy) ActivityEntry {
+	return userEntry(u, ActionPasswordReset, by, nil)
+}
+
+func UserSetupLinkIssued(u UserSnapshot, by ActivityBy) ActivityEntry {
+	return userEntry(u, ActionSetupLinkIssued, by, nil)
+}
+
+// UserEdited is the entries of a change to a User (activity-log R4): their name changed,
+// their Role changed, and made Inactive or Active, each with its before and after where it
+// has them. A change that changed nothing has none. They name the User as they are after.
+func UserEdited(before, after UserSnapshot, by ActivityBy) []ActivityEntry {
+	var entries []ActivityEntry
+	if before.Name != after.Name {
+		entries = append(entries, userEntry(after, ActionNameChanged, by, []FieldChange{{Field: "name", Before: before.Name, After: after.Name}}))
+	}
+	if before.Role != after.Role {
+		entries = append(entries, userEntry(after, ActionRoleChanged, by, []FieldChange{{Field: "role", Before: before.Role, After: after.Role}}))
+	}
+	if before.Status != after.Status {
+		action := ActionMadeActive
+		if after.Status == "inactive" {
+			action = ActionMadeInactive
+		}
+		entries = append(entries, userEntry(after, action, by, nil))
+	}
+	return entries
+}
+
+// OrderEntry is the entry of a change to an Order: created, completed, cancelled (by whom
+// is the entry's actor, a User or the system) or Deleted. It names the Order by its
+// customer and its number as they were (activity-log R2, R11).
+func OrderEntry(d ReadOrderRow, action string, by ActivityBy) ActivityEntry {
+	return ActivityEntry{
+		By: by, Action: action, SubjectKind: SubjectOrder, SubjectID: d.ID, SubjectName: d.Customer,
+		SubjectRef: strconv.FormatInt(d.Number, 10),
+	}
 }

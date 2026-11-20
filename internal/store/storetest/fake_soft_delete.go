@@ -32,7 +32,7 @@ func (f *Fake) DeleteProduct(_ context.Context, arg store.DeleteParams, by store
 	return nil
 }
 
-func (f *Fake) DeleteUser(_ context.Context, arg store.DeleteParams) error {
+func (f *Fake) DeleteUser(_ context.Context, arg store.DeleteParams, by store.ActivityBy) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
@@ -47,12 +47,17 @@ func (f *Fake) DeleteUser(_ context.Context, arg store.DeleteParams) error {
 	case target.Status != "inactive":
 		return store.ErrUserNotInactive
 	}
+	entry := store.UserDeleted(snapshot(*target), by)
+	if err := f.checkActivity(entry); err != nil {
+		return err
+	}
 	target.DeletedAt = pgtype.Timestamptz{Time: arg.At, Valid: true}
 	target.DeletedBy = pgtype.Int8{Int64: arg.UserID, Valid: true}
+	f.record(entry)
 	return nil
 }
 
-func (f *Fake) DeleteOrder(_ context.Context, arg store.DeleteOrderParams) error {
+func (f *Fake) DeleteOrder(_ context.Context, arg store.DeleteOrderParams, by store.ActivityBy) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
@@ -65,7 +70,12 @@ func (f *Fake) DeleteOrder(_ context.Context, arg store.DeleteOrderParams) error
 	case order.Status == store.OrderPending:
 		return store.ErrOrderPending
 	}
+	entry := store.OrderEntry(f.detail(*order).ReadOrderRow, store.ActionDeleted, by)
+	if err := f.checkActivity(entry); err != nil {
+		return err
+	}
 	order.DeletedAt = pgtype.Timestamptz{Time: arg.At, Valid: true}
 	order.DeletedBy = pgtype.Int8{Int64: arg.UserID, Valid: true}
+	f.record(entry)
 	return nil
 }

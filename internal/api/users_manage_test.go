@@ -499,11 +499,11 @@ type failingChanges struct {
 	err error
 }
 
-func (f failingChanges) UpdateUser(context.Context, store.ChangeUserParams) (store.ChangeUserRow, error) {
+func (f failingChanges) UpdateUser(context.Context, store.ChangeUserParams, store.ActivityBy) (store.ChangeUserRow, error) {
 	return store.ChangeUserRow{}, f.err
 }
 
-func (f failingChanges) ResetPassword(context.Context, store.IssueSetupLinkParams) error {
+func (f failingChanges) ResetPassword(context.Context, store.IssueSetupLinkParams, store.ActivityBy) error {
 	return f.err
 }
 

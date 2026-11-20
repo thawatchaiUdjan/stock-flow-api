@@ -19,8 +19,9 @@ var ErrOwnerDetailsMissing = errors.New("no Owner yet: a name and an email are n
 // OwnerStore is what issuing the Owner's Setup link needs from the database.
 type OwnerStore interface {
 	GetOwner(ctx context.Context) (store.User, error)
-	CreateOwner(ctx context.Context, arg store.CreateOwnerParams) error
+	CreateOwner(ctx context.Context, arg store.CreateOwnerParams) (created int64, err error)
 	IssueSetupLink(ctx context.Context, arg store.IssueSetupLinkParams) error
+	RecordActivity(ctx context.Context, entry store.ActivityEntry) error
 }
 
 // SetupLink is an issued link. Token exists only here: the database keeps its hash.
@@ -39,19 +40,29 @@ func NewSetupLink(now time.Time) SetupLink {
 
 // IssueOwnerSetupLink creates the Owner when there is none, and issues their Setup link,
 // which replaces any earlier one (users-and-access R9, R34). name and email are used only
-// when creating: an existing Owner keeps theirs. Run it in one transaction.
+// when creating: an existing Owner keeps theirs. Each is an Activity log entry made by the
+// installation (activity-log R4). Run it in one transaction, so a change and its entry are
+// saved together (activity-log R3).
 func IssueOwnerSetupLink(ctx context.Context, q OwnerStore, now time.Time, name, email string) (SetupLink, error) {
+	by := store.ActivityBy{At: now, Actor: store.ActivityActor{Kind: store.ActorInstallation, Name: "Installation"}}
 	owner, err := q.GetOwner(ctx)
 	if errors.Is(err, store.ErrNotFound) {
 		name, email = strings.TrimSpace(name), strings.TrimSpace(email)
 		if name == "" || email == "" { // users-and-access R14
 			return SetupLink{}, ErrOwnerDetailsMissing
 		}
-		if err := q.CreateOwner(ctx, store.CreateOwnerParams{Name: name, Email: email}); err != nil {
+		var created int64
+		if created, err = q.CreateOwner(ctx, store.CreateOwnerParams{Name: name, Email: email}); err != nil {
 			return SetupLink{}, fmt.Errorf("create owner: %w", err)
 		}
 		// Read back, not assumed: a concurrent install may have won.
 		owner, err = q.GetOwner(ctx)
+		// Only the install that made the Owner records it: the loser created nothing.
+		if err == nil && created > 0 {
+			if err := q.RecordActivity(ctx, store.UserCreated(ownerSnapshot(owner), by)); err != nil {
+				return SetupLink{}, fmt.Errorf("record owner created: %w", err)
+			}
+		}
 	}
 	if err != nil {
 		return SetupLink{}, fmt.Errorf("get owner: %w", err)
@@ -65,5 +76,12 @@ func IssueOwnerSetupLink(ctx context.Context, q OwnerStore, now time.Time, name,
 	if err != nil {
 		return SetupLink{}, fmt.Errorf("issue setup link: %w", err)
 	}
+	if err := q.RecordActivity(ctx, store.UserSetupLinkIssued(ownerSnapshot(owner), by)); err != nil {
+		return SetupLink{}, fmt.Errorf("record setup link issued: %w", err)
+	}
 	return link, nil
+}
+
+func ownerSnapshot(u store.User) store.UserSnapshot {
+	return store.UserSnapshot{ID: u.ID, Name: u.Name, Email: u.Email, Role: u.Role, Status: u.Status}
 }

@@ -173,7 +173,7 @@ func (s *Store) ReadEmailPasswordUser(ctx context.Context, arg EmailPasswordPara
 
 // SetEmailPassword consumes a grant/link, changes the password and removes every
 // credential/session atomically (users-and-access R30, R31, R48).
-func (s *Store) SetEmailPassword(ctx context.Context, arg EmailPasswordParams) (updated User, err error) {
+func (s *Store) SetEmailPassword(ctx context.Context, arg EmailPasswordParams, by ActivityBy) (updated User, err error) {
 	err = InTx(ctx, s.pool, func(q *Queries) error {
 		user, err := q.GetEmailCredentialUser(ctx, GetEmailCredentialUserParams{Kind: arg.Kind, TokenHash: arg.TokenHash, At: arg.At})
 		if err != nil {
@@ -204,7 +204,25 @@ func (s *Store) SetEmailPassword(ctx context.Context, arg EmailPasswordParams) (
 		}
 		user.PasswordHash.String, user.PasswordHash.Valid = arg.PasswordHash, true
 		updated = user
-		return nil
+		// activity-log R4: a first password set, or a reset, by the User themselves.
+		who := UserSnapshot{ID: user.ID, Name: user.Name, Email: user.Email, Role: user.Role, Status: user.Status}
+		if arg.Kind == ResetLink {
+			return q.addActivity(ctx, UserPasswordReset(who, by.AsUser(who)))
+		}
+		return q.addActivity(ctx, UserPasswordSet(who, by.AsUser(who)))
 	})
 	return updated, err
+}
+
+// CreateEmailUser creates a User with no password, and writes their entry in the same
+// transaction (activity-log R3, R4). It answers ErrNotFound when the email is in use.
+func (s *Store) CreateEmailUser(ctx context.Context, arg CreateEmailUserParams, by ActivityBy) (created User, err error) {
+	err = InTx(ctx, s.pool, func(q *Queries) error {
+		var err error
+		if created, err = q.CreateEmailUser(ctx, arg); err != nil {
+			return err
+		}
+		return q.addActivity(ctx, UserCreated(UserSnapshot{ID: created.ID, Name: created.Name, Email: created.Email, Role: created.Role, Status: created.Status}, by))
+	})
+	return created, err
 }

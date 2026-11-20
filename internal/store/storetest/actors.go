@@ -60,7 +60,7 @@ func runActors(t *testing.T, newSubject func(t *testing.T) Subject) {
 		tea := s.AddProduct(t, priced("Thai tea", "TEA-01", 4500, 10))
 		order := createOrder(t, s, newOrder(user, "", line(tea, 3)))
 
-		cancelled, err := s.Store.CancelOrder(ctx, store.FinishOrderParams{Number: order.Number, Now: clock(at.Add(time.Hour))})
+		cancelled, err := s.Store.CancelOrder(ctx, store.FinishOrderParams{Number: order.Number, Now: clock(at.Add(time.Hour))}, SystemBy)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +96,7 @@ func runActors(t *testing.T, newSubject func(t *testing.T) Subject) {
 		createOrder(t, s, newOrder(user, "", line(tea, 1)))
 		online := s.AddOnlineOrder(t, OnlineOrderSeed{Customer: "Somying", ProductID: tea.ID, Quantity: 2, Price: 4500, At: at})
 		// A User cancels the Online order: their movement links to an Order the legacy operations cannot open.
-		if _, err := s.Store.CancelOrder(ctx, store.FinishOrderParams{Number: online, UserID: user.ID, Now: clock(at)}); err != nil {
+		if _, err := s.Store.CancelOrder(ctx, store.FinishOrderParams{Number: online, UserID: user.ID, Now: clock(at)}, SystemBy); err != nil {
 			t.Fatal(err)
 		}
 
@@ -120,7 +120,7 @@ func runActors(t *testing.T, newSubject func(t *testing.T) Subject) {
 		tea := s.AddProduct(t, priced("Thai tea", "TEA-01", 4500, 10))
 		order := createOrder(t, s, newOrder(user, "", line(tea, 1)))
 
-		if _, err := s.Store.CompleteOrder(ctx, store.FinishOrderParams{Number: order.Number, Now: clock(at)}); err == nil {
+		if _, err := s.Store.CompleteOrder(ctx, store.FinishOrderParams{Number: order.Number, Now: clock(at)}, SystemBy); err == nil {
 			t.Error("the system completed an Order: err = nil")
 		}
 		if got, err := s.Store.GetOrder(ctx, order.Number); err != nil || got.Status != store.OrderPending {

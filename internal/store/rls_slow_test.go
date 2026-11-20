@@ -155,7 +155,8 @@ func TestARoleThatDoesNotOwnTheTablesReachesNothing(t *testing.T) {
 	}
 
 	err = asAnon(func(tx pgx.Tx) error {
-		return store.New(tx).CreateOwner(ctx, store.CreateOwnerParams{Name: "Other", Email: "other@example.com"})
+		_, err := store.New(tx).CreateOwner(ctx, store.CreateOwnerParams{Name: "Other", Email: "other@example.com"})
+		return err
 	})
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Code != "42501" {

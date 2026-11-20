@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
+	"github.com/thawatchaiUdjan/stock-flow-api/internal/store/storetest"
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/testdb"
 )
 
@@ -133,7 +134,7 @@ func TestConcurrentResetCompletionsConsumeTheLinkOnlyOnce(t *testing.T) {
 	for i := range 8 {
 		group.Go(func() {
 			<-start
-			_, err := s.SetEmailPassword(context.Background(), store.EmailPasswordParams{Kind: store.ResetLink, TokenHash: []byte("reset"), At: now, PasswordHash: fmt.Sprint(i)})
+			_, err := s.SetEmailPassword(context.Background(), store.EmailPasswordParams{Kind: store.ResetLink, TokenHash: []byte("reset"), At: now, PasswordHash: fmt.Sprint(i)}, storetest.SystemBy)
 			results <- err
 		})
 	}
@@ -170,7 +171,7 @@ func TestResetFailureRollsBackPasswordSessionsAndCredentialConsumption(t *testin
 		t.Fatal(err)
 	}
 	arg := store.EmailPasswordParams{Kind: store.ResetLink, TokenHash: []byte("reset"), At: now, PasswordHash: "new-hash"}
-	if _, err := s.SetEmailPassword(t.Context(), arg); err == nil {
+	if _, err := s.SetEmailPassword(t.Context(), arg, storetest.SystemBy); err == nil {
 		t.Fatal("injected failure was ignored")
 	}
 	got, err := s.GetUserByEmail(t.Context(), u.Email)
@@ -209,7 +210,7 @@ func TestResetRevokesSessionsFromOverlappingOldPasswordLogins(t *testing.T) {
 	}
 	group.Go(func() {
 		<-start
-		_, err := s.SetEmailPassword(context.Background(), store.EmailPasswordParams{Kind: store.ResetLink, TokenHash: []byte("reset"), At: now, PasswordHash: "new-hash"})
+		_, err := s.SetEmailPassword(context.Background(), store.EmailPasswordParams{Kind: store.ResetLink, TokenHash: []byte("reset"), At: now, PasswordHash: "new-hash"}, storetest.SystemBy)
 		failures <- err
 	})
 	close(start)

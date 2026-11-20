@@ -67,11 +67,11 @@ func TestADeleteAndAnActivateOfOneUserAtOnceRunOneAfterTheOther(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			deleted = s.DeleteUser(ctx, store.DeleteParams{ID: target.ID, UserID: owner.ID, At: now})
+			deleted = s.DeleteUser(ctx, store.DeleteParams{ID: target.ID, UserID: owner.ID, At: now}, storetest.SystemBy)
 		}()
 		go func() {
 			defer wg.Done()
-			_, activated = s.UpdateUser(ctx, store.ChangeUserParams{ID: target.ID, Status: "active"})
+			_, activated = s.UpdateUser(ctx, store.ChangeUserParams{ID: target.ID, Status: "active"}, storetest.SystemBy)
 		}()
 		wg.Wait()
 
@@ -134,7 +134,7 @@ func TestADeleteAndACancelOfOnePendingOrderAtOnceNeverDeleteAPendingOrder(t *tes
 		tea := addProduct(t, pool, store.Product{Name: "Thai tea", Sku: "TEA-01", Unit: "box", Price: 100, Stock: 10, Status: "active"})
 		created, err := s.CreateOrder(ctx, store.CreateOrderParams{
 			UserID: owner.ID, Now: func() time.Time { return now }, Lines: []store.OrderLineParams{{ProductID: tea.ID, Quantity: 1}},
-		})
+		}, storetest.SystemBy)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -144,11 +144,11 @@ func TestADeleteAndACancelOfOnePendingOrderAtOnceNeverDeleteAPendingOrder(t *tes
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			deleted = s.DeleteOrder(ctx, store.DeleteOrderParams{Number: created.Number, UserID: owner.ID, At: now})
+			deleted = s.DeleteOrder(ctx, store.DeleteOrderParams{Number: created.Number, UserID: owner.ID, At: now}, storetest.SystemBy)
 		}()
 		go func() {
 			defer wg.Done()
-			_, cancelled = s.CancelOrder(ctx, store.FinishOrderParams{Number: created.Number, UserID: owner.ID, Now: func() time.Time { return now }})
+			_, cancelled = s.CancelOrder(ctx, store.FinishOrderParams{Number: created.Number, UserID: owner.ID, Now: func() time.Time { return now }}, storetest.SystemBy)
 		}()
 		wg.Wait()
 

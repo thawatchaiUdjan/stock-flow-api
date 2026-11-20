@@ -80,7 +80,7 @@ func registerEmailAuth(api huma.API, deps Deps) {
 		}
 		created, err := deps.Store.CreateEmailUser(ctx, store.CreateEmailUserParams{
 			Name: input.Body.Name, Email: input.Body.Email, Role: input.Body.Role,
-		})
+		}, activityBy(ctx, deps))
 		if errors.Is(err, store.ErrNotFound) {
 			return nil, domainError(http.StatusConflict, codeEmailTaken, "A User with this email already exists.")
 		}
@@ -207,7 +207,7 @@ func saveEmailPassword(ctx context.Context, deps Deps, input *emailPasswordInput
 	}
 	arg.PasswordHash = deps.PasswordHasher.Hash(input.Body.Password)
 	arg.At = deps.Now()
-	updated, err := deps.Store.SetEmailPassword(ctx, arg)
+	updated, err := deps.Store.SetEmailPassword(ctx, arg, requestBy(ctx, deps))
 	if err != nil {
 		return store.User{}, refusal("save email password", err)
 	}

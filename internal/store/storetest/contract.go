@@ -101,7 +101,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 	t.Run("creates an Owner who is Active with no password", func(t *testing.T) {
 		s := newSubject(t)
 
-		if err := s.Store.CreateOwner(ctx, store.CreateOwnerParams{Name: "Malee", Email: "malee@example.com"}); err != nil {
+		if _, err := s.Store.CreateOwner(ctx, store.CreateOwnerParams{Name: "Malee", Email: "malee@example.com"}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -117,11 +117,11 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 	t.Run("creating a second Owner changes nothing", func(t *testing.T) {
 		s := newSubject(t)
 		first := store.CreateOwnerParams{Name: "Malee", Email: "malee@example.com"}
-		if err := s.Store.CreateOwner(ctx, first); err != nil {
+		if _, err := s.Store.CreateOwner(ctx, first); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := s.Store.CreateOwner(ctx, store.CreateOwnerParams{Name: "Other", Email: "other@example.com"}); err != nil {
+		if _, err := s.Store.CreateOwner(ctx, store.CreateOwnerParams{Name: "Other", Email: "other@example.com"}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -140,7 +140,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 	t.Run("refuses a blank name", func(t *testing.T) {
 		s := newSubject(t)
 
-		err := s.Store.CreateOwner(ctx, store.CreateOwnerParams{Name: "  ", Email: "malee@example.com"})
+		_, err := s.Store.CreateOwner(ctx, store.CreateOwnerParams{Name: "  ", Email: "malee@example.com"})
 
 		if err == nil {
 			t.Error("err = nil, want a refusal")
@@ -242,7 +242,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 	}
 	setPassword := func(t *testing.T, s Subject, hash string, when time.Time) int64 {
 		t.Helper()
-		used, err := s.Store.SetPassword(ctx, store.SetPasswordParams{PasswordHash: "new-hash", TokenHash: []byte(hash), At: when})
+		used, err := s.Store.SetPassword(ctx, store.SetPasswordParams{PasswordHash: "new-hash", TokenHash: []byte(hash), At: when}, SystemBy)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -464,7 +464,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 
 		created, err := s.Store.CreateUser(ctx, store.CreateUserParams{
 			Name: "สมชาย", Email: "Somchai@Example.com", Role: "admin", TokenHash: []byte("link"), ExpiresAt: at,
-		})
+		}, SystemBy)
 
 		if err != nil {
 			t.Fatal(err)
@@ -495,7 +495,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 
 		_, err := s.Store.CreateUser(ctx, store.CreateUserParams{
 			Name: "Another", Email: "SOMCHAI@example.com", Role: "staff", TokenHash: []byte("link"), ExpiresAt: at,
-		})
+		}, SystemBy)
 
 		if !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("err = %v, want ErrNotFound", err)
@@ -525,7 +525,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 			"second Owner":        {Name: "A", Email: "c@example.com", Role: "owner"},
 		} {
 			arg.TokenHash, arg.ExpiresAt = []byte(name), at
-			if _, err := s.Store.CreateUser(ctx, arg); err == nil || errors.Is(err, store.ErrNotFound) {
+			if _, err := s.Store.CreateUser(ctx, arg, SystemBy); err == nil || errors.Is(err, store.ErrNotFound) {
 				t.Errorf("%s: err = %v, want a refusal", name, err)
 			}
 		}
@@ -537,7 +537,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 
 		_, err := s.Store.CreateUser(ctx, store.CreateUserParams{
 			Name: " ", Email: "somchai@example.com", Role: "staff", TokenHash: []byte("link"), ExpiresAt: at,
-		})
+		}, SystemBy)
 
 		if err == nil || errors.Is(err, store.ErrNotFound) {
 			t.Errorf("err = %v, want a refusal that is not ErrNotFound", err)
@@ -589,15 +589,15 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		s := newSubject(t)
 		user := s.AddUser(t, withPassword(staff("Somchai@Example.com")))
 
-		name, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Name: "สมชาย"})
+		name, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Name: "สมชาย"}, SystemBy)
 		if err != nil {
 			t.Fatal(err)
 		}
-		role, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Role: "admin"})
+		role, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Role: "admin"}, SystemBy)
 		if err != nil {
 			t.Fatal(err)
 		}
-		status, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Status: "inactive"})
+		status, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Status: "inactive"}, SystemBy)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -627,7 +627,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		s := newSubject(t)
 		user := s.AddUser(t, staff("staff@example.com"))
 
-		got, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID})
+		got, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID}, SystemBy)
 
 		want := store.ChangeUserRow{ID: user.ID, Name: user.Name, Email: user.Email, Role: "staff", Status: "active"}
 		if err != nil || got != want {
@@ -638,10 +638,10 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 	t.Run("updating or resetting no User is not found", func(t *testing.T) {
 		s := newSubject(t)
 
-		if _, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: 404, Name: "Nobody"}); !errors.Is(err, store.ErrNotFound) {
+		if _, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: 404, Name: "Nobody"}, SystemBy); !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("update: err = %v, want ErrNotFound", err)
 		}
-		err := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: 404, TokenHash: []byte("h"), ExpiresAt: at})
+		err := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: 404, TokenHash: []byte("h"), ExpiresAt: at}, SystemBy)
 		if !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("reset: err = %v, want ErrNotFound", err)
 		}
@@ -653,8 +653,8 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		malee := s.AddUser(t, withPassword(owner("malee@example.com")))
 		session(t, s, malee, "laptop")
 
-		_, updateErr := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: malee.ID, Role: "staff", Status: "inactive"})
-		resetErr := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: malee.ID, TokenHash: []byte("h"), ExpiresAt: at})
+		_, updateErr := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: malee.ID, Role: "staff", Status: "inactive"}, SystemBy)
+		resetErr := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: malee.ID, TokenHash: []byte("h"), ExpiresAt: at}, SystemBy)
 
 		if !errors.Is(updateErr, store.ErrTargetIsOwner) || !errors.Is(resetErr, store.ErrTargetIsOwner) {
 			t.Errorf("update: %v, reset: %v, want ErrTargetIsOwner", updateErr, resetErr)
@@ -686,7 +686,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 			"unknown status":      {ID: user.ID, Status: "deleted"},
 			"second Owner":        {ID: user.ID, Role: "owner"},
 		} {
-			if _, err := s.Store.UpdateUser(ctx, arg); err == nil {
+			if _, err := s.Store.UpdateUser(ctx, arg, SystemBy); err == nil {
 				t.Errorf("%s: err = nil, want a refusal", name)
 			}
 		}
@@ -710,7 +710,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		issue(t, s, user, "link")
 		issue(t, s, other, "other-link")
 
-		if _, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Status: "inactive"}); err != nil {
+		if _, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Status: "inactive"}, SystemBy); err != nil {
 			t.Fatal(err)
 		}
 
@@ -728,7 +728,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		session(t, s, user, "laptop")
 		issue(t, s, user, "link")
 
-		_, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Name: "Napa", Role: "admin", Status: "active"})
+		_, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Name: "Napa", Role: "admin", Status: "active"}, SystemBy)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -748,7 +748,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		issue(t, s, user, "first")
 		issue(t, s, other, "other-link")
 
-		err := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("second"), ExpiresAt: at})
+		err := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("second"), ExpiresAt: at}, SystemBy)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -782,7 +782,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		user.Status = "inactive"
 		user = s.AddUser(t, user)
 
-		err := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("link"), ExpiresAt: at})
+		err := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("link"), ExpiresAt: at}, SystemBy)
 
 		if !errors.Is(err, store.ErrUserInactive) {
 			t.Errorf("err = %v, want ErrUserInactive", err)
@@ -803,7 +803,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 		session(t, s, user, "laptop")
 		issue(t, s, other, "taken")
 
-		err := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("taken"), ExpiresAt: at})
+		err := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("taken"), ExpiresAt: at}, SystemBy)
 
 		if err == nil {
 			t.Fatal("err = nil, want a refusal")
@@ -820,6 +820,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 	runLoginLog(t, newSubject)
 	runActivityLog(t, newSubject)
 	runActors(t, newSubject)
+	runActivityOfUsersAndOrders(t, newSubject)
 	runProducts(t, newSubject)
 	runStockMovements(t, newSubject)
 	runOrders(t, newSubject)

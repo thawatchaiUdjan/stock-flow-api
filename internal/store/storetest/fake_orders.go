@@ -19,7 +19,7 @@ import (
 // and order_lines tables' constraints refuse, then moveStock's checks. Nothing is kept
 // until all pass, as in its transaction; the Order's number is used up all the same, as
 // the sequence's is.
-func (f *Fake) CreateOrder(_ context.Context, arg store.CreateOrderParams) (store.OrderDetail, error) {
+func (f *Fake) CreateOrder(_ context.Context, arg store.CreateOrderParams, by store.ActivityBy) (store.OrderDetail, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
@@ -77,7 +77,12 @@ func (f *Fake) CreateOrder(_ context.Context, arg store.CreateOrderParams) (stor
 		return store.OrderDetail{}, err
 	}
 
+	entry := store.OrderEntry(store.ReadOrderRow{ID: order.ID, Number: order.Number, Customer: order.Customer}, store.ActionCreated, by)
+	if err := f.checkActivity(entry); err != nil {
+		return store.OrderDetail{}, err
+	}
 	f.orders = append(f.orders, order)
+	f.record(entry)
 	for _, l := range arg.Lines {
 		f.lines = append(f.lines, store.OrderLine{
 			ID: int64(len(f.lines) + 1), OrderID: order.ID, ProductID: l.ProductID, Quantity: l.Quantity,
@@ -109,8 +114,8 @@ func (f *Fake) AddOnlineOrder(seed OnlineOrderSeed) int64 {
 	return o.Number
 }
 
-func (f *Fake) CompleteOrder(_ context.Context, arg store.FinishOrderParams) (store.OrderDetail, error) {
-	return f.finishOrder(arg, func(o *store.Order) error {
+func (f *Fake) CompleteOrder(_ context.Context, arg store.FinishOrderParams, by store.ActivityBy) (store.OrderDetail, error) {
+	return f.finishOrder(arg, by, store.ActionCompleted, func(o *store.Order) error {
 		if arg.UserID == 0 {
 			return errors.New("violates orders_finished_check") // the system completes nothing
 		}
@@ -121,8 +126,8 @@ func (f *Fake) CompleteOrder(_ context.Context, arg store.FinishOrderParams) (st
 	})
 }
 
-func (f *Fake) CancelOrder(_ context.Context, arg store.FinishOrderParams) (store.OrderDetail, error) {
-	return f.finishOrder(arg, func(o *store.Order) error {
+func (f *Fake) CancelOrder(_ context.Context, arg store.FinishOrderParams, by store.ActivityBy) (store.OrderDetail, error) {
+	return f.finishOrder(arg, by, store.ActionCancelled, func(o *store.Order) error {
 		var changes []store.StockChange
 		for _, l := range f.lines {
 			if l.OrderID == o.ID {
@@ -143,7 +148,7 @@ func (f *Fake) CancelOrder(_ context.Context, arg store.FinishOrderParams) (stor
 }
 
 // finishOrder is store.Store's finishOrder. finish changes the Order in place.
-func (f *Fake) finishOrder(arg store.FinishOrderParams, finish func(*store.Order) error) (store.OrderDetail, error) {
+func (f *Fake) finishOrder(arg store.FinishOrderParams, by store.ActivityBy, action string, finish func(*store.Order) error) (store.OrderDetail, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
@@ -159,9 +164,14 @@ func (f *Fake) finishOrder(arg store.FinishOrderParams, finish func(*store.Order
 	if arg.UserID != 0 && f.userRef(arg.UserID) == nil {
 		return store.OrderDetail{}, errors.New("violates an orders user fkey")
 	}
+	entry := store.OrderEntry(store.ReadOrderRow{ID: o.ID, Number: o.Number, Customer: o.Customer}, action, by)
+	if err := f.checkActivity(entry); err != nil {
+		return store.OrderDetail{}, err
+	}
 	if err := finish(o); err != nil {
 		return store.OrderDetail{}, err
 	}
+	f.record(entry)
 	return f.detail(*o), nil
 }
 

@@ -35,15 +35,15 @@ func runEmailAuth(t *testing.T, newSubject func(*testing.T) Subject) {
 			{Name: " ", Email: "blank@example.com", Role: "staff"},
 			{Name: "New", Email: "role@example.com", Role: "invalid"},
 		} {
-			if _, err := s.Store.CreateEmailUser(ctx, arg); err == nil {
+			if _, err := s.Store.CreateEmailUser(ctx, arg, SystemBy); err == nil {
 				t.Fatalf("accepted invalid User: %+v", arg)
 			}
 		}
-		first, err := s.Store.CreateEmailUser(ctx, store.CreateEmailUserParams{Name: "New", Email: "New@example.com", Role: "staff"})
+		first, err := s.Store.CreateEmailUser(ctx, store.CreateEmailUserParams{Name: "New", Email: "New@example.com", Role: "staff"}, SystemBy)
 		if err != nil || first.PasswordHash.Valid {
 			t.Fatalf("create = %+v, %v", first, err)
 		}
-		if _, err := s.Store.CreateEmailUser(ctx, store.CreateEmailUserParams{Name: "Duplicate", Email: "NEW@example.com", Role: "admin"}); !errors.Is(err, store.ErrNotFound) {
+		if _, err := s.Store.CreateEmailUser(ctx, store.CreateEmailUserParams{Name: "Duplicate", Email: "NEW@example.com", Role: "admin"}, SystemBy); !errors.Is(err, store.ErrNotFound) {
 			t.Fatalf("duplicate = %v", err)
 		}
 	})
@@ -92,10 +92,10 @@ func runEmailAuth(t *testing.T, newSubject func(*testing.T) Subject) {
 		if _, err := s.Store.ReadEmailPasswordUser(ctx, store.EmailPasswordParams{Kind: store.ResetLink, TokenHash: arg.TokenHash, At: at}); !errors.Is(err, store.ErrNotFound) {
 			t.Fatalf("grant accepted as Reset link: %v", err)
 		}
-		if _, err := s.Store.SetEmailPassword(ctx, arg); err != nil {
+		if _, err := s.Store.SetEmailPassword(ctx, arg, SystemBy); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.Store.SetEmailPassword(ctx, arg); !errors.Is(err, store.ErrNotFound) {
+		if _, err := s.Store.SetEmailPassword(ctx, arg, SystemBy); !errors.Is(err, store.ErrNotFound) {
 			t.Fatalf("replayed grant = %v", err)
 		}
 		got, err := s.Store.GetUserByEmail(ctx, u.Email)
@@ -140,10 +140,10 @@ func runEmailAuth(t *testing.T, newSubject func(*testing.T) Subject) {
 		if err := s.Store.IssueSetupLink(ctx, store.IssueSetupLinkParams{UserID: u.ID, TokenHash: []byte("legacy"), ExpiresAt: at.Add(time.Hour)}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.Store.SetPassword(ctx, store.SetPasswordParams{TokenHash: []byte("legacy"), PasswordHash: "legacy-password", At: at}); err != nil {
+		if _, err := s.Store.SetPassword(ctx, store.SetPasswordParams{TokenHash: []byte("legacy"), PasswordHash: "legacy-password", At: at}, SystemBy); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: u.ID, TokenHash: []byte("legacy-reset"), ExpiresAt: at.Add(time.Hour)}); err != nil {
+		if err := s.Store.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: u.ID, TokenHash: []byte("legacy-reset"), ExpiresAt: at.Add(time.Hour)}, SystemBy); err != nil {
 			t.Fatal(err)
 		}
 		_, err := s.Store.ReadEmailPasswordUser(ctx, store.EmailPasswordParams{Kind: store.SetupGrant, TokenHash: []byte("grant-digest"), At: at})
@@ -229,7 +229,7 @@ func runEmailAuth(t *testing.T, newSubject func(*testing.T) Subject) {
 		if err != nil || got.PasswordHash != u.PasswordHash {
 			t.Fatalf("issuing reset changed password: %+v, %v", got, err)
 		}
-		updated, err := s.Store.SetEmailPassword(ctx, store.EmailPasswordParams{Kind: store.ResetLink, TokenHash: []byte("reset-digest"), At: at, PasswordHash: "new-hash"})
+		updated, err := s.Store.SetEmailPassword(ctx, store.EmailPasswordParams{Kind: store.ResetLink, TokenHash: []byte("reset-digest"), At: at, PasswordHash: "new-hash"}, SystemBy)
 		if err != nil || updated.PasswordHash.String != "new-hash" {
 			t.Fatalf("reset = %+v, %v", updated, err)
 		}
@@ -255,7 +255,7 @@ func runEmailAuth(t *testing.T, newSubject func(*testing.T) Subject) {
 				}
 			}
 			for _, status := range []string{"inactive", "active"} {
-				if _, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: u.ID, Status: status}); err != nil {
+				if _, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: u.ID, Status: status}, SystemBy); err != nil {
 					t.Fatal(err)
 				}
 			}

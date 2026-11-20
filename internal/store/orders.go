@@ -65,7 +65,7 @@ type OrderDetail struct {
 // when a Product does not exist, ErrProductArchived when one is Archived (orders R6), an
 // *InsufficientStockError naming every line that asks for more than its stock (orders R8),
 // and ErrTotalTooLarge. A Product on two lines is refused by the schema (orders R3).
-func (s *Store) CreateOrder(ctx context.Context, arg CreateOrderParams) (created OrderDetail, err error) {
+func (s *Store) CreateOrder(ctx context.Context, arg CreateOrderParams, by ActivityBy) (created OrderDetail, err error) {
 	if len(arg.Lines) == 0 {
 		return OrderDetail{}, ErrNoLines
 	}
@@ -123,8 +123,10 @@ func (s *Store) CreateOrder(ctx context.Context, arg CreateOrderParams) (created
 		}, order.ID); err != nil {
 			return err
 		}
-		created, err = orderDetail(ctx, q, order.Number)
-		return err
+		if created, err = orderDetail(ctx, q, order.Number); err != nil {
+			return err
+		}
+		return q.addActivity(ctx, OrderEntry(created.ReadOrderRow, ActionCreated, by))
 	})
 	if err != nil {
 		return OrderDetail{}, err
@@ -135,8 +137,8 @@ func (s *Store) CreateOrder(ctx context.Context, arg CreateOrderParams) (created
 // CompleteOrder completes a Pending Order, recording who and when, and changes no stock
 // (orders R11, context ADR 0007). It answers ErrNotFound for no such Order and
 // ErrOrderNotPending for one that is Completed or Cancelled (orders R13).
-func (s *Store) CompleteOrder(ctx context.Context, arg FinishOrderParams) (OrderDetail, error) {
-	return s.finishOrder(ctx, arg, func(q *Queries, id int64) error {
+func (s *Store) CompleteOrder(ctx context.Context, arg FinishOrderParams, by ActivityBy) (OrderDetail, error) {
+	return s.finishOrder(ctx, arg, by, ActionCompleted, func(q *Queries, id int64) error {
 		err := q.SetOrderCompleted(ctx, SetOrderCompletedParams{ID: id, UserID: arg.UserID, At: arg.Now()})
 		if err != nil {
 			return fmt.Errorf("set order completed: %w", err)
@@ -149,8 +151,8 @@ func (s *Store) CompleteOrder(ctx context.Context, arg FinishOrderParams) (Order
 // quantity back to its Product's stock as one Cancellation movement per line, Archived
 // Products included (orders R12). It answers ErrNotFound for no such Order and
 // ErrOrderNotPending for one that is Completed or Cancelled (orders R13).
-func (s *Store) CancelOrder(ctx context.Context, arg FinishOrderParams) (OrderDetail, error) {
-	return s.finishOrder(ctx, arg, func(q *Queries, id int64) error {
+func (s *Store) CancelOrder(ctx context.Context, arg FinishOrderParams, by ActivityBy) (OrderDetail, error) {
+	return s.finishOrder(ctx, arg, by, ActionCancelled, func(q *Queries, id int64) error {
 		lines, err := q.ListOrderLines(ctx, id)
 		if err != nil {
 			return fmt.Errorf("list order lines: %w", err)
@@ -174,7 +176,7 @@ func (s *Store) CancelOrder(ctx context.Context, arg FinishOrderParams) (OrderDe
 // finishOrder holds the Pending Order of arg.Number and runs finish on it, in one
 // transaction. A Complete and a Cancel at the same moment take the lock one after the other,
 // so the second finds the Order finished and changes nothing (orders R13).
-func (s *Store) finishOrder(ctx context.Context, arg FinishOrderParams, finish func(q *Queries, id int64) error) (finished OrderDetail, err error) {
+func (s *Store) finishOrder(ctx context.Context, arg FinishOrderParams, by ActivityBy, action string, finish func(q *Queries, id int64) error) (finished OrderDetail, err error) {
 	err = InTx(ctx, s.pool, func(q *Queries) error {
 		order, err := q.LockOrder(ctx, arg.Number)
 		if errors.Is(err, ErrNotFound) {
@@ -189,8 +191,11 @@ func (s *Store) finishOrder(ctx context.Context, arg FinishOrderParams, finish f
 		if err := finish(q, order.ID); err != nil {
 			return err
 		}
-		finished, err = orderDetail(ctx, q, arg.Number)
-		return err
+		if finished, err = orderDetail(ctx, q, arg.Number); err != nil {
+			return err
+		}
+		// activity-log R3, R4: who completed or cancelled it is the entry's actor.
+		return q.addActivity(ctx, OrderEntry(finished.ReadOrderRow, action, by))
 	})
 	if err != nil {
 		return OrderDetail{}, err
