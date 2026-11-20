@@ -70,7 +70,7 @@ func (f *Fake) ReserveLoginCheck(_ context.Context, arg store.LoginCheckParams) 
 	return allowed, retryAt, nil
 }
 
-func (f *Fake) CreateEmailUser(_ context.Context, arg store.CreateEmailUserParams) (store.User, error) {
+func (f *Fake) CreateEmailUser(_ context.Context, arg store.CreateEmailUserParams, by store.ActivityBy) (store.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
@@ -91,7 +91,12 @@ func (f *Fake) CreateEmailUser(_ context.Context, arg store.CreateEmailUserParam
 		}
 	}
 	user := store.User{ID: int64(len(f.users) + 1), Name: arg.Name, Email: arg.Email, Role: arg.Role, Status: "active"}
+	entry := store.UserCreated(snapshot(user), by)
+	if err := f.checkActivity(entry); err != nil {
+		return store.User{}, err
+	}
 	f.users = append(f.users, user)
+	f.record(entry)
 	return user, nil
 }
 
@@ -175,7 +180,7 @@ func (f *Fake) ReadEmailPasswordUser(_ context.Context, arg store.EmailPasswordP
 	return *user, nil
 }
 
-func (f *Fake) SetEmailPassword(_ context.Context, arg store.EmailPasswordParams) (store.User, error) {
+func (f *Fake) SetEmailPassword(_ context.Context, arg store.EmailPasswordParams, by store.ActivityBy) (store.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
@@ -185,6 +190,15 @@ func (f *Fake) SetEmailPassword(_ context.Context, arg store.EmailPasswordParams
 	if err != nil {
 		return store.User{}, err
 	}
+	who := snapshot(*user)
+	entry := store.UserPasswordSet(who, by.AsUser(who))
+	if arg.Kind == store.ResetLink {
+		entry = store.UserPasswordReset(who, by.AsUser(who))
+	}
+	if err := f.checkActivity(entry); err != nil {
+		return store.User{}, err
+	}
+	f.record(entry)
 	user.PasswordHash = pgtype.Text{String: arg.PasswordHash, Valid: true}
 	f.endSessions(user.ID)
 	delete(f.links, user.ID)

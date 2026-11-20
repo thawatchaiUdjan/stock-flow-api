@@ -33,7 +33,7 @@ func finish(number int64, user store.User) store.FinishOrderParams {
 
 func createOrder(t *testing.T, s Subject, arg store.CreateOrderParams) store.OrderDetail {
 	t.Helper()
-	created, err := s.Store.CreateOrder(context.Background(), arg)
+	created, err := s.Store.CreateOrder(context.Background(), arg, SystemBy)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 		created, err := s.Store.CreateOrder(ctx, store.CreateOrderParams{
 			UserID: user.ID, Now: clock(at), Customer: "Khun Dao", Note: "Pick up at 5",
 			Lines: []store.OrderLineParams{line(cup, 3), line(tea, 2)},
-		})
+		}, SystemBy)
 
 		if err != nil {
 			t.Fatal(err)
@@ -161,7 +161,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 		tea := s.AddProduct(t, priced("Thai tea", "TEA-01", 100, 10))
 
 		first := createOrder(t, s, newOrder(user, "", line(tea, 1)))
-		if _, err := s.Store.CreateOrder(ctx, newOrder(user, "", line(tea, 100))); err == nil {
+		if _, err := s.Store.CreateOrder(ctx, newOrder(user, "", line(tea, 100)), SystemBy); err == nil {
 			t.Fatal("an Order for 100 of 9 was not refused")
 		}
 		second := createOrder(t, s, newOrder(user, "", line(tea, 1)))
@@ -179,7 +179,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 		cup := s.AddProduct(t, priced("Cup", "CUP-01", 100, 18))
 		lid := s.AddProduct(t, priced("Lid", "LID-01", 100, 0))
 
-		_, err := s.Store.CreateOrder(ctx, newOrder(user, "", line(tea, 4), line(lid, 1), line(cup, 19)))
+		_, err := s.Store.CreateOrder(ctx, newOrder(user, "", line(tea, 4), line(lid, 1), line(cup, 19)), SystemBy)
 
 		var short *store.InsufficientStockError
 		if !errors.As(err, &short) {
@@ -213,7 +213,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 		old.Status = "archived"
 		old = s.AddProduct(t, old)
 
-		_, err := s.Store.CreateOrder(ctx, newOrder(user, "", line(tea, 1), line(old, 1)))
+		_, err := s.Store.CreateOrder(ctx, newOrder(user, "", line(tea, 1), line(old, 1)), SystemBy)
 
 		if !errors.Is(err, store.ErrProductArchived) {
 			t.Errorf("err = %v, want ErrProductArchived", err)
@@ -226,7 +226,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 		user := s.AddUser(t, staff("somchai@example.com"))
 		tea := s.AddProduct(t, priced("Thai tea", "TEA-01", 100, 10))
 
-		_, err := s.Store.CreateOrder(ctx, newOrder(user, "", line(tea, 1), store.OrderLineParams{ProductID: 404, Quantity: 1}))
+		_, err := s.Store.CreateOrder(ctx, newOrder(user, "", line(tea, 1), store.OrderLineParams{ProductID: 404, Quantity: 1}), SystemBy)
 
 		if !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("err = %v, want ErrNotFound", err)
@@ -245,7 +245,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 			stock[p.ID] = math.MaxInt32
 		}
 
-		_, err := s.Store.CreateOrder(ctx, newOrder(user, "", lines...))
+		_, err := s.Store.CreateOrder(ctx, newOrder(user, "", lines...), SystemBy)
 
 		if !errors.Is(err, store.ErrTotalTooLarge) {
 			t.Errorf("err = %v, want ErrTotalTooLarge", err)
@@ -275,13 +275,13 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 			"an unknown User":               newOrder(store.User{ID: 404}, "", line(tea, 1)),
 			"a valid line before a bad one": newOrder(user, "", line(cup, 1), line(tea, 0)),
 		} {
-			if _, err := s.Store.CreateOrder(ctx, arg); err == nil {
+			if _, err := s.Store.CreateOrder(ctx, arg, SystemBy); err == nil {
 				t.Errorf("%s: err = nil, want a refusal", name)
 			}
 		}
 		assertNothingTaken(t, s, map[int64]int32{tea.ID: 10, cup.ID: 10})
 		edge := long(120, long(200, ok, func(a *store.CreateOrderParams, v string) { a.Note = v }), func(a *store.CreateOrderParams, v string) { a.Customer = v })
-		if _, err := s.Store.CreateOrder(ctx, edge); err != nil {
+		if _, err := s.Store.CreateOrder(ctx, edge, SystemBy); err != nil {
 			t.Errorf("a customer of 120 letters and a note of 200: %v", err)
 		}
 	})
@@ -293,7 +293,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 		tea := s.AddProduct(t, priced("Thai tea", "TEA-01", 100, 10))
 		createOrder(t, s, newOrder(creator, "", line(tea, 4)))
 
-		completed, err := s.Store.CompleteOrder(ctx, finish(1, other))
+		completed, err := s.Store.CompleteOrder(ctx, finish(1, other), SystemBy)
 
 		if err != nil {
 			t.Fatal(err)
@@ -324,7 +324,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 			t.Fatal(err)
 		}
 
-		cancelled, err := s.Store.CancelOrder(ctx, finish(1, admin))
+		cancelled, err := s.Store.CancelOrder(ctx, finish(1, admin), SystemBy)
 
 		if err != nil {
 			t.Fatal(err)
@@ -363,7 +363,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 			t.Fatal(err)
 		}
 
-		_, err := s.Store.CancelOrder(ctx, finish(1, user))
+		_, err := s.Store.CancelOrder(ctx, finish(1, user), SystemBy)
 
 		if !errors.Is(err, store.ErrStockTooLarge) {
 			t.Errorf("err = %v, want ErrStockTooLarge", err)
@@ -379,20 +379,20 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 		tea := s.AddProduct(t, priced("Thai tea", "TEA-01", 100, 10))
 		createOrder(t, s, newOrder(user, "", line(tea, 1)))
 		createOrder(t, s, newOrder(user, "", line(tea, 1)))
-		if _, err := s.Store.CompleteOrder(ctx, finish(1, user)); err != nil {
+		if _, err := s.Store.CompleteOrder(ctx, finish(1, user), SystemBy); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.Store.CancelOrder(ctx, finish(2, user)); err != nil {
+		if _, err := s.Store.CancelOrder(ctx, finish(2, user), SystemBy); err != nil {
 			t.Fatal(err)
 		}
 		before1, _ := s.Store.GetOrder(ctx, 1)
 		before2, _ := s.Store.GetOrder(ctx, 2)
 
 		for name, err := range map[string]error{
-			"complete a Completed": second(s.Store.CompleteOrder(ctx, finish(1, user))),
-			"cancel a Completed":   second(s.Store.CancelOrder(ctx, finish(1, user))),
-			"complete a Cancelled": second(s.Store.CompleteOrder(ctx, finish(2, user))),
-			"cancel a Cancelled":   second(s.Store.CancelOrder(ctx, finish(2, user))),
+			"complete a Completed": second(s.Store.CompleteOrder(ctx, finish(1, user), SystemBy)),
+			"cancel a Completed":   second(s.Store.CancelOrder(ctx, finish(1, user), SystemBy)),
+			"complete a Cancelled": second(s.Store.CompleteOrder(ctx, finish(2, user), SystemBy)),
+			"cancel a Cancelled":   second(s.Store.CancelOrder(ctx, finish(2, user), SystemBy)),
 		} {
 			if !errors.Is(err, store.ErrOrderNotPending) {
 				t.Errorf("%s: err = %v, want ErrOrderNotPending", name, err)
@@ -414,8 +414,8 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 
 		for name, err := range map[string]error{
 			"get":      second(s.Store.GetOrder(ctx, 404)),
-			"complete": second(s.Store.CompleteOrder(ctx, finish(404, user))),
-			"cancel":   second(s.Store.CancelOrder(ctx, finish(404, user))),
+			"complete": second(s.Store.CompleteOrder(ctx, finish(404, user), SystemBy)),
+			"cancel":   second(s.Store.CancelOrder(ctx, finish(404, user), SystemBy)),
 		} {
 			if !errors.Is(err, store.ErrNotFound) {
 				t.Errorf("%s: err = %v, want ErrNotFound", name, err)
@@ -457,10 +457,10 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 		for _, customer := range []string{"Khun Dao", "Somsri", "dao 50%", "Order 1 Ltd", ""} {
 			createOrder(t, s, newOrder(user, customer, line(tea, 1)))
 		}
-		if _, err := s.Store.CompleteOrder(ctx, finish(1, user)); err != nil {
+		if _, err := s.Store.CompleteOrder(ctx, finish(1, user), SystemBy); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.Store.CancelOrder(ctx, finish(2, user)); err != nil {
+		if _, err := s.Store.CancelOrder(ctx, finish(2, user), SystemBy); err != nil {
 			t.Fatal(err)
 		}
 

@@ -82,7 +82,7 @@ func registerSetupLinks(api huma.API, deps Deps) {
 			PasswordHash: deps.PasswordHasher.Hash(input.Body.Password),
 			TokenHash:    auth.HashToken(input.Body.Token),
 			At:           deps.Now(),
-		})
+		}, requestBy(ctx, deps))
 		if err != nil {
 			return nil, internalError(ctx, "set password", err)
 		}

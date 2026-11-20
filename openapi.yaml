@@ -52,7 +52,7 @@ components:
       additionalProperties: false
       properties:
         action:
-          description: "What was done: added, edited, archived, restored or deleted for a Product."
+          description: "What was done. Product: added, edited, archived, restored, deleted. User: created, name-changed, role-changed, made-inactive, made-active, deleted, password-set, password-reset, setup-link-issued. Order: created, completed, cancelled, deleted."
           type: string
         actor:
           $ref: "#/components/schemas/ActivityActor"
@@ -3542,7 +3542,7 @@ paths:
         - Users
   /v2/activity-log:
     get:
-      description: "Every recorded change, newest first, in numbered pages of 10, 25 or 50 with an exact total. An out-of-range page is empty with the actual total. Entries cannot be changed or removed. Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      description: "Every recorded change to Products, Users and Orders, newest first, in numbered pages of 10, 25 or 50 with an exact total. An out-of-range page is empty with the actual total. Entries cannot be changed or removed. Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
       operationId: list-activity-log
       parameters:
         - description: Only the changes made by this kind of actor.
@@ -3578,12 +3578,12 @@ paths:
               - user
               - customer
             type: string
-        - description: Only this action, such as edited.
+        - description: Only this action, such as edited or made-inactive.
           explode: false
           in: query
           name: action
           schema:
-            description: Only this action, such as edited.
+            description: Only this action, such as edited or made-inactive.
             maxLength: 40
             pattern: ^[a-z-]+$
             type: string

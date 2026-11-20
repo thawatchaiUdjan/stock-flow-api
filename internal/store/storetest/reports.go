@@ -15,7 +15,7 @@ import (
 func completedAt(t *testing.T, s Subject, user store.User, when time.Time, lines ...store.OrderLineParams) store.OrderDetail {
 	t.Helper()
 	created := createOrder(t, s, newOrder(user, "", lines...))
-	done, err := s.Store.CompleteOrder(context.Background(), store.FinishOrderParams{Number: created.Number, UserID: user.ID, Now: clock(when)})
+	done, err := s.Store.CompleteOrder(context.Background(), store.FinishOrderParams{Number: created.Number, UserID: user.ID, Now: clock(when)}, SystemBy)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func runReports(t *testing.T, newSubject func(t *testing.T) Subject) {
 		completedAt(t, s, user, midnight.Add(day-time.Second), line(tea, 3), line(cup, 1))
 		createOrder(t, s, newOrder(user, "", line(tea, 4))) // Pending
 		cancelled := createOrder(t, s, newOrder(user, "", line(tea, 5)))
-		if _, err := s.Store.CancelOrder(context.Background(), finish(cancelled.Number, user)); err != nil {
+		if _, err := s.Store.CancelOrder(context.Background(), finish(cancelled.Number, user), SystemBy); err != nil {
 			t.Fatal(err)
 		}
 

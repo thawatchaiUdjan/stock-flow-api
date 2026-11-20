@@ -290,7 +290,7 @@ func TestASetupLinkUsedTwiceAtOnceWorksOnce(t *testing.T) {
 			PasswordHash: fmt.Sprintf("hash-%d", i),
 			TokenHash:    auth.HashToken(link.Token),
 			At:           now,
-		})
+		}, storetest.SystemBy)
 		return err
 	})
 
@@ -330,7 +330,7 @@ func TestAFailedPasswordSetEndsNoSessionAndKeepsTheLink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = s.SetPassword(ctx, store.SetPasswordParams{PasswordHash: "boom", TokenHash: auth.HashToken(link.Token), At: now})
+	_, err = s.SetPassword(ctx, store.SetPasswordParams{PasswordHash: "boom", TokenHash: auth.HashToken(link.Token), At: now}, storetest.SystemBy)
 
 	assertViolates(t, err, "users_no_boom")
 	if _, err := s.GetSession(ctx, []byte("laptop")); err != nil {
@@ -359,7 +359,7 @@ func TestAPasswordSetThatCannotEndTheOwnersSessionsSetsNoPassword(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	_, err := s.SetPassword(ctx, store.SetPasswordParams{PasswordHash: "new-hash", TokenHash: []byte("link"), At: time.Now()})
+	_, err := s.SetPassword(ctx, store.SetPasswordParams{PasswordHash: "new-hash", TokenHash: []byte("link"), At: time.Now()}, storetest.SystemBy)
 
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Message != "refused" {
@@ -382,11 +382,11 @@ var hashed = pgtype.Text{String: "hash", Valid: true}
 // endsAccess is what the Owner can do to end a User's access, through the real Store.
 var endsAccess = map[string]func(ctx context.Context, s *store.Store, id int64) error{
 	"Inactive": func(ctx context.Context, s *store.Store, id int64) error {
-		_, err := s.UpdateUser(ctx, store.ChangeUserParams{ID: id, Status: "inactive"})
+		_, err := s.UpdateUser(ctx, store.ChangeUserParams{ID: id, Status: "inactive"}, storetest.SystemBy)
 		return err
 	},
 	"reset": func(ctx context.Context, s *store.Store, id int64) error {
-		return s.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: id, TokenHash: []byte("new-link"), ExpiresAt: time.Now().Add(time.Hour)})
+		return s.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: id, TokenHash: []byte("new-link"), ExpiresAt: time.Now().Add(time.Hour)}, storetest.SystemBy)
 	},
 }
 
@@ -522,7 +522,7 @@ func holdLogin(t *testing.T, pool *pgxpool.Pool, owner store.User, token string)
 func settingThePassword(ctx context.Context, s *store.Store) <-chan error {
 	finished := make(chan error, 1)
 	go func() {
-		used, err := s.SetPassword(ctx, store.SetPasswordParams{PasswordHash: "new-hash", TokenHash: []byte("link"), At: time.Now()})
+		used, err := s.SetPassword(ctx, store.SetPasswordParams{PasswordHash: "new-hash", TokenHash: []byte("link"), At: time.Now()}, storetest.SystemBy)
 		if err == nil && used != 1 {
 			err = fmt.Errorf("used = %d, want 1", used)
 		}
@@ -661,7 +661,7 @@ func TestAResetWaitsForAnInactiveUnderWayAndIsThenRefused(t *testing.T) {
 
 	reset := make(chan error, 1)
 	go func() {
-		reset <- s.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("link"), ExpiresAt: time.Now().Add(time.Hour)})
+		reset <- s.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("link"), ExpiresAt: time.Now().Add(time.Hour)}, storetest.SystemBy)
 	}()
 	waitUntilBlocked(t, pool)
 	if err := owner.Commit(ctx); err != nil {
@@ -699,7 +699,7 @@ func TestAnInactiveWaitsForAResetUnderWayAndStopsItsSetupLink(t *testing.T) {
 
 	inactive := make(chan error, 1)
 	go func() {
-		_, err := s.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Status: "inactive"})
+		_, err := s.UpdateUser(ctx, store.ChangeUserParams{ID: user.ID, Status: "inactive"}, storetest.SystemBy)
 		inactive <- err
 	}()
 	waitUntilBlocked(t, pool)
@@ -782,7 +782,7 @@ func TestAResetThatFailsPartwayChangesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := s.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("taken"), ExpiresAt: expires})
+	err := s.ResetPassword(ctx, store.IssueSetupLinkParams{UserID: user.ID, TokenHash: []byte("taken"), ExpiresAt: expires}, storetest.SystemBy)
 
 	assertViolates(t, err, "setup_links_token_hash_key")
 	got, err := s.GetUserByEmail(ctx, user.Email)

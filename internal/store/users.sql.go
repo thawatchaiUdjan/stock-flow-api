@@ -65,7 +65,7 @@ func (q *Queries) ClearPassword(ctx context.Context, id int64) error {
 	return err
 }
 
-const createOwner = `-- name: CreateOwner :exec
+const createOwner = `-- name: CreateOwner :execrows
 INSERT INTO users (name, email, role) VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING
 `
 
@@ -76,9 +76,12 @@ type CreateOwnerParams struct {
 
 // Does nothing when an Owner exists, so concurrent installs can't fail or make a second
 // one: the loser waits for the winner's commit, then skips (users-and-access R9).
-func (q *Queries) CreateOwner(ctx context.Context, arg CreateOwnerParams) error {
-	_, err := q.db.Exec(ctx, createOwner, arg.Name, arg.Email)
-	return err
+func (q *Queries) CreateOwner(ctx context.Context, arg CreateOwnerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createOwner, arg.Name, arg.Email)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const createUser = `-- name: CreateUser :one
@@ -218,10 +221,12 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 }
 
 const lockUser = `-- name: LockUser :one
-SELECT role, status FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+SELECT name, email, role, status FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
 `
 
 type LockUserRow struct {
+	Name   string
+	Email  string
 	Role   string
 	Status string
 }
@@ -230,7 +235,12 @@ type LockUserRow struct {
 func (q *Queries) LockUser(ctx context.Context, id int64) (LockUserRow, error) {
 	row := q.db.QueryRow(ctx, lockUser, id)
 	var i LockUserRow
-	err := row.Scan(&i.Role, &i.Status)
+	err := row.Scan(
+		&i.Name,
+		&i.Email,
+		&i.Role,
+		&i.Status,
+	)
 	return i, err
 }
 
@@ -255,7 +265,7 @@ func (q *Queries) MarkUserDeleted(ctx context.Context, arg MarkUserDeletedParams
 const setUserPassword = `-- name: SetUserPassword :one
 UPDATE users SET password_hash = $1::text
 WHERE id = $2
-RETURNING role
+RETURNING name, email, role
 `
 
 type SetUserPasswordParams struct {
@@ -263,9 +273,15 @@ type SetUserPasswordParams struct {
 	ID           int64
 }
 
-func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams) (string, error) {
+type SetUserPasswordRow struct {
+	Name  string
+	Email string
+	Role  string
+}
+
+func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams) (SetUserPasswordRow, error) {
 	row := q.db.QueryRow(ctx, setUserPassword, arg.PasswordHash, arg.ID)
-	var role string
-	err := row.Scan(&role)
-	return role, err
+	var i SetUserPasswordRow
+	err := row.Scan(&i.Name, &i.Email, &i.Role)
+	return i, err
 }

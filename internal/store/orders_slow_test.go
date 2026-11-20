@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
+	"github.com/thawatchaiUdjan/stock-flow-api/internal/store/storetest"
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/testdb"
 )
 
@@ -27,7 +28,7 @@ func TestOrdersForTheLastUnitsAtOnceNeverTakeStockBelowZero(t *testing.T) {
 	errs := atTheSameTime(n, func(i int) error {
 		_, err := s.CreateOrder(ctx, store.CreateOrderParams{
 			UserID: user.ID, Now: time.Now, Lines: []store.OrderLineParams{{ProductID: tea.ID, Quantity: int32(1 + i%2)}},
-		})
+		}, storetest.SystemBy)
 		return err
 	})
 
@@ -91,7 +92,7 @@ func TestOrdersNamingTwoProductsInOppositeOrderDoNotDeadlock(t *testing.T) {
 	go func() {
 		_, err := s.CreateOrder(ctx, store.CreateOrderParams{UserID: user.ID, Now: time.Now, Lines: []store.OrderLineParams{
 			{ProductID: second.ID, Quantity: 1}, {ProductID: first.ID, Quantity: 1},
-		}})
+		}}, storetest.SystemBy)
 		created <- err
 	}()
 	waitUntilBlocked(t, pool)
@@ -119,7 +120,7 @@ func TestACompleteAndACancelAtOnceOnlyOneWins(t *testing.T) {
 	tea := addProduct(t, pool, store.Product{Name: "Thai tea", Sku: "TEA-01", Unit: "pcs", Price: 100, Stock: n, Status: "active"})
 	var numbers []int64
 	for range n {
-		o, err := s.CreateOrder(ctx, store.CreateOrderParams{UserID: user.ID, Now: time.Now, Lines: []store.OrderLineParams{{ProductID: tea.ID, Quantity: 1}}})
+		o, err := s.CreateOrder(ctx, store.CreateOrderParams{UserID: user.ID, Now: time.Now, Lines: []store.OrderLineParams{{ProductID: tea.ID, Quantity: 1}}}, storetest.SystemBy)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -130,10 +131,10 @@ func TestACompleteAndACancelAtOnceOnlyOneWins(t *testing.T) {
 	errs := atTheSameTime(2*n, func(i int) error {
 		arg := store.FinishOrderParams{Number: numbers[i/2], UserID: user.ID, Now: time.Now}
 		if i%2 == 0 {
-			_, err := s.CompleteOrder(ctx, arg)
+			_, err := s.CompleteOrder(ctx, arg, storetest.SystemBy)
 			return err
 		}
-		_, err := s.CancelOrder(ctx, arg)
+		_, err := s.CancelOrder(ctx, arg, storetest.SystemBy)
 		return err
 	})
 
@@ -175,7 +176,7 @@ func TestTheSchemaRefusesAnOrderStatusWithoutItsWhoAndWhen(t *testing.T) {
 	s := store.NewStore(pool)
 	user := addUser(t, pool, store.User{Name: "Somchai", Email: "s@example.com", Role: "staff", Status: "active"})
 	tea := addProduct(t, pool, store.Product{Name: "Thai tea", Sku: "TEA-01", Unit: "pcs", Price: 100, Stock: 1, Status: "active"})
-	o, err := s.CreateOrder(ctx, store.CreateOrderParams{UserID: user.ID, Now: time.Now, Lines: []store.OrderLineParams{{ProductID: tea.ID, Quantity: 1}}})
+	o, err := s.CreateOrder(ctx, store.CreateOrderParams{UserID: user.ID, Now: time.Now, Lines: []store.OrderLineParams{{ProductID: tea.ID, Quantity: 1}}}, storetest.SystemBy)
 	if err != nil {
 		t.Fatal(err)
 	}

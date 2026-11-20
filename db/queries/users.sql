@@ -7,7 +7,7 @@ SELECT * FROM users WHERE role = 'owner';
 
 -- Does nothing when an Owner exists, so concurrent installs can't fail or make a second
 -- one: the loser waits for the winner's commit, then skips (users-and-access R9).
--- name: CreateOwner :exec
+-- name: CreateOwner :execrows
 INSERT INTO users (name, email, role) VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING;
 
 -- name: ListUsers :many
@@ -34,7 +34,7 @@ SELECT id, name, email, role, status FROM new_user;
 
 -- Holds the User's row until the transaction ends (store.Store says why).
 -- name: LockUser :one
-SELECT role, status FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE;
+SELECT name, email, role, status FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE;
 
 -- An empty argument leaves its column as it is. The email is not here: it never changes
 -- (users-and-access R15).
@@ -49,7 +49,7 @@ RETURNING id, name, email, role, status, (password_hash IS NOT NULL)::boolean AS
 -- name: SetUserPassword :one
 UPDATE users SET password_hash = sqlc.arg(password_hash)::text
 WHERE id = sqlc.arg(id)
-RETURNING role;
+RETURNING name, email, role;
 
 -- name: ClearPassword :exec
 UPDATE users SET password_hash = NULL WHERE id = $1;

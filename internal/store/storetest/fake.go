@@ -101,27 +101,54 @@ func (f *Fake) GetOwner(context.Context) (store.User, error) {
 	return store.User{}, store.ErrNotFound
 }
 
-func (f *Fake) CreateOwner(_ context.Context, arg store.CreateOwnerParams) error {
+func (f *Fake) CreateOwner(_ context.Context, arg store.CreateOwnerParams) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
-		return f.Err
+		return 0, f.Err
 	}
 	if strings.TrimSpace(arg.Name) == "" {
-		return errors.New("violates users_name_check")
+		return 0, errors.New("violates users_name_check")
 	}
 	for _, user := range f.users {
 		if user.Role == "owner" || (!user.DeletedAt.Valid && strings.EqualFold(user.Email, arg.Email)) {
-			return nil
+			return 0, nil
 		}
 	}
 	f.users = append(f.users, store.User{
 		ID: int64(len(f.users) + 1), Name: arg.Name, Email: arg.Email, Role: "owner", Status: "active",
 	})
+	return 1, nil
+}
+
+// RecordActivity is store.Queries' RecordActivity: an entry written on the caller's transaction.
+func (f *Fake) RecordActivity(_ context.Context, entry store.ActivityEntry) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := f.checkActivity(entry); err != nil {
+		return err
+	}
+	f.record(entry)
 	return nil
 }
 
-func (f *Fake) CreateUser(_ context.Context, arg store.CreateUserParams) (store.CreateUserRow, error) {
+// snapshot is a User as an Activity log entry names them.
+func snapshot(u store.User) store.UserSnapshot {
+	return store.UserSnapshot{ID: u.ID, Name: u.Name, Email: u.Email, Role: u.Role, Status: u.Status}
+}
+
+// checkAll refuses the change when any of its entries would be refused, before anything is
+// kept, as the entry's failure rolls the change back (activity-log R3).
+func (f *Fake) checkAll(entries ...store.ActivityEntry) error {
+	for _, e := range entries {
+		if err := f.checkActivity(e); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (f *Fake) CreateUser(_ context.Context, arg store.CreateUserParams, by store.ActivityBy) (store.CreateUserRow, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
@@ -145,8 +172,13 @@ func (f *Fake) CreateUser(_ context.Context, arg store.CreateUserParams) (store.
 		return store.CreateUserRow{}, errors.New("violates users_one_owner_key")
 	}
 	user := store.User{ID: int64(len(f.users) + 1), Name: arg.Name, Email: arg.Email, Role: arg.Role, Status: "active"}
+	entries := []store.ActivityEntry{store.UserCreated(snapshot(user), by), store.UserSetupLinkIssued(snapshot(user), by)}
+	if err := f.checkAll(entries...); err != nil {
+		return store.CreateUserRow{}, err
+	}
 	f.users = append(f.users, user)
 	f.links[user.ID] = store.SetupLink{UserID: user.ID, TokenHash: arg.TokenHash, ExpiresAt: arg.ExpiresAt}
+	f.record(entries...)
 	return store.CreateUserRow{ID: user.ID, Name: user.Name, Email: user.Email, Role: user.Role, Status: user.Status}, nil
 }
 
@@ -169,7 +201,7 @@ func (f *Fake) ListUsers(context.Context) ([]store.ListUsersRow, error) {
 	return rows, nil
 }
 
-func (f *Fake) UpdateUser(_ context.Context, arg store.ChangeUserParams) (store.ChangeUserRow, error) {
+func (f *Fake) UpdateUser(_ context.Context, arg store.ChangeUserParams, by store.ActivityBy) (store.ChangeUserRow, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
@@ -202,7 +234,12 @@ func (f *Fake) UpdateUser(_ context.Context, arg store.ChangeUserParams) (store.
 	case changed.Role == "owner" && slices.ContainsFunc(f.users, func(u store.User) bool { return u.Role == "owner" }):
 		return store.ChangeUserRow{}, errors.New("violates users_one_owner_key")
 	}
+	entries := store.UserEdited(snapshot(*target), snapshot(changed), by)
+	if err := f.checkAll(entries...); err != nil {
+		return store.ChangeUserRow{}, err
+	}
 	*target = changed
+	f.record(entries...)
 	if changed.Status == "inactive" {
 		f.endSessions(changed.ID)
 		delete(f.links, changed.ID)
@@ -214,7 +251,7 @@ func (f *Fake) UpdateUser(_ context.Context, arg store.ChangeUserParams) (store.
 	}, nil
 }
 
-func (f *Fake) ResetPassword(_ context.Context, arg store.IssueSetupLinkParams) error {
+func (f *Fake) ResetPassword(_ context.Context, arg store.IssueSetupLinkParams, by store.ActivityBy) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
@@ -229,12 +266,17 @@ func (f *Fake) ResetPassword(_ context.Context, arg store.IssueSetupLinkParams) 
 	case target.Status == "inactive":
 		return store.ErrUserInactive
 	}
+	entries := []store.ActivityEntry{store.UserPasswordReset(snapshot(*target), by), store.UserSetupLinkIssued(snapshot(*target), by)}
+	if err := f.checkAll(entries...); err != nil {
+		return err
+	}
 	if err := f.issue(arg); err != nil {
 		return err
 	}
 	target.PasswordHash = pgtype.Text{}
 	delete(f.credentials, arg.UserID)
 	f.endSessions(arg.UserID)
+	f.record(entries...)
 	return nil
 }
 
@@ -464,7 +506,7 @@ func (f *Fake) GetSetupLinkUser(_ context.Context, arg store.GetSetupLinkUserPar
 	return store.GetSetupLinkUserRow{}, store.ErrNotFound
 }
 
-func (f *Fake) SetPassword(_ context.Context, arg store.SetPasswordParams) (int64, error) {
+func (f *Fake) SetPassword(_ context.Context, arg store.SetPasswordParams, by store.ActivityBy) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
@@ -472,6 +514,16 @@ func (f *Fake) SetPassword(_ context.Context, arg store.SetPasswordParams) (int6
 	}
 	for userID, link := range f.links {
 		if string(link.TokenHash) == string(arg.TokenHash) && link.ExpiresAt.After(arg.At) {
+			for i := range f.users {
+				if f.users[i].ID == userID {
+					who := snapshot(f.users[i])
+					entry := store.UserPasswordSet(who, by.AsUser(who))
+					if err := f.checkActivity(entry); err != nil {
+						return 0, err
+					}
+					f.record(entry)
+				}
+			}
 			delete(f.links, userID)
 			delete(f.credentials, userID)
 			for i := range f.users {

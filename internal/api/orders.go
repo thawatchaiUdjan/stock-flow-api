@@ -233,7 +233,7 @@ func registerOrders(api huma.API, deps Deps) {
 		}
 		created, err := deps.Store.CreateOrder(ctx, store.CreateOrderParams{
 			UserID: sessionOf(ctx).UserID, Now: deps.Now, Customer: input.Body.Customer, Note: input.Body.Note, Lines: lines,
-		})
+		}, activityBy(ctx, deps))
 		var short *store.InsufficientStockError
 		switch {
 		case err == nil:
@@ -267,7 +267,7 @@ func registerOrders(api huma.API, deps Deps) {
 		if err := inShopOrder(ctx, deps, input.Number); err != nil {
 			return nil, orderError(ctx, "complete order", err)
 		}
-		completed, err := deps.Store.CompleteOrder(ctx, store.FinishOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, Now: deps.Now})
+		completed, err := deps.Store.CompleteOrder(ctx, store.FinishOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, Now: deps.Now}, activityBy(ctx, deps))
 		if err != nil {
 			return nil, orderError(ctx, "complete order", err)
 		}
@@ -292,7 +292,7 @@ func registerOrders(api huma.API, deps Deps) {
 		if err := inShopOrder(ctx, deps, input.Number); err != nil {
 			return nil, orderError(ctx, "cancel order", err)
 		}
-		cancelled, err := deps.Store.CancelOrder(ctx, store.FinishOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, Now: deps.Now})
+		cancelled, err := deps.Store.CancelOrder(ctx, store.FinishOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, Now: deps.Now}, activityBy(ctx, deps))
 		if err != nil {
 			return nil, orderError(ctx, "cancel order", err)
 		}
@@ -318,7 +318,7 @@ func registerOrders(api huma.API, deps Deps) {
 		if err := inShopOrder(ctx, deps, input.Number); err != nil {
 			return nil, orderError(ctx, "delete order", err)
 		}
-		err := deps.Store.DeleteOrder(ctx, store.DeleteOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, At: deps.Now()})
+		err := deps.Store.DeleteOrder(ctx, store.DeleteOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, At: deps.Now()}, activityBy(ctx, deps))
 		if err != nil {
 			return nil, orderError(ctx, "delete order", err)
 		}

@@ -48,7 +48,7 @@ func (s *Store) DeleteProduct(ctx context.Context, arg DeleteParams, by Activity
 // answers ErrNotFound for no such User, Deleted ones included, ErrTargetIsOwner for the
 // Owner and ErrUserNotInactive for an Active one. The User is held, as every change to a
 // User is, so a reactivation at the same moment runs before or after, never between.
-func (s *Store) DeleteUser(ctx context.Context, arg DeleteParams) error {
+func (s *Store) DeleteUser(ctx context.Context, arg DeleteParams, by ActivityBy) error {
 	return InTx(ctx, s.pool, func(q *Queries) error {
 		target, err := lockTarget(ctx, q, arg.ID)
 		if err != nil {
@@ -60,7 +60,7 @@ func (s *Store) DeleteUser(ctx context.Context, arg DeleteParams) error {
 		if err := q.MarkUserDeleted(ctx, MarkUserDeletedParams{ID: arg.ID, UserID: arg.UserID, At: arg.At}); err != nil {
 			return fmt.Errorf("mark user deleted: %w", err)
 		}
-		return nil
+		return q.addActivity(ctx, UserDeleted(UserSnapshot{ID: arg.ID, Name: target.Name, Email: target.Email, Role: target.Role, Status: target.Status}, by))
 	})
 }
 
@@ -75,7 +75,7 @@ type DeleteOrderParams struct {
 // business ADR 0013). It answers ErrNotFound for no such Order, Deleted ones included, and
 // ErrOrderPending for a Pending one. The Order is held, so a Complete or Cancel at the same
 // moment runs before or after.
-func (s *Store) DeleteOrder(ctx context.Context, arg DeleteOrderParams) error {
+func (s *Store) DeleteOrder(ctx context.Context, arg DeleteOrderParams, by ActivityBy) error {
 	return InTx(ctx, s.pool, func(q *Queries) error {
 		order, err := q.LockOrder(ctx, arg.Number)
 		if errors.Is(err, ErrNotFound) {
@@ -87,9 +87,14 @@ func (s *Store) DeleteOrder(ctx context.Context, arg DeleteOrderParams) error {
 		if order.Status == OrderPending {
 			return ErrOrderPending
 		}
+		// Read while it is not Deleted yet: the entry names it as it was (activity-log R11).
+		detail, err := q.ReadOrder(ctx, arg.Number)
+		if err != nil {
+			return fmt.Errorf("read order: %w", err)
+		}
 		if err := q.MarkOrderDeleted(ctx, MarkOrderDeletedParams{ID: order.ID, UserID: arg.UserID, At: arg.At}); err != nil {
 			return fmt.Errorf("mark order deleted: %w", err)
 		}
-		return nil
+		return q.addActivity(ctx, OrderEntry(detail, ActionDeleted, by))
 	})
 }

@@ -153,7 +153,7 @@ func registerOrdersV2(api huma.API, deps Deps) {
 		Middlewares: huma.Middlewares{anyRole(api, deps)},
 		Errors:      []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusConflict},
 	}, func(ctx context.Context, input *orderNumberInput) (*orderV2Output, error) {
-		completed, err := deps.Store.CompleteOrder(ctx, store.FinishOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, Now: deps.Now})
+		completed, err := deps.Store.CompleteOrder(ctx, store.FinishOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, Now: deps.Now}, activityBy(ctx, deps))
 		if err != nil {
 			return nil, orderError(ctx, "complete order", err)
 		}
@@ -175,7 +175,7 @@ func registerOrdersV2(api huma.API, deps Deps) {
 		Middlewares: huma.Middlewares{ownerOrAdmin(api, deps)},
 		Errors:      []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict},
 	}, func(ctx context.Context, input *orderNumberInput) (*orderV2Output, error) {
-		cancelled, err := deps.Store.CancelOrder(ctx, store.FinishOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, Now: deps.Now})
+		cancelled, err := deps.Store.CancelOrder(ctx, store.FinishOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, Now: deps.Now}, activityBy(ctx, deps))
 		if err != nil {
 			return nil, orderError(ctx, "cancel order", err)
 		}
@@ -198,7 +198,7 @@ func registerOrdersV2(api huma.API, deps Deps) {
 		Errors:        []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict},
 	}, func(ctx context.Context, input *orderNumberInput) (*struct{}, error) {
 		// orders R20
-		err := deps.Store.DeleteOrder(ctx, store.DeleteOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, At: deps.Now()})
+		err := deps.Store.DeleteOrder(ctx, store.DeleteOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, At: deps.Now()}, activityBy(ctx, deps))
 		if err != nil {
 			return nil, orderError(ctx, "delete order", err)
 		}

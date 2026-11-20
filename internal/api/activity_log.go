@@ -18,13 +18,17 @@ import (
 // call it.
 func activityBy(ctx context.Context, deps Deps) store.ActivityBy {
 	session := sessionOf(ctx)
+	by := requestBy(ctx, deps)
+	by.Actor = store.ActivityActor{Kind: store.ActorUser, ID: session.UserID, Name: session.Name, Email: session.Email, Role: session.Role}
+	return by
+}
+
+// requestBy is when and from where this request's change is made, with no actor: for a
+// change made without a session, such as a password set through a Setup link, whose actor
+// the store names from the User the link is for (activity-log R2).
+func requestBy(ctx context.Context, deps Deps) store.ActivityBy {
 	info, _ := ctx.Value(requestInfoKey{}).(requestInfo)
-	return store.ActivityBy{
-		At:        deps.Now(),
-		Actor:     store.ActivityActor{Kind: store.ActorUser, ID: session.UserID, Name: session.Name, Email: session.Email, Role: session.Role},
-		IP:        info.ip,
-		UserAgent: info.userAgent,
-	}
+	return store.ActivityBy{At: deps.Now(), IP: info.ip, UserAgent: info.userAgent}
 }
 
 type activityActor struct {
@@ -52,7 +56,7 @@ type activityEntryBody struct {
 	ID        int64            `json:"id" doc:"Identifies the entry. Later entries have higher ids."`
 	At        time.Time        `json:"at" doc:"When the change was made."`
 	Actor     activityActor    `json:"actor" doc:"Who made it."`
-	Action    string           `json:"action" doc:"What was done: added, edited, archived, restored or deleted for a Product."`
+	Action    string           `json:"action" doc:"What was done. Product: added, edited, archived, restored, deleted. User: created, name-changed, role-changed, made-inactive, made-active, deleted, password-set, password-reset, setup-link-issued. Order: created, completed, cancelled, deleted."`
 	Subject   activitySubject  `json:"subject" doc:"What it was done to."`
 	Changes   []activityChange `json:"changes" nullable:"false" doc:"For an edit, each changed field with its value before and after; empty otherwise."`
 	IP        string           `json:"ip" doc:"The IP address of the request. Empty when no person made the change."`
@@ -63,7 +67,7 @@ type listActivityLogInput struct {
 	ActorKind string `query:"actorKind" enum:"user,customer,system,installation" doc:"Only the changes made by this kind of actor."`
 	ActorID   int64  `query:"actorId" minimum:"1" doc:"Only the changes made by the User or Customer with this id; use with actorKind."`
 	Kind      string `query:"kind" enum:"product,order,user,customer" doc:"Only the changes to this kind of record."`
-	Action    string `query:"action" maxLength:"40" pattern:"^[a-z-]+$" doc:"Only this action, such as edited."`
+	Action    string `query:"action" maxLength:"40" pattern:"^[a-z-]+$" doc:"Only this action, such as edited or made-inactive."`
 	From      string `query:"from" format:"date" doc:"Only the changes on or after this day of the Shop, in Bangkok time (YYYY-MM-DD)."`
 	To        string `query:"to" format:"date" doc:"Only the changes on or before this day of the Shop, in Bangkok time (YYYY-MM-DD)."`
 	Offset    int32  `query:"offset" minimum:"0" maximum:"2147483647" default:"0" doc:"How many matching entries to skip: page number times limit."`
@@ -91,7 +95,7 @@ func registerActivityLog(api huma.API, deps Deps) {
 		Method:      http.MethodGet,
 		Path:        "/v2/activity-log",
 		Summary:     "List the Activity log",
-		Description: "Every recorded change, newest first, in numbered pages of 10, 25 or 50 with an exact total. " +
+		Description: "Every recorded change to Products, Users and Orders, newest first, in numbered pages of 10, 25 or 50 with an exact total. " +
 			"An out-of-range page is empty with the actual total. Entries cannot be changed or removed. " + ownerOnlyErrors,
 		Tags:        []string{"Activity log"},
 		Security:    sessionSecurity,

@@ -26,16 +26,16 @@ type Store interface {
 	ListLoginLog(ctx context.Context, arg store.ListLoginLogParams) ([]store.ListLoginLogRow, error)
 	CountLoginLog(ctx context.Context, arg store.CountLoginLogParams) (int64, error)
 	GetSetupLinkUser(ctx context.Context, arg store.GetSetupLinkUserParams) (store.GetSetupLinkUserRow, error)
-	SetPassword(ctx context.Context, arg store.SetPasswordParams) (int64, error)
+	SetPassword(ctx context.Context, arg store.SetPasswordParams, by store.ActivityBy) (int64, error)
 	ListUsers(ctx context.Context) ([]store.ListUsersRow, error)
-	CreateUser(ctx context.Context, arg store.CreateUserParams) (store.CreateUserRow, error)
-	UpdateUser(ctx context.Context, arg store.ChangeUserParams) (store.ChangeUserRow, error)
-	ResetPassword(ctx context.Context, arg store.IssueSetupLinkParams) error
-	CreateEmailUser(context.Context, store.CreateEmailUserParams) (store.User, error)
+	CreateUser(ctx context.Context, arg store.CreateUserParams, by store.ActivityBy) (store.CreateUserRow, error)
+	UpdateUser(ctx context.Context, arg store.ChangeUserParams, by store.ActivityBy) (store.ChangeUserRow, error)
+	ResetPassword(ctx context.Context, arg store.IssueSetupLinkParams, by store.ActivityBy) error
+	CreateEmailUser(context.Context, store.CreateEmailUserParams, store.ActivityBy) (store.User, error)
 	IssuePasswordCredential(context.Context, store.EmailCredentialParams) (store.User, error)
 	VerifyFirstTimeCode(context.Context, store.VerifyFirstTimeCodeParams) (bool, error)
 	ReadEmailPasswordUser(context.Context, store.EmailPasswordParams) (store.User, error)
-	SetEmailPassword(context.Context, store.EmailPasswordParams) (store.User, error)
+	SetEmailPassword(context.Context, store.EmailPasswordParams, store.ActivityBy) (store.User, error)
 	ReserveEmailRequest(context.Context, store.EmailRequestParams) (bool, error)
 	ReserveLoginCheck(context.Context, store.LoginCheckParams) (bool, time.Time, error)
 	LoginBlockedUntil(context.Context, store.LoginBlockParams) (time.Time, error)
@@ -50,14 +50,14 @@ type Store interface {
 	DeleteProduct(ctx context.Context, arg store.DeleteParams, by store.ActivityBy) error
 	ListActivityLog(ctx context.Context, arg store.ListActivityLogParams) ([]store.ActivityLog, error)
 	CountActivityLog(ctx context.Context, arg store.CountActivityLogParams) (int64, error)
-	DeleteUser(ctx context.Context, arg store.DeleteParams) error
-	DeleteOrder(ctx context.Context, arg store.DeleteOrderParams) error
+	DeleteUser(ctx context.Context, arg store.DeleteParams, by store.ActivityBy) error
+	DeleteOrder(ctx context.Context, arg store.DeleteOrderParams, by store.ActivityBy) error
 	ListOrders(ctx context.Context, arg store.ListOrdersParams) ([]store.ListOrdersRow, error)
 	CountOrders(ctx context.Context, arg store.CountOrdersParams) (int64, error)
 	GetOrder(ctx context.Context, number int64) (store.OrderDetail, error)
-	CreateOrder(ctx context.Context, arg store.CreateOrderParams) (store.OrderDetail, error)
-	CompleteOrder(ctx context.Context, arg store.FinishOrderParams) (store.OrderDetail, error)
-	CancelOrder(ctx context.Context, arg store.FinishOrderParams) (store.OrderDetail, error)
+	CreateOrder(ctx context.Context, arg store.CreateOrderParams, by store.ActivityBy) (store.OrderDetail, error)
+	CompleteOrder(ctx context.Context, arg store.FinishOrderParams, by store.ActivityBy) (store.OrderDetail, error)
+	CancelOrder(ctx context.Context, arg store.FinishOrderParams, by store.ActivityBy) (store.OrderDetail, error)
 	SalesByDay(ctx context.Context, arg store.SalesByDayParams) ([]store.SalesByDayRow, error)
 	TopSellingProducts(ctx context.Context, arg store.TopSellingProductsParams) ([]store.TopSellingProductsRow, error)
 	ListProductsToRestock(ctx context.Context, rowLimit int32) ([]store.Product, error)

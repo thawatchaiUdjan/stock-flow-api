@@ -131,7 +131,7 @@ func registerUsers(api huma.API, deps Deps) {
 			Role:      input.Body.Role,
 			TokenHash: auth.HashToken(link.Token),
 			ExpiresAt: link.ExpiresAt,
-		})
+		}, activityBy(ctx, deps))
 		// No row back means the email is in use, in any letter case (users-and-access R3).
 		if errors.Is(err, store.ErrNotFound) {
 			return nil, domainError(http.StatusConflict, codeEmailTaken, "A User with this email already exists.")
@@ -161,7 +161,7 @@ func registerUsers(api huma.API, deps Deps) {
 	}, func(ctx context.Context, input *updateUserInput) (*updateUserOutput, error) {
 		updated, err := deps.Store.UpdateUser(ctx, store.ChangeUserParams{
 			ID: input.ID, Name: input.Body.Name, Role: input.Body.Role, Status: input.Body.Status,
-		})
+		}, activityBy(ctx, deps))
 		if err != nil {
 			return nil, targetError(ctx, "update user", err)
 		}
@@ -186,7 +186,7 @@ func registerUsers(api huma.API, deps Deps) {
 		link := auth.NewSetupLink(deps.Now())
 		err := deps.Store.ResetPassword(ctx, store.IssueSetupLinkParams{
 			UserID: input.ID, TokenHash: auth.HashToken(link.Token), ExpiresAt: link.ExpiresAt,
-		})
+		}, activityBy(ctx, deps))
 		if err != nil {
 			return nil, targetError(ctx, "reset password", err)
 		}
@@ -208,7 +208,7 @@ func registerUsers(api huma.API, deps Deps) {
 		Errors:        []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict},
 	}, func(ctx context.Context, input *userIDInput) (*struct{}, error) {
 		// users-and-access R54
-		err := deps.Store.DeleteUser(ctx, store.DeleteParams{ID: input.ID, UserID: sessionOf(ctx).UserID, At: deps.Now()})
+		err := deps.Store.DeleteUser(ctx, store.DeleteParams{ID: input.ID, UserID: sessionOf(ctx).UserID, At: deps.Now()}, activityBy(ctx, deps))
 		if err != nil {
 			return nil, targetError(ctx, "delete user", err)
 		}

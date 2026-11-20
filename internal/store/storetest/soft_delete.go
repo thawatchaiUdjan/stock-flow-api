@@ -76,7 +76,7 @@ func runSoftDelete(t *testing.T, newSubject func(t *testing.T) Subject) {
 		owner := s.AddUser(t, store.User{Name: "Malee", Email: "malee@example.com", Role: "owner", Status: "active"})
 		gone := s.AddUser(t, store.User{Name: "Somchai", Email: "somchai@example.com", Role: "staff", Status: "inactive"})
 
-		if err := s.Store.DeleteUser(ctx, store.DeleteParams{ID: gone.ID, UserID: owner.ID, At: at}); err != nil {
+		if err := s.Store.DeleteUser(ctx, store.DeleteParams{ID: gone.ID, UserID: owner.ID, At: at}, SystemBy); err != nil {
 			t.Fatal(err)
 		}
 
@@ -87,13 +87,13 @@ func runSoftDelete(t *testing.T, newSubject func(t *testing.T) Subject) {
 		if err != nil || len(rows) != 1 || rows[0].ID != owner.ID {
 			t.Errorf("users = %+v, %v; want only the Owner", rows, err)
 		}
-		if _, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: gone.ID, Status: "active"}); !errors.Is(err, store.ErrNotFound) {
+		if _, err := s.Store.UpdateUser(ctx, store.ChangeUserParams{ID: gone.ID, Status: "active"}, SystemBy); !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("update: err = %v, want ErrNotFound", err)
 		}
-		if err := s.Store.DeleteUser(ctx, store.DeleteParams{ID: gone.ID, UserID: owner.ID, At: at}); !errors.Is(err, store.ErrNotFound) {
+		if err := s.Store.DeleteUser(ctx, store.DeleteParams{ID: gone.ID, UserID: owner.ID, At: at}, SystemBy); !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("delete again: err = %v, want ErrNotFound", err)
 		}
-		created, err := s.Store.CreateUser(ctx, store.CreateUserParams{Name: "Somsri", Email: "Somchai@Example.com", Role: "staff", TokenHash: []byte("t"), ExpiresAt: at})
+		created, err := s.Store.CreateUser(ctx, store.CreateUserParams{Name: "Somsri", Email: "Somchai@Example.com", Role: "staff", TokenHash: []byte("t"), ExpiresAt: at}, SystemBy)
 		if err != nil || created.ID == gone.ID {
 			t.Errorf("a new User with the freed email: %+v, %v; want a new one", created, err)
 		}
@@ -107,13 +107,13 @@ func runSoftDelete(t *testing.T, newSubject func(t *testing.T) Subject) {
 		owner := s.AddUser(t, store.User{Name: "Malee", Email: "malee@example.com", Role: "owner", Status: "active"})
 		active := s.AddUser(t, staff("somchai@example.com"))
 
-		if err := s.Store.DeleteUser(ctx, store.DeleteParams{ID: active.ID, UserID: owner.ID, At: at}); !errors.Is(err, store.ErrUserNotInactive) {
+		if err := s.Store.DeleteUser(ctx, store.DeleteParams{ID: active.ID, UserID: owner.ID, At: at}, SystemBy); !errors.Is(err, store.ErrUserNotInactive) {
 			t.Errorf("Active: err = %v, want ErrUserNotInactive", err)
 		}
-		if err := s.Store.DeleteUser(ctx, store.DeleteParams{ID: owner.ID, UserID: owner.ID, At: at}); !errors.Is(err, store.ErrTargetIsOwner) {
+		if err := s.Store.DeleteUser(ctx, store.DeleteParams{ID: owner.ID, UserID: owner.ID, At: at}, SystemBy); !errors.Is(err, store.ErrTargetIsOwner) {
 			t.Errorf("Owner: err = %v, want ErrTargetIsOwner", err)
 		}
-		if err := s.Store.DeleteUser(ctx, store.DeleteParams{ID: 404, UserID: owner.ID, At: at}); !errors.Is(err, store.ErrNotFound) {
+		if err := s.Store.DeleteUser(ctx, store.DeleteParams{ID: 404, UserID: owner.ID, At: at}, SystemBy); !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("unknown: err = %v, want ErrNotFound", err)
 		}
 		if rows, err := s.Store.ListUsers(ctx); err != nil || len(rows) != 2 {
@@ -127,10 +127,10 @@ func runSoftDelete(t *testing.T, newSubject func(t *testing.T) Subject) {
 		tea := s.AddProduct(t, priced("Thai tea", "TEA-01", 100, 10))
 		createOrder(t, s, newOrder(user, "", line(tea, 2)))
 		createOrder(t, s, newOrder(user, "", line(tea, 3)))
-		if _, err := s.Store.CompleteOrder(ctx, finish(1, user)); err != nil {
+		if _, err := s.Store.CompleteOrder(ctx, finish(1, user), SystemBy); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.Store.CancelOrder(ctx, finish(2, user)); err != nil {
+		if _, err := s.Store.CancelOrder(ctx, finish(2, user), SystemBy); err != nil {
 			t.Fatal(err)
 		}
 		stock, movements := stockOf(t, s, tea.ID), len(listMovements(t, s, store.ListStockMovementsParams{}))
@@ -145,16 +145,16 @@ func runSoftDelete(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}
 
 		for _, number := range []int64{1, 2} {
-			if err := s.Store.DeleteOrder(ctx, store.DeleteOrderParams{Number: number, UserID: user.ID, At: at}); err != nil {
+			if err := s.Store.DeleteOrder(ctx, store.DeleteOrderParams{Number: number, UserID: user.ID, At: at}, SystemBy); err != nil {
 				t.Fatalf("delete %d: %v", number, err)
 			}
 			if _, err := s.Store.GetOrder(ctx, number); !errors.Is(err, store.ErrNotFound) {
 				t.Errorf("get %d: err = %v, want ErrNotFound", number, err)
 			}
-			if _, err := s.Store.CompleteOrder(ctx, finish(number, user)); !errors.Is(err, store.ErrNotFound) {
+			if _, err := s.Store.CompleteOrder(ctx, finish(number, user), SystemBy); !errors.Is(err, store.ErrNotFound) {
 				t.Errorf("complete %d: err = %v, want ErrNotFound", number, err)
 			}
-			if err := s.Store.DeleteOrder(ctx, store.DeleteOrderParams{Number: number, UserID: user.ID, At: at}); !errors.Is(err, store.ErrNotFound) {
+			if err := s.Store.DeleteOrder(ctx, store.DeleteOrderParams{Number: number, UserID: user.ID, At: at}, SystemBy); !errors.Is(err, store.ErrNotFound) {
 				t.Errorf("delete %d again: err = %v, want ErrNotFound", number, err)
 			}
 		}
@@ -193,10 +193,10 @@ func runSoftDelete(t *testing.T, newSubject func(t *testing.T) Subject) {
 		tea := s.AddProduct(t, priced("Thai tea", "TEA-01", 100, 10))
 		createOrder(t, s, newOrder(user, "", line(tea, 2)))
 
-		if err := s.Store.DeleteOrder(ctx, store.DeleteOrderParams{Number: 1, UserID: user.ID, At: at}); !errors.Is(err, store.ErrOrderPending) {
+		if err := s.Store.DeleteOrder(ctx, store.DeleteOrderParams{Number: 1, UserID: user.ID, At: at}, SystemBy); !errors.Is(err, store.ErrOrderPending) {
 			t.Errorf("Pending: err = %v, want ErrOrderPending", err)
 		}
-		if err := s.Store.DeleteOrder(ctx, store.DeleteOrderParams{Number: 404, UserID: user.ID, At: at}); !errors.Is(err, store.ErrNotFound) {
+		if err := s.Store.DeleteOrder(ctx, store.DeleteOrderParams{Number: 404, UserID: user.ID, At: at}, SystemBy); !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("unknown: err = %v, want ErrNotFound", err)
 		}
 		if got, err := s.Store.GetOrder(ctx, 1); err != nil || got.Status != "pending" {

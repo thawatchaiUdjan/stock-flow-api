@@ -137,14 +137,23 @@ func lockTarget(ctx context.Context, q *Queries, id int64) (LockUserRow, error) 
 // UpdateUser changes what arg names, in one transaction: an Inactive User has no session
 // and no Setup link left (users-and-access R16, R32). It answers ErrNotFound for no such
 // User and ErrTargetIsOwner for the Owner.
-func (s *Store) UpdateUser(ctx context.Context, arg ChangeUserParams) (updated ChangeUserRow, err error) {
+func (s *Store) UpdateUser(ctx context.Context, arg ChangeUserParams, by ActivityBy) (updated ChangeUserRow, err error) {
 	err = InTx(ctx, s.pool, func(q *Queries) error {
-		if _, err := lockTarget(ctx, q, arg.ID); err != nil {
+		before, err := lockTarget(ctx, q, arg.ID)
+		if err != nil {
 			return err
 		}
 		updated, err = q.ChangeUser(ctx, arg)
 		if err != nil {
 			return fmt.Errorf("change user: %w", err)
+		}
+		// activity-log R3, R4: the entries are saved with the change.
+		for _, entry := range UserEdited(
+			UserSnapshot{ID: arg.ID, Name: before.Name, Email: before.Email, Role: before.Role, Status: before.Status},
+			UserSnapshot{ID: arg.ID, Name: updated.Name, Email: updated.Email, Role: updated.Role, Status: updated.Status}, by) {
+			if err := q.addActivity(ctx, entry); err != nil {
+				return err
+			}
 		}
 		if updated.Status != statusInactive {
 			return nil
@@ -167,7 +176,7 @@ func (s *Store) UpdateUser(ctx context.Context, arg ChangeUserParams) (updated C
 // earlier Setup link, in one transaction (users-and-access R29, R31). It answers
 // ErrNotFound for no such User, ErrTargetIsOwner for the Owner (R34) and ErrUserInactive
 // for an Inactive User (R32), and then changes nothing.
-func (s *Store) ResetPassword(ctx context.Context, arg IssueSetupLinkParams) error {
+func (s *Store) ResetPassword(ctx context.Context, arg IssueSetupLinkParams, by ActivityBy) error {
 	return InTx(ctx, s.pool, func(q *Queries) error {
 		target, err := lockTarget(ctx, q, arg.UserID)
 		if err != nil {
@@ -189,7 +198,12 @@ func (s *Store) ResetPassword(ctx context.Context, arg IssueSetupLinkParams) err
 		if err := q.IssueSetupLink(ctx, arg); err != nil {
 			return fmt.Errorf("issue setup link: %w", err)
 		}
-		return nil
+		// activity-log R4: the password was reset and a Setup link was issued.
+		user := UserSnapshot{ID: arg.UserID, Name: target.Name, Email: target.Email, Role: target.Role, Status: target.Status}
+		if err := q.addActivity(ctx, UserPasswordReset(user, by)); err != nil {
+			return err
+		}
+		return q.addActivity(ctx, UserSetupLinkIssued(user, by))
 	})
 }
 
@@ -203,14 +217,15 @@ type SetPasswordParams struct {
 // SetPassword uses up the Setup link and sets its User's password, in one transaction.
 // Setting the Owner's password also ends all the Owner's sessions (users-and-access R34,
 // context ADR 0003); no one else's password-set ends any. It returns how many passwords
-// were set: 1, or 0 when the link doesn't work.
+// were set: 1, or 0 when the link doesn't work. The password's entry names the User, who is
+// the actor, and takes by's time and request (activity-log R4).
 //
 // No session of the Owner survives, however a login overlaps this. The password goes before
 // the sessions: it waits for every login holding the User (CreateSession's FOR SHARE), and a
 // login that comes later waits for this transaction and then finds the password changed.
 // The sessions go in a statement of their own, after that wait: its snapshot holds what
 // those logins committed, which one statement's snapshot, older than the wait, would miss.
-func (s *Store) SetPassword(ctx context.Context, arg SetPasswordParams) (used int64, err error) {
+func (s *Store) SetPassword(ctx context.Context, arg SetPasswordParams, by ActivityBy) (used int64, err error) {
 	err = InTx(ctx, s.pool, func(q *Queries) error {
 		userID, err := q.UseSetupLink(ctx, UseSetupLinkParams{TokenHash: arg.TokenHash, At: arg.At})
 		if errors.Is(err, ErrNotFound) {
@@ -219,14 +234,18 @@ func (s *Store) SetPassword(ctx context.Context, arg SetPasswordParams) (used in
 		if err != nil {
 			return fmt.Errorf("use setup link: %w", err)
 		}
-		role, err := q.SetUserPassword(ctx, SetUserPasswordParams{PasswordHash: arg.PasswordHash, ID: userID})
+		user, err := q.SetUserPassword(ctx, SetUserPasswordParams{PasswordHash: arg.PasswordHash, ID: userID})
 		if err != nil {
 			return fmt.Errorf("set user password: %w", err)
+		}
+		who := UserSnapshot{ID: userID, Name: user.Name, Email: user.Email, Role: user.Role}
+		if err := q.addActivity(ctx, UserPasswordSet(who, by.AsUser(who))); err != nil {
+			return err
 		}
 		if err := q.DeleteEmailCredential(ctx, userID); err != nil {
 			return fmt.Errorf("delete email credential: %w", err)
 		}
-		if role == roleOwner {
+		if user.Role == roleOwner {
 			if err := q.DeleteUserSessions(ctx, userID); err != nil {
 				return fmt.Errorf("delete sessions: %w", err)
 			}
@@ -238,6 +257,24 @@ func (s *Store) SetPassword(ctx context.Context, arg SetPasswordParams) (used in
 		return 0, err
 	}
 	return used, nil
+}
+
+// CreateUser creates the User and issues their Setup link in one statement, and writes the
+// entries of both in the same transaction (users-and-access R3, activity-log R3, R4). It
+// answers ErrNotFound when the email is in use, and then changes nothing.
+func (s *Store) CreateUser(ctx context.Context, arg CreateUserParams, by ActivityBy) (created CreateUserRow, err error) {
+	err = InTx(ctx, s.pool, func(q *Queries) error {
+		var err error
+		if created, err = q.CreateUser(ctx, arg); err != nil {
+			return err
+		}
+		user := UserSnapshot{ID: created.ID, Name: created.Name, Email: created.Email, Role: created.Role, Status: created.Status}
+		if err := q.addActivity(ctx, UserCreated(user, by)); err != nil {
+			return err
+		}
+		return q.addActivity(ctx, UserSetupLinkIssued(user, by))
+	})
+	return created, err
 }
 
 // CreateProduct adds a Product with stock 0, Active (products R7, R11), and its Activity

@@ -32,7 +32,7 @@ func newActorsHarness(t *testing.T) *actorsHarness {
 	a.product = h.store.AddProduct(store.Product{Name: "Thai tea", Sku: "TEA-01", Unit: "box", Price: 4500, Stock: 20, Status: "active"})
 	created, err := h.store.CreateOrder(context.Background(), store.CreateOrderParams{
 		UserID: somchai.ID, Now: h.clock.Now, Customer: "Walk-in", Lines: []store.OrderLineParams{{ProductID: a.product.ID, Quantity: 2}},
-	})
+	}, storetest.SystemBy)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestV2OrdersCompleteAndCancelNameTheActor(t *testing.T) {
 	}
 	// The system's cancellation, as the Unpaid timeout of a later ticket makes it.
 	system := a.store.AddOnlineOrder(storetest.OnlineOrderSeed{Customer: "Somsak", ProductID: a.product.ID, Quantity: 1, Price: 4500, At: a.clock.Now()})
-	if _, err := a.store.CancelOrder(context.Background(), store.FinishOrderParams{Number: system, Now: a.clock.Now}); err != nil {
+	if _, err := a.store.CancelOrder(context.Background(), store.FinishOrderParams{Number: system, Now: a.clock.Now}, storetest.SystemBy); err != nil {
 		t.Fatal(err)
 	}
 	got := decode[orderV2Body](t, a.do(http.MethodGet, fmt.Sprintf("/v2/orders/%d", system), nil, a.staff))
@@ -232,7 +232,7 @@ type movementV2Body struct {
 // stock-movements R2, R10: /v2/stock-movements shows every actor; the legacy list only Users.
 func TestStockMovementsNameTheActorAndLegacyListsOnlyUsers(t *testing.T) {
 	a := newActorsHarness(t)
-	if _, err := a.store.CancelOrder(context.Background(), store.FinishOrderParams{Number: a.inShop, Now: a.clock.Now}); err != nil {
+	if _, err := a.store.CancelOrder(context.Background(), store.FinishOrderParams{Number: a.inShop, Now: a.clock.Now}, storetest.SystemBy); err != nil {
 		t.Fatal(err)
 	}
 
