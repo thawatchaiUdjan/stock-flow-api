@@ -24,6 +24,8 @@ type Fake struct {
 	// LogErr, when set, is returned by every operation that writes a Login log entry, like
 	// a database that can read but not write.
 	LogErr error
+	// ActivityErr makes writing an Activity log entry fail, and the change with it.
+	ActivityErr error
 
 	mu            sync.Mutex
 	users         []store.User
@@ -34,6 +36,7 @@ type Fake struct {
 	loginChecks   []store.LoginCheckParams
 	log           []store.ListLoginLogRow
 	products      []store.Product
+	activity      []store.ActivityLog
 	movements     []store.StockMovement
 	orders        []store.Order
 	lines         []store.OrderLine

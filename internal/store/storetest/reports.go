@@ -115,7 +115,7 @@ func runReports(t *testing.T, newSubject func(t *testing.T) Subject) {
 		completedAt(t, s, user, midnight.Add(time.Hour), line(cup, 1), line(pen, 3))
 		createOrder(t, s, newOrder(user, "", line(pen, 50))) // Pending: not Sales
 		// A new price changes no Order already made.
-		if _, err := s.Store.UpdateProduct(context.Background(), store.ChangeProductParams{ID: cup.ID, Price: pgtype.Int8{Int64: 2000, Valid: true}}); err != nil {
+		if _, err := s.Store.UpdateProduct(context.Background(), store.ChangeProductParams{ID: cup.ID, Price: pgtype.Int8{Int64: 2000, Valid: true}}, SystemBy); err != nil {
 			t.Fatal(err)
 		}
 		completedAt(t, s, user, midnight.Add(2*time.Hour), line(cup, 1))
@@ -164,7 +164,7 @@ func runReports(t *testing.T, newSubject func(t *testing.T) Subject) {
 		user := s.AddUser(t, staff("somchai@example.com"))
 		tea := s.AddProduct(t, priced("Thai tea", "TEA-01", 4500, 100))
 		completedAt(t, s, user, midnight, line(tea, 1))
-		if _, err := s.Store.UpdateProduct(context.Background(), store.ChangeProductParams{ID: tea.ID, Status: pgtype.Text{String: "archived", Valid: true}}); err != nil {
+		if _, err := s.Store.UpdateProduct(context.Background(), store.ChangeProductParams{ID: tea.ID, Status: pgtype.Text{String: "archived", Valid: true}}, SystemBy); err != nil {
 			t.Fatal(err)
 		}
 

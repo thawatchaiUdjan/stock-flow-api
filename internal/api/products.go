@@ -178,7 +178,7 @@ func registerProducts(api huma.API, deps Deps) {
 		row, err := deps.Store.CreateProduct(ctx, store.InsertProductParams{
 			Name: input.Body.Name, Sku: input.Body.SKU, Unit: input.Body.Unit,
 			Price: input.Body.Price, MinimumStock: input.Body.MinimumStock,
-		})
+		}, activityBy(ctx, deps))
 		if err != nil {
 			return nil, productError(ctx, "create product", err)
 		}
@@ -208,7 +208,7 @@ func registerProducts(api huma.API, deps Deps) {
 		if body.MinimumStock != nil {
 			change.MinimumStock = pgtype.Int4{Int32: *body.MinimumStock, Valid: true}
 		}
-		row, err := deps.Store.UpdateProduct(ctx, change)
+		row, err := deps.Store.UpdateProduct(ctx, change, activityBy(ctx, deps))
 		if err != nil {
 			return nil, productError(ctx, "update product", err)
 		}
@@ -231,7 +231,7 @@ func registerProducts(api huma.API, deps Deps) {
 		Errors:        []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict},
 	}, func(ctx context.Context, input *productIDInput) (*struct{}, error) {
 		// products R17
-		err := deps.Store.DeleteProduct(ctx, store.DeleteParams{ID: input.ID, UserID: sessionOf(ctx).UserID, At: deps.Now()})
+		err := deps.Store.DeleteProduct(ctx, store.DeleteParams{ID: input.ID, UserID: sessionOf(ctx).UserID, At: deps.Now()}, activityBy(ctx, deps))
 		if err != nil {
 			return nil, productError(ctx, "delete product", err)
 		}

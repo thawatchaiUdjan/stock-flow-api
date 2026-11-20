@@ -228,18 +228,40 @@ func (s *Store) SetPassword(ctx context.Context, arg SetPasswordParams) (used in
 	return used, nil
 }
 
-// CreateProduct adds a Product with stock 0, Active (products R7, R11). It answers
-// ErrSKUTaken when another Product has the SKU, in any letter case (products R3).
-func (s *Store) CreateProduct(ctx context.Context, arg InsertProductParams) (Product, error) {
-	created, err := s.Queries.InsertProduct(ctx, arg)
+// CreateProduct adds a Product with stock 0, Active (products R7, R11), and its Activity
+// log entry in the same transaction (activity-log R3). It answers ErrSKUTaken when another
+// Product has the SKU, in any letter case (products R3).
+func (s *Store) CreateProduct(ctx context.Context, arg InsertProductParams, by ActivityBy) (created Product, err error) {
+	err = InTx(ctx, s.pool, func(q *Queries) error {
+		var err error
+		if created, err = q.InsertProduct(ctx, arg); err != nil {
+			return err
+		}
+		return q.addActivity(ctx, ProductAdded(created, by))
+	})
 	return created, skuTaken(err)
 }
 
-// UpdateProduct changes what arg names and leaves the rest, never the stock. It answers
-// ErrNotFound for no such Product and ErrSKUTaken when another Product has the new SKU, in
-// any letter case (products R3).
-func (s *Store) UpdateProduct(ctx context.Context, arg ChangeProductParams) (Product, error) {
-	updated, err := s.Queries.ChangeProduct(ctx, arg)
+// UpdateProduct changes what arg names and leaves the rest, never the stock, and writes
+// the Activity log entries of the change in the same transaction (activity-log R3). It
+// answers ErrNotFound for no such Product and ErrSKUTaken when another Product has the
+// new SKU, in any letter case (products R3).
+func (s *Store) UpdateProduct(ctx context.Context, arg ChangeProductParams, by ActivityBy) (updated Product, err error) {
+	err = InTx(ctx, s.pool, func(q *Queries) error {
+		before, err := q.LockProduct(ctx, arg.ID)
+		if err != nil {
+			return err
+		}
+		if updated, err = q.ChangeProduct(ctx, arg); err != nil {
+			return err
+		}
+		for _, entry := range ProductEdited(before, updated, by) {
+			if err := q.addActivity(ctx, entry); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 	return updated, skuTaken(err)
 }
 

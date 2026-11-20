@@ -45,9 +45,11 @@ type Store interface {
 	MoveStock(ctx context.Context, arg store.MoveStockParams) ([]store.ListStockMovementsRow, error)
 	ListStockMovements(ctx context.Context, arg store.ListStockMovementsParams) ([]store.ListStockMovementsRow, error)
 	CountStockMovements(ctx context.Context, arg store.CountStockMovementsParams) (int64, error)
-	CreateProduct(ctx context.Context, arg store.InsertProductParams) (store.Product, error)
-	UpdateProduct(ctx context.Context, arg store.ChangeProductParams) (store.Product, error)
-	DeleteProduct(ctx context.Context, arg store.DeleteParams) error
+	CreateProduct(ctx context.Context, arg store.InsertProductParams, by store.ActivityBy) (store.Product, error)
+	UpdateProduct(ctx context.Context, arg store.ChangeProductParams, by store.ActivityBy) (store.Product, error)
+	DeleteProduct(ctx context.Context, arg store.DeleteParams, by store.ActivityBy) error
+	ListActivityLog(ctx context.Context, arg store.ListActivityLogParams) ([]store.ActivityLog, error)
+	CountActivityLog(ctx context.Context, arg store.CountActivityLogParams) (int64, error)
 	DeleteUser(ctx context.Context, arg store.DeleteParams) error
 	DeleteOrder(ctx context.Context, arg store.DeleteOrderParams) error
 	ListOrders(ctx context.Context, arg store.ListOrdersParams) ([]store.ListOrdersRow, error)
@@ -98,6 +100,7 @@ func New(deps Deps) (http.Handler, huma.API) {
 	registerLoginIdentify(api, deps)
 	registerLoginLog(api, deps)
 	registerProducts(api, deps)
+	registerActivityLog(api, deps)
 	registerStockMovements(api, deps)
 	registerOrders(api, deps)
 	registerReports(api, deps)

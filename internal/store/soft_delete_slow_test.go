@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
+	"github.com/thawatchaiUdjan/stock-flow-api/internal/store/storetest"
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/testdb"
 )
 
@@ -91,12 +92,12 @@ func TestADeleteAndAnActivateOfOneProductAtOnceRunOneAfterTheOther(t *testing.T)
 		pool := open(t, testdb.URL(t))
 		s := store.NewStore(pool)
 		owner := addUser(t, pool, store.User{Name: "Malee", Email: "malee@example.com", Role: "owner", Status: "active"})
-		tea, err := s.CreateProduct(ctx, store.InsertProductParams{Name: "Thai tea", Sku: "TEA-01", Unit: "box", Price: 100})
+		tea, err := s.CreateProduct(ctx, store.InsertProductParams{Name: "Thai tea", Sku: "TEA-01", Unit: "box", Price: 100}, storetest.SystemBy)
 		if err != nil {
 			t.Fatal(err)
 		}
 		archived := pgtype.Text{String: "archived", Valid: true}
-		if _, err := s.UpdateProduct(ctx, store.ChangeProductParams{ID: tea.ID, Status: archived}); err != nil {
+		if _, err := s.UpdateProduct(ctx, store.ChangeProductParams{ID: tea.ID, Status: archived}, storetest.SystemBy); err != nil {
 			t.Fatal(err)
 		}
 
@@ -105,11 +106,11 @@ func TestADeleteAndAnActivateOfOneProductAtOnceRunOneAfterTheOther(t *testing.T)
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			deleted = s.DeleteProduct(ctx, store.DeleteParams{ID: tea.ID, UserID: owner.ID, At: now})
+			deleted = s.DeleteProduct(ctx, store.DeleteParams{ID: tea.ID, UserID: owner.ID, At: now}, storetest.SystemBy)
 		}()
 		go func() {
 			defer wg.Done()
-			_, activated = s.UpdateProduct(ctx, store.ChangeProductParams{ID: tea.ID, Status: pgtype.Text{String: "active", Valid: true}})
+			_, activated = s.UpdateProduct(ctx, store.ChangeProductParams{ID: tea.ID, Status: pgtype.Text{String: "active", Valid: true}}, storetest.SystemBy)
 		}()
 		wg.Wait()
 

@@ -15,7 +15,7 @@ func runSoftDelete(t *testing.T, newSubject func(t *testing.T) Subject) {
 	ctx := context.Background()
 	archive := func(t *testing.T, s Subject, id int64) {
 		t.Helper()
-		if _, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: id, Status: text("archived")}); err != nil {
+		if _, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: id, Status: text("archived")}, SystemBy); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -26,7 +26,7 @@ func runSoftDelete(t *testing.T, newSubject func(t *testing.T) Subject) {
 		tea := s.AddProduct(t, stocked("Thai tea", "TEA-01", 10))
 		archive(t, s, tea.ID)
 
-		if err := s.Store.DeleteProduct(ctx, store.DeleteParams{ID: tea.ID, UserID: by.ID, At: at}); err != nil {
+		if err := s.Store.DeleteProduct(ctx, store.DeleteParams{ID: tea.ID, UserID: by.ID, At: at}, SystemBy); err != nil {
 			t.Fatal(err)
 		}
 
@@ -41,16 +41,16 @@ func runSoftDelete(t *testing.T, newSubject func(t *testing.T) Subject) {
 			t.Errorf("count = %d, %v; want 0", count, err)
 		}
 		change := store.ChangeProductParams{ID: tea.ID, Status: text("active")}
-		if _, err := s.Store.UpdateProduct(ctx, change); !errors.Is(err, store.ErrNotFound) {
+		if _, err := s.Store.UpdateProduct(ctx, change, SystemBy); !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("update: err = %v, want ErrNotFound", err)
 		}
-		if err := s.Store.DeleteProduct(ctx, store.DeleteParams{ID: tea.ID, UserID: by.ID, At: at}); !errors.Is(err, store.ErrNotFound) {
+		if err := s.Store.DeleteProduct(ctx, store.DeleteParams{ID: tea.ID, UserID: by.ID, At: at}, SystemBy); !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("delete again: err = %v, want ErrNotFound", err)
 		}
-		if _, err := s.Store.CreateProduct(ctx, newProduct("Other tea", "tea-01")); err != nil {
+		if _, err := s.Store.CreateProduct(ctx, newProduct("Other tea", "tea-01"), SystemBy); err != nil {
 			t.Errorf("a new Product with the freed SKU: err = %v, want none", err)
 		}
-		if _, err := s.Store.CreateProduct(ctx, newProduct("Third tea", "TEA-01")); !errors.Is(err, store.ErrSKUTaken) {
+		if _, err := s.Store.CreateProduct(ctx, newProduct("Third tea", "TEA-01"), SystemBy); !errors.Is(err, store.ErrSKUTaken) {
 			t.Errorf("the SKU in use again: err = %v, want ErrSKUTaken", err)
 		}
 	})
@@ -60,10 +60,10 @@ func runSoftDelete(t *testing.T, newSubject func(t *testing.T) Subject) {
 		by := s.AddUser(t, staff("somchai@example.com"))
 		tea := s.AddProduct(t, stocked("Thai tea", "TEA-01", 10))
 
-		if err := s.Store.DeleteProduct(ctx, store.DeleteParams{ID: tea.ID, UserID: by.ID, At: at}); !errors.Is(err, store.ErrProductNotArchived) {
+		if err := s.Store.DeleteProduct(ctx, store.DeleteParams{ID: tea.ID, UserID: by.ID, At: at}, SystemBy); !errors.Is(err, store.ErrProductNotArchived) {
 			t.Errorf("Active: err = %v, want ErrProductNotArchived", err)
 		}
-		if err := s.Store.DeleteProduct(ctx, store.DeleteParams{ID: 404, UserID: by.ID, At: at}); !errors.Is(err, store.ErrNotFound) {
+		if err := s.Store.DeleteProduct(ctx, store.DeleteParams{ID: 404, UserID: by.ID, At: at}, SystemBy); !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("unknown: err = %v, want ErrNotFound", err)
 		}
 		if got, err := s.Store.GetProduct(ctx, tea.ID); err != nil || got.Status != "active" {

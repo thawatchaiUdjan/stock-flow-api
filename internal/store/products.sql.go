@@ -212,6 +212,30 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 	return items, nil
 }
 
+const lockProduct = `-- name: LockProduct :one
+SELECT id, name, sku, unit, price, minimum_stock, stock, status, stock_state, deleted_at, deleted_by FROM products WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+`
+
+// Held while a change reads the Product's values before and after (activity-log R2).
+func (q *Queries) LockProduct(ctx context.Context, id int64) (Product, error) {
+	row := q.db.QueryRow(ctx, lockProduct, id)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Sku,
+		&i.Unit,
+		&i.Price,
+		&i.MinimumStock,
+		&i.Stock,
+		&i.Status,
+		&i.StockState,
+		&i.DeletedAt,
+		&i.DeletedBy,
+	)
+	return i, err
+}
+
 const markProductDeleted = `-- name: MarkProductDeleted :execrows
 UPDATE products SET deleted_at = $1::timestamptz, deleted_by = $2::bigint
 WHERE id = $3 AND deleted_at IS NULL AND status = 'archived'

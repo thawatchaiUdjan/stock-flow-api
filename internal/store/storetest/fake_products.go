@@ -61,7 +61,7 @@ func (f *Fake) skuUsed(sku string, except int64) bool {
 	})
 }
 
-func (f *Fake) CreateProduct(_ context.Context, arg store.InsertProductParams) (store.Product, error) {
+func (f *Fake) CreateProduct(_ context.Context, arg store.InsertProductParams, by store.ActivityBy) (store.Product, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
@@ -79,7 +79,12 @@ func (f *Fake) CreateProduct(_ context.Context, arg store.InsertProductParams) (
 		return store.Product{}, store.ErrSKUTaken
 	}
 	product.StockState = stockState(product)
+	entry := store.ProductAdded(product, by)
+	if err := f.checkActivity(entry); err != nil {
+		return store.Product{}, err
+	}
 	f.products = append(f.products, product)
+	f.record(entry)
 	return product, nil
 }
 
@@ -97,7 +102,7 @@ func (f *Fake) GetProduct(_ context.Context, id int64) (store.Product, error) {
 	return store.Product{}, store.ErrNotFound
 }
 
-func (f *Fake) UpdateProduct(_ context.Context, arg store.ChangeProductParams) (store.Product, error) {
+func (f *Fake) UpdateProduct(_ context.Context, arg store.ChangeProductParams, by store.ActivityBy) (store.Product, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
@@ -133,7 +138,14 @@ func (f *Fake) UpdateProduct(_ context.Context, arg store.ChangeProductParams) (
 		return store.Product{}, store.ErrSKUTaken
 	}
 	changed.StockState = stockState(changed)
+	entries := store.ProductEdited(f.products[i], changed, by)
+	for _, entry := range entries {
+		if err := f.checkActivity(entry); err != nil {
+			return store.Product{}, err
+		}
+	}
 	f.products[i] = changed
+	f.record(entries...)
 	return changed, nil
 }
 
