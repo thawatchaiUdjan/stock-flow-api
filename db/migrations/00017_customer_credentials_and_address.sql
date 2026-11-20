@@ -27,13 +27,13 @@ ALTER TABLE customers
     ADD CONSTRAINT customers_address_check CHECK (
         (address_recipient IS NULL AND address_phone IS NULL AND address_line IS NULL AND address_subdistrict IS NULL
             AND address_district IS NULL AND address_province IS NULL AND address_postcode IS NULL)
-        OR (address_recipient !~ '^\s*$' AND char_length(address_recipient) <= 120
-            AND address_phone ~ '^0[0-9]{8,9}$'
-            AND address_line !~ '^\s*$' AND char_length(address_line) <= 200
-            AND address_subdistrict !~ '^\s*$' AND char_length(address_subdistrict) <= 80
-            AND address_district !~ '^\s*$' AND char_length(address_district) <= 80
-            AND address_province !~ '^\s*$'
-            AND address_postcode ~ '^[0-9]{5}$')
+        OR (address_recipient IS NOT NULL AND address_recipient !~ '^\s*$' AND char_length(address_recipient) <= 120
+            AND address_phone IS NOT NULL AND address_phone ~ '^0[0-9]{8,9}$'
+            AND address_line IS NOT NULL AND address_line !~ '^\s*$' AND char_length(address_line) <= 200
+            AND address_subdistrict IS NOT NULL AND address_subdistrict !~ '^\s*$' AND char_length(address_subdistrict) <= 80
+            AND address_district IS NOT NULL AND address_district !~ '^\s*$' AND char_length(address_district) <= 80
+            AND address_province IS NOT NULL AND address_province !~ '^\s*$'
+            AND address_postcode IS NOT NULL AND address_postcode ~ '^[0-9]{5}$')
     );
 
 -- +goose Down

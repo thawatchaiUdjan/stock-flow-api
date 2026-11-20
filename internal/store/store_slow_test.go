@@ -1182,3 +1182,26 @@ func TestTheActorChannelAndAppMigrationKeepsStoredRowsAndReverses(t *testing.T) 
 		t.Errorf("after down, an Order with no creator: err = %v, want a not-null violation", err)
 	}
 }
+
+// customers R2, storefront R7: a saved Delivery address is none or all seven fields; a NULL
+// among them must not slip past the other checks.
+func TestADeliveryAddressWithAMissingFieldIsRefused(t *testing.T) {
+	ctx := context.Background()
+	pool := open(t, testdb.URL(t))
+	c := addCustomer(t, pool, store.Customer{Name: "Somying", Email: "somying@example.com", Phone: "0812345678", Status: "active"})
+	columns := []string{"recipient", "phone", "line", "subdistrict", "district", "province", "postcode"}
+	values := []string{"Somying", "0812345678", "99/1 Rama IV", "Silom", "Bang Rak", "Bangkok", "10500"}
+
+	for missing := range columns {
+		set := ""
+		for i, column := range columns {
+			if i == missing {
+				set += "address_" + column + " = NULL, "
+			} else {
+				set += fmt.Sprintf("address_%s = '%s', ", column, values[i])
+			}
+		}
+		_, err := pool.Exec(ctx, "UPDATE customers SET "+set[:len(set)-2]+" WHERE id = $1", c.ID)
+		assertViolates(t, err, "customers_address_check")
+	}
+}
