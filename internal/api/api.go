@@ -38,6 +38,7 @@ type Store interface {
 	SetEmailPassword(context.Context, store.EmailPasswordParams) (store.User, error)
 	ReserveEmailRequest(context.Context, store.EmailRequestParams) (bool, error)
 	ReserveLoginCheck(context.Context, store.LoginCheckParams) (bool, time.Time, error)
+	LoginBlockedUntil(context.Context, store.LoginBlockParams) (time.Time, error)
 	GetProduct(ctx context.Context, id int64) (store.Product, error)
 	ListProducts(ctx context.Context, arg store.ListProductsParams) ([]store.Product, error)
 	CountProducts(ctx context.Context, arg store.CountProductsParams) (int64, error)

@@ -21,3 +21,18 @@ LIMIT sqlc.arg(row_limit) OFFSET sqlc.arg(row_offset)::integer;
 SELECT count(*) FROM login_log
 WHERE (sqlc.narg(user_id)::bigint IS NULL OR login_log.user_id = sqlc.narg(user_id))
     AND (sqlc.narg(result)::text IS NULL OR login_log.result = sqlc.narg(result));
+
+-- users-and-access R55: the newest failures for an email, in any letter case, as far back
+-- as a block can still reach. LIMIT is the count that blocks.
+-- name: RecentFailedLoginsByEmail :many
+SELECT at FROM login_log
+WHERE result = 'failed-login' AND lower(email) = lower(sqlc.arg(email)) AND at > sqlc.arg(since)
+ORDER BY at DESC
+LIMIT 5;
+
+-- users-and-access R56: the newest failures from an address within the last hour.
+-- name: RecentFailedLoginsByIP :many
+SELECT at FROM login_log
+WHERE result = 'failed-login' AND ip = sqlc.arg(ip) AND at > sqlc.arg(since)
+ORDER BY at DESC
+LIMIT 50;

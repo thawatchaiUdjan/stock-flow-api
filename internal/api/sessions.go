@@ -88,9 +88,11 @@ func registerSessions(api huma.API, deps Deps) {
 		Method:      http.MethodPost,
 		Path:        "/login",
 		Summary:     "Log in with an email and a password",
-		Description: "Starts a session. Every failure answers the same 401 `login-failed`, in the same time.",
-		Tags:        []string{"Sessions"},
-		Errors:      []int{http.StatusUnauthorized},
+		Description: "Starts a session. Every failure answers the same 401 `login-failed`, in the same time. " +
+			"After 5 failed logins for an email within 15 minutes, or 50 from an IP address within an hour, answers 429 `login-blocked` " +
+			"with Retry-After, even for the right password, and records a `blocked` Login log entry. Forgot password and password setup are never blocked.",
+		Tags:   []string{"Sessions"},
+		Errors: []int{http.StatusUnauthorized, http.StatusTooManyRequests},
 	}, func(ctx context.Context, input *logInInput) (*logInOutput, error) {
 		failed := domainError(http.StatusUnauthorized, codeLoginFailed, "Email or password is incorrect.")
 		user, err := deps.Store.GetUserByEmail(ctx, input.Body.Email)
@@ -100,6 +102,19 @@ func registerSessions(api huma.API, deps Deps) {
 		// users-and-access R36: the email as typed, and the User only if it matches one. An
 		// unknown email leaves the zero User, whose ID is 0.
 		entry := loginLogEntry(ctx, deps, store.ResultFailedLogin, input.Body.Email, user.ID)
+		// users-and-access R55-R57: before the password is looked at, and the same answer
+		// for every email.
+		blockedUntil, err := deps.Store.LoginBlockedUntil(ctx, store.LoginBlockParams{Email: input.Body.Email, IP: entry.Ip, At: entry.At})
+		if err != nil {
+			return nil, internalError(ctx, "log in: check login limits", err)
+		}
+		if !blockedUntil.IsZero() {
+			entry.Result = store.ResultBlocked
+			if err := deps.Store.AddLoginLogEntry(ctx, entry); err != nil {
+				return nil, internalError(ctx, "log in: add login log entry", err)
+			}
+			return nil, retryLater(codeLoginBlocked, "Logins are temporarily blocked. Try again later.", blockedUntil, entry.At)
+		}
 		// Verify runs on every path and before the status is looked at, so an unknown
 		// email, a User with no password and an Inactive User all take as long as a wrong
 		// password (users-and-access R5, R16). The zero User has an empty hash.

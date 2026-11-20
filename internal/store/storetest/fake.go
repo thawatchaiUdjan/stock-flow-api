@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -311,7 +312,7 @@ func (f *Fake) addEntry(arg store.AddLoginLogEntryParams) error {
 	if f.LogErr != nil {
 		return f.LogErr
 	}
-	if arg.Result != store.ResultLogin && arg.Result != store.ResultFailedLogin && arg.Result != store.ResultLogout {
+	if arg.Result != store.ResultLogin && arg.Result != store.ResultFailedLogin && arg.Result != store.ResultLogout && arg.Result != store.ResultBlocked {
 		return errors.New("violates login_log_result_check")
 	}
 	entry := store.ListLoginLogRow{
@@ -327,6 +328,33 @@ func (f *Fake) addEntry(arg store.AddLoginLogEntryParams) error {
 	}
 	f.log = append(f.log, entry)
 	return nil
+}
+
+// LoginBlockedUntil feeds the newest failures to the same rule the database uses.
+func (f *Fake) LoginBlockedUntil(_ context.Context, arg store.LoginBlockParams) (time.Time, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Err != nil {
+		return time.Time{}, f.Err
+	}
+	var byEmail, byIP []time.Time
+	for _, row := range f.log {
+		if row.Result != store.ResultFailedLogin {
+			continue
+		}
+		if strings.EqualFold(row.Email, arg.Email) {
+			byEmail = append(byEmail, row.At)
+		}
+		if row.Ip == arg.IP {
+			byIP = append(byIP, row.At)
+		}
+	}
+	newestFirst := func(times []time.Time) []time.Time {
+		slices.SortStableFunc(times, func(a, b time.Time) int { return b.Compare(a) })
+		return times[:min(len(times), store.IPFailureLimit)]
+	}
+	byEmail, byIP = newestFirst(byEmail), newestFirst(byIP)
+	return store.BlockedUntil(byEmail[:min(len(byEmail), store.EmailFailureLimit)], byIP, arg.At), nil
 }
 
 // navigation-and-lists R6: the fake applies the same filters before counting or paging.

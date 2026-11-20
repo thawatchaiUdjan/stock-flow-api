@@ -31,6 +31,7 @@ const (
 	ResultLogin       = "login"
 	ResultFailedLogin = "failed-login"
 	ResultLogout      = "logout"
+	ResultBlocked     = "blocked" // a login refused by the limits (R55-R57)
 )
 
 // StartSessionParams is a login that passed its password check: the session to start and

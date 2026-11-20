@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -72,9 +73,14 @@ func reserveLoginCheck(ctx context.Context, deps Deps) error {
 	if allowed {
 		return nil
 	}
+	return retryLater(codeLoginCheckLimited, "Too many email checks from this network. Try again later.", retryAt, now)
+}
+
+// retryLater is a 429 domain error whose Retry-After says when to try again.
+func retryLater(code, detail string, retryAt, now time.Time) error {
 	seconds := max(1, int(math.Ceil(retryAt.Sub(now).Seconds())))
 	return huma.ErrorWithHeaders(
-		domainError(http.StatusTooManyRequests, codeLoginCheckLimited, "Too many email checks from this network. Try again later."),
+		domainError(http.StatusTooManyRequests, code, detail),
 		http.Header{"Retry-After": {strconv.Itoa(seconds)}},
 	)
 }

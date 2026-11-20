@@ -54,8 +54,8 @@ type verifyFirstTimeCodeOutput struct {
 type emailPasswordInput struct {
 	Body struct {
 		Token string `json:"token" doc:"The single-use credential received from verification or an email link."`
-		// users-and-access R19: retain the existing password policy.
-		Password string `json:"password" minLength:"6"`
+		// users-and-access R19, business ADR 0017: 6 to 128 characters.
+		Password string `json:"password" minLength:"6" maxLength:"128"`
 	}
 }
 

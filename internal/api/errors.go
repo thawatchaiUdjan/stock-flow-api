@@ -31,6 +31,7 @@ const (
 	codeProductNotArchived   = "product-not-archived"
 	codeUserNotInactive      = "user-not-inactive"
 	codeOrderPending         = "order-pending"
+	codeLoginBlocked         = "login-blocked"
 )
 
 // errorCodes is the published list. Every code above must be in it.
@@ -53,6 +54,7 @@ var errorCodes = []struct{ code, meaning string }{
 	{codeProductNotArchived, "The Product is Active: only an Archived Product can be deleted."},
 	{codeUserNotInactive, "The User is Active: only an Inactive User can be deleted."},
 	{codeOrderPending, "The Order is Pending and still holds stock: cancel it before deleting it."},
+	{codeLoginBlocked, "Too many failed logins for this email or from this IP address; logins are temporarily blocked, even with the right password. Retry-After says when to try again. Says nothing about the email."},
 }
 
 func domainError(status int, code, detail string) *huma.ErrorModel {

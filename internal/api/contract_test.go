@@ -125,7 +125,7 @@ func TestEveryOperationDeclaresItsErrors(t *testing.T) {
 	ops := operations(t)
 
 	for id, statuses := range map[string][]string{
-		"create-session":          {"401"},
+		"create-session":          {"401", "429"},
 		"end-session":             {"401"},
 		"get-current-user":        {"401"},
 		"read-setup-link":         {"410"},
@@ -187,7 +187,7 @@ func TestTheContractPublishesEveryErrorCode(t *testing.T) {
 	model := contract.OpenAPI().Components.Schemas.Map()["ErrorModel"]
 
 	typ := model.Properties["type"]
-	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken", "insufficient-stock", "product-archived", "order-not-pending", "email-auth-unavailable", "first-time-code-invalid", "password-setup-invalid", "password-reset-invalid", "login-check-limited", "product-not-archived", "user-not-inactive", "order-pending"}
+	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken", "insufficient-stock", "product-archived", "order-not-pending", "email-auth-unavailable", "first-time-code-invalid", "password-setup-invalid", "password-reset-invalid", "login-check-limited", "product-not-archived", "user-not-inactive", "order-pending", "login-blocked"}
 	if !slices.Equal(typ.Enum, want) {
 		t.Errorf("type enum = %v, want %v", typ.Enum, want)
 	}
