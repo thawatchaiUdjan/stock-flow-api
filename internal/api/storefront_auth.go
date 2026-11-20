@@ -50,7 +50,7 @@ type customerSessionInput struct {
 type currentCustomer struct {
 	ID    int64  `json:"id" doc:"Identifies the Customer."`
 	Name  string `json:"name" doc:"The Customer's name, in any language."`
-	Email string `json:"email" doc:"The Customer's email, as it was entered when they signed up."`
+	Email string `json:"email" doc:"The Customer's email, in lower case."`
 	Phone string `json:"phone" doc:"The Customer's phone number: 9 or 10 digits, starting with 0."`
 }
 
@@ -301,8 +301,8 @@ func registerStorefrontAuth(api huma.API, deps Deps) {
 	})
 }
 
-func customerBody(id int64, name, address, phone string) currentCustomer {
-	return currentCustomer{ID: id, Name: name, Email: address, Phone: phone}
+func customerBody(id int64, name, emailAddress, phone string) currentCustomer {
+	return currentCustomer{ID: id, Name: name, Email: emailAddress, Phone: phone}
 }
 
 // sendVerificationCode emails a sign-up code and says how it went (customers R5, R6, R8).

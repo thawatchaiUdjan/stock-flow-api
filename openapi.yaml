@@ -379,7 +379,7 @@ components:
           readOnly: true
           type: string
         email:
-          description: The Customer's email, as it was entered when they signed up.
+          description: The Customer's email, in lower case.
           type: string
         id:
           description: Identifies the Customer.
