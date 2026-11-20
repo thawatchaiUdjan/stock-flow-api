@@ -53,7 +53,7 @@ func TestTheContractPublishesEveryOperationOfLoggingIn(t *testing.T) {
 // users-and-access R4: nobody can sign up. What needs no session is this list and no
 // more, so an operation that makes a User can't be reached without logging in.
 func TestOnlyTheseOperationsNeedNoSession(t *testing.T) {
-	public := []string{"create-session", "get-health", "identify-login-email", "read-setup-link", "request-first-time-code", "request-password-reset", "reset-email-password", "set-email-password", "set-password", "verify-first-time-code"}
+	public := []string{"create-session", "get-health", "identify-login-email", "list-storefront-products", "read-setup-link", "request-first-time-code", "request-password-reset", "reset-email-password", "set-email-password", "set-password", "verify-first-time-code"}
 
 	var got []string
 	for id, op := range operations(t) {
