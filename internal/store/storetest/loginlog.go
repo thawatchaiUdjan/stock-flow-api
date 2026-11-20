@@ -3,8 +3,10 @@ package storetest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -279,6 +281,89 @@ func runLoginLog(t *testing.T, newSubject func(t *testing.T) Subject) {
 
 		if rows := listLog(t, s, store.ListLoginLogParams{}); len(rows) != 1 {
 			t.Errorf("rows = %+v, want one logout", rows)
+		}
+	})
+
+	// users-and-access R55-R57. Window counts run on the stored timestamps, so the real
+	// store and the fake must agree on the boundary minute.
+	failure := func(t *testing.T, s Subject, email, ip string, when time.Time) {
+		t.Helper()
+		e := entry(email, store.User{}, ip)
+		e.At = when
+		if err := s.Store.AddLoginLogEntry(ctx, e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	blockedUntil := func(t *testing.T, s Subject, email, ip string, now time.Time) time.Time {
+		t.Helper()
+		until, err := s.Store.LoginBlockedUntil(ctx, store.LoginBlockParams{Email: email, IP: ip, At: now})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return until
+	}
+
+	t.Run("blocks an email, in any letter case, from the 5th failure within 15 minutes until 15 minutes after the last", func(t *testing.T) {
+		s := newSubject(t)
+		for i := range 4 {
+			failure(t, s, "Somchai@Example.com", "203.0.113.7", at.Add(time.Duration(i)*time.Minute))
+		}
+		if until := blockedUntil(t, s, "somchai@example.com", "198.51.100.1", at.Add(4*time.Minute)); !until.IsZero() {
+			t.Fatalf("4 failures: blocked until %v", until)
+		}
+		failure(t, s, "SOMCHAI@example.com", "203.0.113.8", at.Add(4*time.Minute))
+
+		if until := blockedUntil(t, s, "somchai@example.com", "198.51.100.1", at.Add(16*time.Minute)); !until.Equal(at.Add(19 * time.Minute)) {
+			t.Errorf("blocked until %v, want %v", until, at.Add(19*time.Minute))
+		}
+		if until := blockedUntil(t, s, "somchai@example.com", "198.51.100.1", at.Add(19*time.Minute)); !until.IsZero() {
+			t.Errorf("at the end of the block: blocked until %v", until)
+		}
+		if until := blockedUntil(t, s, "other@example.com", "198.51.100.1", at.Add(5*time.Minute)); !until.IsZero() {
+			t.Errorf("another email: blocked until %v", until)
+		}
+	})
+
+	t.Run("does not add up failures 15 minutes apart, and does not count blocked or successful entries", func(t *testing.T) {
+		s := newSubject(t)
+		for i := range 5 {
+			failure(t, s, "somchai@example.com", "203.0.113.7", at.Add(time.Duration(i)*4*time.Minute)) // +0 to +16m
+		}
+		if until := blockedUntil(t, s, "somchai@example.com", "203.0.113.7", at.Add(16*time.Minute)); !until.IsZero() {
+			t.Errorf("failures 16 minutes apart: blocked until %v", until)
+		}
+		for _, result := range []string{store.ResultLogin, store.ResultBlocked} {
+			e := entry("other@example.com", store.User{}, "203.0.113.9")
+			e.Result = result
+			for range 60 {
+				if err := s.Store.AddLoginLogEntry(ctx, e); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		if until := blockedUntil(t, s, "other@example.com", "203.0.113.9", at); !until.IsZero() {
+			t.Errorf("successes and blocked entries: blocked until %v", until)
+		}
+	})
+
+	t.Run("blocks an address from the 50th failure within an hour until fewer than 50 remain", func(t *testing.T) {
+		s := newSubject(t)
+		for i := range 49 {
+			failure(t, s, fmt.Sprintf("guess%d@example.com", i), "203.0.113.7", at.Add(time.Duration(i)*time.Minute))
+		}
+		if until := blockedUntil(t, s, "new@example.com", "203.0.113.7", at.Add(49*time.Minute)); !until.IsZero() {
+			t.Fatalf("49 failures: blocked until %v", until)
+		}
+		failure(t, s, "guess49@example.com", "203.0.113.7", at.Add(49*time.Minute))
+
+		if until := blockedUntil(t, s, "new@example.com", "203.0.113.7", at.Add(50*time.Minute)); !until.Equal(at.Add(time.Hour)) {
+			t.Errorf("blocked until %v, want %v", until, at.Add(time.Hour))
+		}
+		if until := blockedUntil(t, s, "new@example.com", "203.0.113.7", at.Add(time.Hour)); !until.IsZero() {
+			t.Errorf("an hour after the oldest: blocked until %v", until)
+		}
+		if until := blockedUntil(t, s, "new@example.com", "203.0.113.8", at.Add(50*time.Minute)); !until.IsZero() {
+			t.Errorf("another address: blocked until %v", until)
 		}
 	})
 }

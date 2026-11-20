@@ -31,7 +31,7 @@ type setPasswordInput struct {
 	Body struct {
 		Token string `json:"token" doc:"The token from the Setup link."`
 		// users-and-access R19. minLength counts characters, not bytes.
-		Password string `json:"password" minLength:"6" doc:"The new password, of at least 6 characters."`
+		Password string `json:"password" minLength:"6" maxLength:"128" doc:"The new password, of 6 to 128 characters."`
 	}
 }
 

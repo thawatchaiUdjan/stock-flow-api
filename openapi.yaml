@@ -293,6 +293,7 @@ components:
           readOnly: true
           type: string
         password:
+          maxLength: 128
           minLength: 6
           type: string
         token:
@@ -411,6 +412,7 @@ components:
             product-not-archived: The Product is Active: only an Archived Product can be deleted.
             user-not-inactive: The User is Active: only an Inactive User can be deleted.
             order-pending: The Order is Pending and still holds stock: cancel it before deleting it.
+            login-blocked: Too many failed logins for this email or from this IP address; logins are temporarily blocked, even with the right password. Retry-After says when to try again. Says nothing about the email.
           enum:
             - about:blank
             - login-failed
@@ -431,6 +433,7 @@ components:
             - product-not-archived
             - user-not-inactive
             - order-pending
+            - login-blocked
           type: string
       type: object
     HealthOutputBody:
@@ -639,11 +642,12 @@ components:
           description: The visitor's IP address.
           type: string
         result:
-          description: A successful login, a failed login, or a logout.
+          description: A successful login, a failed login, a logout, or a login refused because of too many failed logins.
           enum:
             - login
             - failed-login
             - logout
+            - blocked
           type: string
         user:
           description: The User the email matches, or null when it matches none.
@@ -1142,7 +1146,8 @@ components:
           readOnly: true
           type: string
         password:
-          description: The new password, of at least 6 characters.
+          description: The new password, of 6 to 128 characters.
+          maxLength: 128
           minLength: 6
           type: string
         token:
@@ -1514,7 +1519,7 @@ paths:
         - Health
   /login:
     post:
-      description: Starts a session. Every failure answers the same 401 `login-failed`, in the same time.
+      description: Starts a session. Every failure answers the same 401 `login-failed`, in the same time. After 5 failed logins for an email within 15 minutes, or 50 from an IP address within an hour, answers 429 `login-blocked` with Retry-After, even for the right password, and records a `blocked` Login log entry. Forgot password and password setup are never blocked.
       operationId: create-session
       requestBody:
         content:
@@ -1546,6 +1551,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorModel"
           description: Unprocessable Entity
+        "429":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Too Many Requests
         "500":
           content:
             application/problem+json:
@@ -1579,6 +1590,7 @@ paths:
               - login
               - failed-login
               - logout
+              - blocked
             type: string
         - description: "The previous page's nextBefore: only the entries older than that. Leave out for the newest."
           explode: false

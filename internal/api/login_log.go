@@ -89,7 +89,7 @@ type loginLogEntryBody struct {
 	At        time.Time     `json:"at" doc:"When it happened."`
 	Email     string        `json:"email" doc:"What was entered, as it was typed, even when it matches no User. For a logout, the email of the User who logged out."`
 	User      *loginLogUser `json:"user" doc:"The User the email matches, or null when it matches none."`
-	Result    string        `json:"result" enum:"login,failed-login,logout" doc:"A successful login, a failed login, or a logout."`
+	Result    string        `json:"result" enum:"login,failed-login,logout,blocked" doc:"A successful login, a failed login, a logout, or a login refused because of too many failed logins."`
 	IP        string        `json:"ip" doc:"The visitor's IP address."`
 	UserAgent string        `json:"userAgent" doc:"The browser or device, as it called itself. Empty when it sent nothing."`
 }
@@ -108,7 +108,7 @@ func (loginLogEntryBody) TransformSchema(_ huma.Registry, s *huma.Schema) *huma.
 
 type listLoginLogInput struct {
 	UserID int64         `query:"userId" minimum:"1" doc:"Only the entries of this User."`
-	Result string        `query:"result" enum:"login,failed-login,logout" doc:"Only the entries with this result."`
+	Result string        `query:"result" enum:"login,failed-login,logout,blocked" doc:"Only the entries with this result."`
 	Before int64         `query:"before" minimum:"1" doc:"The previous page's nextBefore: only the entries older than that. Leave out for the newest."`
 	Offset historyOffset `query:"offset" minimum:"0" maximum:"2147483647" doc:"Explicitly selects numbered mode, including 0. Omit for legacy cursor mode."`
 	Limit  int           `query:"limit" minimum:"1" maximum:"100" default:"50" doc:"The most entries on a page."`

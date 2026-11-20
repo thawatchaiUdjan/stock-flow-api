@@ -125,3 +125,70 @@ func (q *Queries) ListLoginLog(ctx context.Context, arg ListLoginLogParams) ([]L
 	}
 	return items, nil
 }
+
+const recentFailedLoginsByEmail = `-- name: RecentFailedLoginsByEmail :many
+SELECT at FROM login_log
+WHERE result = 'failed-login' AND lower(email) = lower($1) AND at > $2
+ORDER BY at DESC
+LIMIT 5
+`
+
+type RecentFailedLoginsByEmailParams struct {
+	Email string
+	Since time.Time
+}
+
+// users-and-access R55: the newest failures for an email, in any letter case, as far back
+// as a block can still reach. LIMIT is the count that blocks.
+func (q *Queries) RecentFailedLoginsByEmail(ctx context.Context, arg RecentFailedLoginsByEmailParams) ([]time.Time, error) {
+	rows, err := q.db.Query(ctx, recentFailedLoginsByEmail, arg.Email, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []time.Time
+	for rows.Next() {
+		var at time.Time
+		if err := rows.Scan(&at); err != nil {
+			return nil, err
+		}
+		items = append(items, at)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const recentFailedLoginsByIP = `-- name: RecentFailedLoginsByIP :many
+SELECT at FROM login_log
+WHERE result = 'failed-login' AND ip = $1 AND at > $2
+ORDER BY at DESC
+LIMIT 50
+`
+
+type RecentFailedLoginsByIPParams struct {
+	Ip    string
+	Since time.Time
+}
+
+// users-and-access R56: the newest failures from an address within the last hour.
+func (q *Queries) RecentFailedLoginsByIP(ctx context.Context, arg RecentFailedLoginsByIPParams) ([]time.Time, error) {
+	rows, err := q.db.Query(ctx, recentFailedLoginsByIP, arg.Ip, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []time.Time
+	for rows.Next() {
+		var at time.Time
+		if err := rows.Scan(&at); err != nil {
+			return nil, err
+		}
+		items = append(items, at)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
