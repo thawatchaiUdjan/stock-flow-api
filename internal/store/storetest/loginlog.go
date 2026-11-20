@@ -367,6 +367,3 @@ func runLoginLog(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}
 	})
 }
-
-// SystemBy is a change made by the system, for tests that do not look at the Activity log.
-var SystemBy = store.ActivityBy{At: at, Actor: store.ActivityActor{Kind: store.ActorSystem, Name: "System"}}

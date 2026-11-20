@@ -11,6 +11,9 @@ import (
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
 )
 
+// SystemBy is a change made by the system, for tests that do not look at the Activity log.
+var SystemBy = store.ActivityBy{At: at, Actor: store.ActivityActor{Kind: store.ActorSystem, Name: "System"}}
+
 func userBy(id int64, when time.Time) store.ActivityBy {
 	return store.ActivityBy{
 		At: when, IP: "203.0.113.7", UserAgent: "Firefox",

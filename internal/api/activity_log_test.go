@@ -116,6 +116,10 @@ func TestEveryProductChangeIsOneActivityLogEntryWithWhoWhatAndWhere(t *testing.T
 		edited.Changes[1].Field != "price" || edited.Changes[1].Before != float64(12000) || edited.Changes[1].After != float64(13000) {
 		t.Errorf("edited changes = %+v, want only name and price, before and after", edited.Changes)
 	}
+	// An entry names the Product as it is after the change; the old name is in changes.
+	if edited.Subject.Name != "Green tea" || edited.Subject.Ref != "TEA-01" {
+		t.Errorf("edited subject = %+v, want the Product as it is after the change", edited.Subject)
+	}
 	// activity-log R11: a Deleted Product is still named, as it was.
 	if deleted.Subject.Name != "Green tea" || deleted.Subject.Ref != "TEA-01" || deleted.Subject.ID != 1 {
 		t.Errorf("deleted = %+v, want the Product's name and SKU kept", deleted.Subject)
