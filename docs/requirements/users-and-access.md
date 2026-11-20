@@ -1,6 +1,6 @@
 # Users & access
 
-Status: Amended by business ADR 0003, business ADR 0004, [business ADR 0011](../business-adr/0011-email-first-time-setup-and-self-service-recovery.md), [business ADR 0012](../business-adr/0012-email-first-login.md) and [business ADR 0013](../business-adr/0013-soft-delete.md)
+Status: Amended by business ADR 0003, business ADR 0004, [business ADR 0011](../business-adr/0011-email-first-time-setup-and-self-service-recovery.md), [business ADR 0012](../business-adr/0012-email-first-login.md) [business ADR 0013](../business-adr/0013-soft-delete.md), [business ADR 0014](../business-adr/0014-customers-and-the-storefront.md), [business ADR 0016](../business-adr/0016-activity-log.md) and [business ADR 0017](../business-adr/0017-login-limits-and-password-length.md)
 
 ## Purpose
 
@@ -18,7 +18,7 @@ Everyone who works in the Shop uses this module to log in. It decides who has a 
 - **R8** There are three Roles: Owner, Admin and Staff. Every User has exactly one.
 - **R9** There is exactly one Owner, created when the system is installed. No other Owner can be created.
 - **R10** Only the Owner creates Users, and chooses Admin or Staff for each.
-- **R11** Each Role reaches these pages; a page not yet built follows this table once it is:
+- **R11** Each Role reaches these pages of StockFlow; a page not yet built follows this table once it is (Customers list: business ADR 0014; Activity log: business ADR 0016). Customers reach none of them (Customers R1):
 
   | Page | Owner | Admin | Staff |
   | --- | --- | --- | --- |
@@ -31,6 +31,8 @@ Everyone who works in the Shop uses this module to log in. It decides who has a 
   | Reports | Yes | Yes | No |
   | Users list and form | Yes | No | No |
   | Login log | Yes | No | No |
+  | Customers list and form | Yes | Yes | No |
+  | Activity log | Yes | No | No |
 
 - **R12** After logging in, the Owner and Admins land on the Dashboard, and Staff on the Orders List.
 - **R13** What a Role may do within a page, such as which actions it sees, is stated by the module that owns the page.
@@ -39,7 +41,7 @@ Everyone who works in the Shop uses this module to log in. It decides who has a 
 - **R16** A User is Active or Inactive, and only the Owner sets this. An Inactive User cannot log in, and their sessions end at once.
 - **R17** A User can be Deleted only by the Owner and only once Inactive (R54), so that what they did stays attributed to them (business ADR 0013).
 - **R18** The Owner's own status, Role and name cannot be changed in the system (ADR 0004).
-- **R19** A password has at least 6 characters.
+- **R19** A new password has 8 to 128 characters. A shorter one set before business ADR 0017 still works until it is replaced.
 - **R20** Every User sets their own password, the first time and after a reset. Nobody else sets or sees it.
 - **R21** A session ends 7 days after login, however much it is used.
 - **R22** A page the User's Role cannot reach does not appear in their navigation. Opened directly, it says they have no access and links to their landing page.
@@ -56,9 +58,9 @@ Everyone who works in the Shop uses this module to log in. It decides who has a 
 - **R33** The Users list shows which Users have not set a password yet.
 - **R34** At installation only, a developer issues the first Owner's Setup link: single-use and valid for 24 hours. Initial Owner setup sends no email or First-time code, including through public requests before installation setup completes. Afterwards, the Owner uses Forgot password under R31. Setting the Owner's password through the installation link ends all Owner sessions. No password is kept in any repo (business ADR 0003 and business ADR 0011).
 - **R35** The Owner can change the name of every User except their own (ADR 0004), and change their Role between Admin and Staff. A Role change applies at once to the sessions that User has open.
-- **R36** The Login log records every successful login, failed login and logout: the time, the email entered, the User if it matches one, the result, the IP address and the browser or device.
+- **R36** The Login log records every successful, failed and blocked login and every logout, of Users in StockFlow and of Customers on the Storefront: the time, which of the two, the email entered, the User or Customer if it matches one, the result, the IP address and the browser or device.
 - **R37** The Login log never records a password, whether right or wrong.
-- **R38** The Login log lists the newest entries first and can be filtered by User and by result.
+- **R38** The Login log lists the newest entries first and can be filtered by User or Customer, by StockFlow or Storefront, and by result.
 - **R39** Login log entries cannot be edited, and are kept indefinitely.
 - **R40** Until its module is built, each page in R11 shows only its title and "Coming soon", under the same access rules.
 - **R41** Five incorrect First-time code attempts block code verification for that email for 10 minutes. Resending does not bypass the block or reset its failed-attempt allowance. This does not lock ordinary password login (business ADR 0011).
@@ -75,21 +77,20 @@ Everyone who works in the Shop uses this module to log in. It decides who has a 
 - **R52** For the first Owner before installation setup, Login's email step says to use the installation Setup link and sends nothing (R34, business ADR 0012).
 - **R53** Login's email step is limited to 100 checks per IP address per rolling hour. Over the limit, it answers that the check is limited and when to retry, revealing nothing about the email (business ADR 0012).
 - **R54** Only the Owner deletes a User, and only an Inactive one; the Owner cannot be Deleted. A Deleted User is not in the Users list, cannot be changed or restored, and is an unknown email to Login (R50). Their Orders, Stock movements and Login log entries keep their name and email (business ADR 0013).
+- **R55** After 5 failed logins for one email within 15 minutes, logins for that email are blocked until 15 minutes after the last failure, even with the right password. This counts any email entered, known or not (business ADR 0017).
+- **R56** After 50 failed logins from one IP address within an hour, logins from that address are blocked until fewer than 50 remain in the last hour (business ADR 0017).
+- **R57** A blocked login says logins are temporarily blocked and when to try again, and nothing about the email; it is recorded in the Login log as blocked. Forgot password is not blocked. StockFlow and the Storefront count separately (business ADR 0017).
 
 ## Out of scope
 
-- Locking a User out after failed logins. The requirements owner left it out because this is a practice project (2026-11-06). Together with the 6-character minimum (R19), it needs revisiting before any real data goes in.
+- A lock the Owner clears after failed logins: R55–R57 block for a time instead (business ADR 0017).
+- A list of refused common passwords.
 - A one-time code on ordinary password logins after first-time setup.
 - Changing your own password while logged in. Users recover through Forgot password on Login.
 - Changing a User's email or recovering lost mailbox access inside the application. Email remains immutable (R15); lost-mailbox cases require developer assistance outside the app.
-- A log of anything other than logins and logouts, such as who changed whose Role.
+- Logging anything beyond the Login log and the [Activity log](activity-log.md) (business ADR 0016).
 - More than one Shop in a deployment.
 
 ## Open questions
 
-| # | Question | Asked of | Since |
-| --- | --- | --- | --- |
-| 1 | How are repeated failed logins limited: how many failures, over what window, per email or per address, and what happens then (a wait, or a lock the Owner clears)? Today nothing limits them. Found by the [security review](../security-notes.md). | Requirements owner | 2026-11-08 |
-| 2 | Should R19's 6-character minimum rise (e.g. to 8 or 10), with a maximum and a list of refused common passwords? | Requirements owner | 2026-11-08 |
-
-The owner confirmed the email setup/recovery design on 2026-11-11 in business ADR 0011, retaining R15 and R19 unchanged. On 2026-11-17 the owner accepted user enumeration for Login's email step in business ADR 0012. The two questions above concern broader policy and remain outside this feature. The record becomes authoritative on merge; runtime rollout and web adoption are separate work.
+None. The owner confirmed the email setup/recovery design on 2026-11-11 in business ADR 0011 and accepted user enumeration for Login's email step on 2026-11-17 in business ADR 0012. The former questions on limiting failed logins and on password length (raised 2026-11-08 by the [security review](../security-notes.md)) were decided on 2026-11-20 in business ADR 0017 under the owner's task-scoped delegation, as R19 and R55–R57. The record becomes authoritative on merge; runtime rollout and web adoption are separate work.

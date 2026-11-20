@@ -1,6 +1,6 @@
 # Navigation & lists
 
-Status: Amended by [ADR 0009](../business-adr/0009-numbered-history-pagination.md)
+Status: Amended by [ADR 0009](../business-adr/0009-numbered-history-pagination.md), [business ADR 0014](../business-adr/0014-customers-and-the-storefront.md) and [business ADR 0016](../business-adr/0016-activity-log.md)
 
 ## Purpose
 
@@ -11,11 +11,11 @@ Every User can identify StockFlow, return to their landing page and move between
 - **R1** The application has a project icon beside the StockFlow name in the sidebar. Together they form one accessible link to the User's landing page (Users & access R12); the equivalent home link is available on a phone.
 - **R2** Main navigation lists destinations, excluding New product and New order. Creating a Product or Order starts from its list. Removing these navigation items does not change access to the forms or their direct links (Users & access R11, R22).
 - **R3** Authenticated pages have a top navigation bar indicating the current page and linking to its parent list when applicable. Main navigation highlights Products for Product forms and Orders for Order forms and details. Navigation respects the User's Role and remains usable on a phone and with a keyboard.
-- **R4** The Product List, Orders List, Users list, Stock movements and Login log display one bounded page of records at a time, with visible paging controls even when there is only one page. Loading, errors and empty results have explicit states; an unavailable direction cannot be activated.
-- **R5** Product List, Orders List, Users list, Stock movements and Login log offer a page size of 10, 25 or 50, defaulting to 25, and show the current page and matching count. Searches, filters, page size and page survive reloads; searches, filters and page size survive paging. Changing a search, filter or page size returns to the first page. A page beyond the available results offers a working way back to valid results.
-- **R6** Stock movements and Login log use numbered pages with First, Previous, Next and Last controls. Their matching count is exact for all current filters across the full result, excluding the page selection. Records remain newest first. The system retrieves bounded server pages and the count without downloading the entire history or inventing totals.
+- **R4** The Product List, Orders List, Users list, Customers list, Stock movements, Login log and Activity log display one bounded page of records at a time, with visible paging controls even when there is only one page. Loading, errors and empty results have explicit states; an unavailable direction cannot be activated.
+- **R5** Product List, Orders List, Users list, Customers list, Stock movements, Login log and Activity log offer a page size of 10, 25 or 50, defaulting to 25, and show the current page and matching count. Searches, filters, page size and page survive reloads; searches, filters and page size survive paging. Changing a search, filter or page size returns to the first page. A page beyond the available results offers a working way back to valid results.
+- **R6** Stock movements, Login log and Activity log use numbered pages with First, Previous, Next and Last controls. Their matching count is exact for all current filters across the full result, excluding the page selection. Records remain newest first. The system retrieves bounded server pages and the count without downloading the entire history or inventing totals.
 - **R7** The Reports daily sales table is paginated at 25 rows per page; its chart and totals still describe the full selected date range. Its bounded Top products table and Dashboard summaries are not paginated.
-- **R8** Stock movements and Login log offer a page size of 10, 25 or 50, defaulting to 25. The selected size survives paging and reloads. Changing the size or a filter returns to the first page; changing the size retains the filters.
+- **R8** Stock movements, Login log and Activity log offer a page size of 10, 25 or 50, defaulting to 25. The selected size survives paging and reloads. Changing the size or a filter returns to the first page; changing the size retains the filters.
 
 ## Out of scope
 
