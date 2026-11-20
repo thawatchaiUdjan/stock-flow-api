@@ -63,12 +63,17 @@ func TestTheCatalogueSearchesByNameOrSKU(t *testing.T) {
 	h.seedProduct("Thai tea", "TEA-01", 5, 1, "active")
 	h.seedProduct("Cup", "CUP-01", 5, 1, "active")
 	h.seedProduct("Archived pen", "PEN-01", 5, 1, "archived")
+	gone := h.seedProduct("Deleted mug", "MUG-01", 5, 1, "archived")
+	if err := h.store.DeleteProduct(context.Background(), store.DeleteParams{ID: gone.ID, UserID: 1, At: h.clock.Now()}, storetest.SystemBy); err != nil {
+		t.Fatal(err)
+	}
 
 	for query, want := range map[string]string{
 		"?search=THAI":    "[Thai tea]",
 		"?search=cup-01":  "[Cup]",
 		"?search=":        "[Cup Thai tea]",
 		"?search=pen":     "[]",
+		"?search=mug":     "[]",
 		"?search=nothing": "[]",
 	} {
 		got := h.catalogue(query)
