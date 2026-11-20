@@ -378,6 +378,11 @@ components:
           format: uri
           readOnly: true
           type: string
+        deliveryAddress:
+          description: The saved Delivery address, or null when there is none.
+          oneOf:
+            - $ref: "#/components/schemas/DeliveryAddress"
+            - type: "null"
         email:
           description: The Customer's email, in lower case.
           type: string
@@ -396,6 +401,7 @@ components:
         - name
         - email
         - phone
+        - deliveryAddress
       type: object
     CurrentUser:
       additionalProperties: false
@@ -503,6 +509,133 @@ components:
         - salesByDay
         - restock
         - newestOrders
+      type: object
+    DeliveryAddress:
+      additionalProperties: false
+      properties:
+        district:
+          description: The district, up to 80 characters.
+          maxLength: 80
+          pattern: "[^\\t-\\r \x85   - \u2028\u2029  　]"
+          patternDescription: contain a character that is not whitespace
+          type: string
+        line:
+          description: The address line, up to 200 characters.
+          maxLength: 200
+          pattern: "[^\\t-\\r \x85   - \u2028\u2029  　]"
+          patternDescription: contain a character that is not whitespace
+          type: string
+        phone:
+          description: "The recipient's phone number: 9 or 10 digits, starting with 0 (customers R4)."
+          pattern: ^0[0-9]{8,9}$
+          patternDescription: be 9 or 10 digits starting with 0
+          type: string
+        postcode:
+          description: The 5-digit postcode.
+          pattern: ^[0-9]{5}$
+          patternDescription: be 5 digits
+          type: string
+        province:
+          description: One of Thailand's 77 provinces, by its English name.
+          enum:
+            - Amnat Charoen
+            - Ang Thong
+            - Bangkok
+            - Bueng Kan
+            - Buri Ram
+            - Chachoengsao
+            - Chai Nat
+            - Chaiyaphum
+            - Chanthaburi
+            - Chiang Mai
+            - Chiang Rai
+            - Chon Buri
+            - Chumphon
+            - Kalasin
+            - Kamphaeng Phet
+            - Kanchanaburi
+            - Khon Kaen
+            - Krabi
+            - Lampang
+            - Lamphun
+            - Loei
+            - Lop Buri
+            - Mae Hong Son
+            - Maha Sarakham
+            - Mukdahan
+            - Nakhon Nayok
+            - Nakhon Pathom
+            - Nakhon Phanom
+            - Nakhon Ratchasima
+            - Nakhon Sawan
+            - Nakhon Si Thammarat
+            - Nan
+            - Narathiwat
+            - Nong Bua Lamphu
+            - Nong Khai
+            - Nonthaburi
+            - Pathum Thani
+            - Pattani
+            - Phang Nga
+            - Phatthalung
+            - Phayao
+            - Phetchabun
+            - Phetchaburi
+            - Phichit
+            - Phitsanulok
+            - Phra Nakhon Si Ayutthaya
+            - Phrae
+            - Phuket
+            - Prachin Buri
+            - Prachuap Khiri Khan
+            - Ranong
+            - Ratchaburi
+            - Rayong
+            - Roi Et
+            - Sa Kaeo
+            - Sakon Nakhon
+            - Samut Prakan
+            - Samut Sakhon
+            - Samut Songkhram
+            - Saraburi
+            - Satun
+            - Si Sa Ket
+            - Sing Buri
+            - Songkhla
+            - Sukhothai
+            - Suphan Buri
+            - Surat Thani
+            - Surin
+            - Tak
+            - Trang
+            - Trat
+            - Ubon Ratchathani
+            - Udon Thani
+            - Uthai Thani
+            - Uttaradit
+            - Yala
+            - Yasothon
+          type: string
+        recipient:
+          description: Who receives it, up to 120 characters.
+          maxLength: 120
+          pattern: "[^\\t-\\r \x85   - \u2028\u2029  　]"
+          patternDescription: contain a character that is not whitespace
+          type: string
+        subdistrict:
+          description: The sub-district, up to 80 characters.
+          maxLength: 80
+          pattern: "[^\\t-\\r \x85   - \u2028\u2029  　]"
+          patternDescription: contain a character that is not whitespace
+          type: string
+      required:
+        - recipient
+        - phone
+        - line
+        - subdistrict
+        - district
+        - province
+        - postcode
       type: object
     EmailPasswordInputBody:
       additionalProperties: false
@@ -636,8 +769,10 @@ components:
             order-pending: The Order is Pending and still holds stock: cancel it before deleting it.
             login-blocked: Too many failed logins for this email or from this IP address; logins are temporarily blocked, even with the right password. Retry-After says when to try again. Says nothing about the email.
             customer-email-taken: A Customer has this email already, in any letter case. Nothing was sent; the Storefront offers Log in and Forgot password.
-            signup-code-invalid: The Verification code cannot be used: it is wrong, expired, used, replaced or blocked after five wrong attempts.
+            signup-code-invalid: The Verification code cannot be used: it is wrong, expired, used, replaced, ineligible or blocked after five wrong attempts.
             signup-invalid: The sign-up grant is expired, used or was never issued: verify a new code.
+            customer-password-setup-invalid: The Customer's password-setup grant is expired, used, replaced or ineligible.
+            customer-password-reset-invalid: The Customer's Reset link is expired, used, replaced or ineligible.
           enum:
             - about:blank
             - login-failed
@@ -662,6 +797,8 @@ components:
             - customer-email-taken
             - signup-code-invalid
             - signup-invalid
+            - customer-password-setup-invalid
+            - customer-password-reset-invalid
           type: string
       type: object
     HealthOutputBody:
@@ -1964,6 +2101,31 @@ components:
         - unit
         - price
         - availability
+      type: object
+    UpdateCustomerInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/UpdateCustomerInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        deliveryAddress:
+          $ref: "#/components/schemas/DeliveryAddress"
+          description: A new saved Delivery address, all of it. Leave out to keep it.
+        name:
+          description: A new name, up to 120 characters. Leave out to keep it.
+          maxLength: 120
+          pattern: "[^\\t-\\r \x85   - \u2028\u2029  　]"
+          patternDescription: contain a character that is not whitespace
+          type: string
+        phone:
+          description: A new phone number. Leave out to keep it.
+          pattern: ^0[0-9]{8,9}$
+          patternDescription: be 9 or 10 digits starting with 0
+          type: string
       type: object
     UpdateProductBody:
       additionalProperties: false
@@ -4705,6 +4867,245 @@ paths:
       summary: Get the Customer who is logged in
       tags:
         - Storefront sessions
+    patch:
+      description: "Changes only what the body names. The email cannot be changed, and neither can the password while logged in: use Forgot password. Each change is recorded in the Activity log with its value before and after. Answers a plain 401 with no `customer_session` cookie, and 401 `session-ended` with a cookie that matches no live Customer session."
+      operationId: update-current-customer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCustomerInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentCustomer"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - customer_session: []
+      summary: Change the logged-in Customer's name, phone number or saved Delivery address
+      tags:
+        - Storefront sessions
+  /v2/storefront/password-reset/password:
+    post:
+      description: The link works once, for 30 minutes, and only the newest works. Ends all the Customer's sessions and starts none, and emails them that the password changed. Answers 410 `customer-password-reset-invalid` for an expired, used, replaced or ineligible link, and 503 `email-auth-unavailable` when not configured.
+      operationId: reset-customer-password
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailPasswordInputBody"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "410":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Gone
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+        "503":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Service Unavailable
+      summary: Set a Customer's new password using an emailed Reset link
+      tags:
+        - Storefront account
+  /v2/storefront/password-reset/request:
+    post:
+      description: "Always answers the same 202 message: for an unknown, Inactive, limited or failed-to-send email alike. A Customer without a password is sent a Verification code instead. Not blocked by failed logins. Answers 503 `email-auth-unavailable` when email is not configured."
+      operationId: request-customer-password-reset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailRequestInputBody"
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailRequestOutputBody"
+          description: Accepted
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+        "503":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Service Unavailable
+      summary: Email a Customer a Reset link (Forgot password)
+      tags:
+        - Storefront account
+  /v2/storefront/password-setup/password:
+    post:
+      description: "Answers 410 `customer-password-setup-invalid` for an expired, used, replaced or ineligible grant, and 503 `email-auth-unavailable` when not configured. Starts no session: log in next."
+      operationId: set-customer-password
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailPasswordInputBody"
+        required: true
+      responses:
+        "204":
+          description: No Content
+        "410":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Gone
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+        "503":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Service Unavailable
+      summary: Set a Customer's first password using a verified grant
+      tags:
+        - Storefront account
+  /v2/storefront/password-setup/request:
+    post:
+      description: "Always answers the same 202 message: whether the email is a Customer's, Inactive, has a password already, is limited or failed to send. Sends are limited as sign-up's are. Answers 503 `email-auth-unavailable` when email is not configured."
+      operationId: request-customer-password-setup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailRequestInputBody"
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailRequestOutputBody"
+          description: Accepted
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+        "503":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Service Unavailable
+      summary: Email a Verification code to a Customer who has no password
+      tags:
+        - Storefront account
+  /v2/storefront/password-setup/verify:
+    post:
+      description: "Answers 410 `signup-code-invalid` for a wrong, expired, used, replaced, blocked or ineligible code: five wrong attempts block codes for the email for 10 minutes. Answers 503 `email-auth-unavailable` when not configured. No session starts."
+      operationId: verify-customer-password-setup-code
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifySignupCodeInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifySignupCodeOutputBody"
+          description: OK
+        "410":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Gone
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+        "503":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Service Unavailable
+      summary: Exchange a Customer's Verification code for a password-setup grant
+      tags:
+        - Storefront account
   /v2/storefront/products:
     get:
       description: "Public: needs no login. The Active Products only, sorted by name, searched by name or SKU, one bounded page at a time. Archived and Deleted Products never appear."

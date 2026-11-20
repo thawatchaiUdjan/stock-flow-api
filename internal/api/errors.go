@@ -13,28 +13,30 @@ import (
 // The domain error codes, carried in Problem Details' type (ADR 0019). They are a
 // contract: stock-flow-web checks against them, so renaming one breaks it.
 const (
-	codeLoginFailed          = "login-failed"
-	codeSessionEnded         = "session-ended"
-	codeSetupLinkInvalid     = "setup-link-invalid"
-	codeEmailTaken           = "email-taken"
-	codeTargetIsOwner        = "target-is-owner"
-	codeUserInactive         = "user-inactive"
-	codeSKUTaken             = "sku-taken"
-	codeInsufficientStock    = "insufficient-stock"
-	codeProductArchived      = "product-archived"
-	codeOrderNotPending      = "order-not-pending"
-	codeEmailAuthUnavailable = "email-auth-unavailable"
-	codeFirstTimeCodeInvalid = "first-time-code-invalid"
-	codePasswordSetupInvalid = "password-setup-invalid"
-	codePasswordResetInvalid = "password-reset-invalid"
-	codeLoginCheckLimited    = "login-check-limited"
-	codeProductNotArchived   = "product-not-archived"
-	codeUserNotInactive      = "user-not-inactive"
-	codeOrderPending         = "order-pending"
-	codeLoginBlocked         = "login-blocked"
-	codeCustomerEmailTaken   = "customer-email-taken"
-	codeSignupCodeInvalid    = "signup-code-invalid"
-	codeSignupInvalid        = "signup-invalid"
+	codeLoginFailed                  = "login-failed"
+	codeSessionEnded                 = "session-ended"
+	codeSetupLinkInvalid             = "setup-link-invalid"
+	codeEmailTaken                   = "email-taken"
+	codeTargetIsOwner                = "target-is-owner"
+	codeUserInactive                 = "user-inactive"
+	codeSKUTaken                     = "sku-taken"
+	codeInsufficientStock            = "insufficient-stock"
+	codeProductArchived              = "product-archived"
+	codeOrderNotPending              = "order-not-pending"
+	codeEmailAuthUnavailable         = "email-auth-unavailable"
+	codeFirstTimeCodeInvalid         = "first-time-code-invalid"
+	codePasswordSetupInvalid         = "password-setup-invalid"
+	codePasswordResetInvalid         = "password-reset-invalid"
+	codeLoginCheckLimited            = "login-check-limited"
+	codeProductNotArchived           = "product-not-archived"
+	codeUserNotInactive              = "user-not-inactive"
+	codeOrderPending                 = "order-pending"
+	codeLoginBlocked                 = "login-blocked"
+	codeCustomerEmailTaken           = "customer-email-taken"
+	codeSignupCodeInvalid            = "signup-code-invalid"
+	codeSignupInvalid                = "signup-invalid"
+	codeCustomerPasswordSetupInvalid = "customer-password-setup-invalid"
+	codeCustomerPasswordResetInvalid = "customer-password-reset-invalid"
 )
 
 // errorCodes is the published list. Every code above must be in it.
@@ -59,8 +61,10 @@ var errorCodes = []struct{ code, meaning string }{
 	{codeOrderPending, "The Order is Pending and still holds stock: cancel it before deleting it."},
 	{codeLoginBlocked, "Too many failed logins for this email or from this IP address; logins are temporarily blocked, even with the right password. Retry-After says when to try again. Says nothing about the email."},
 	{codeCustomerEmailTaken, "A Customer has this email already, in any letter case. Nothing was sent; the Storefront offers Log in and Forgot password."},
-	{codeSignupCodeInvalid, "The Verification code cannot be used: it is wrong, expired, used, replaced or blocked after five wrong attempts."},
+	{codeSignupCodeInvalid, "The Verification code cannot be used: it is wrong, expired, used, replaced, ineligible or blocked after five wrong attempts."},
 	{codeSignupInvalid, "The sign-up grant is expired, used or was never issued: verify a new code."},
+	{codeCustomerPasswordSetupInvalid, "The Customer's password-setup grant is expired, used, replaced or ineligible."},
+	{codeCustomerPasswordResetInvalid, "The Customer's Reset link is expired, used, replaced or ineligible."},
 }
 
 func domainError(status int, code, detail string) *huma.ErrorModel {

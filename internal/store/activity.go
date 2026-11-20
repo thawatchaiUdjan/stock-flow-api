@@ -36,6 +36,8 @@ const (
 	ActionPasswordSet     = "password-set"
 	ActionPasswordReset   = "password-reset"
 	ActionSetupLinkIssued = "setup-link-issued"
+	ActionPhoneChanged    = "phone-changed"
+	ActionAddressChanged  = "delivery-address-changed"
 	ActionCompleted       = "completed"
 	ActionCancelled       = "cancelled"
 )
@@ -166,6 +168,37 @@ func (by ActivityBy) AsCustomer(c Customer) ActivityBy {
 // CustomerCreated is the entry of a Customer who signed up (activity-log R4).
 func CustomerCreated(c Customer, by ActivityBy) ActivityEntry {
 	return ActivityEntry{By: by, Action: ActionCreated, SubjectKind: SubjectCustomer, SubjectID: c.ID, SubjectName: c.Name, SubjectRef: c.Email}
+}
+
+func customerEntry(c Customer, action string, by ActivityBy, changes []FieldChange) ActivityEntry {
+	return ActivityEntry{By: by, Action: action, SubjectKind: SubjectCustomer, SubjectID: c.ID, SubjectName: c.Name, SubjectRef: c.Email, Changes: changes}
+}
+
+// CustomerPasswordSet and CustomerPasswordReset carry no field: a password, code, link or
+// token is never in an entry (activity-log R6).
+func CustomerPasswordSet(c Customer, by ActivityBy) ActivityEntry {
+	return customerEntry(c, ActionPasswordSet, by, nil)
+}
+
+func CustomerPasswordReset(c Customer, by ActivityBy) ActivityEntry {
+	return customerEntry(c, ActionPasswordReset, by, nil)
+}
+
+// CustomerEdited is the entries of a Customer's change to their profile (activity-log R4):
+// name, phone number and saved Delivery address, each with its value before and after. A
+// change that changed nothing has none. They name the Customer as they are after.
+func CustomerEdited(before, after Customer, by ActivityBy) []ActivityEntry {
+	var entries []ActivityEntry
+	if before.Name != after.Name {
+		entries = append(entries, customerEntry(after, ActionNameChanged, by, []FieldChange{{Field: "name", Before: before.Name, After: after.Name}}))
+	}
+	if before.Phone != after.Phone {
+		entries = append(entries, customerEntry(after, ActionPhoneChanged, by, []FieldChange{{Field: "phone", Before: before.Phone, After: after.Phone}}))
+	}
+	if b, a := before.DeliveryAddress(), after.DeliveryAddress(); (b == nil) != (a == nil) || (b != nil && *b != *a) {
+		entries = append(entries, customerEntry(after, ActionAddressChanged, by, []FieldChange{{Field: "deliveryAddress", Before: b, After: a}}))
+	}
+	return entries
 }
 
 // UserSnapshot is a User as an entry records them (activity-log R2, R11): their email and

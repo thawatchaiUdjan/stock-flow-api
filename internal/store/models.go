@@ -29,15 +29,31 @@ type ActivityLog struct {
 }
 
 type Customer struct {
-	ID           int64
-	Name         string
-	Email        string
-	Phone        string
-	PasswordHash pgtype.Text
-	Status       string
-	CreatedAt    time.Time
-	DeletedAt    pgtype.Timestamptz
-	DeletedBy    pgtype.Int8
+	ID                 int64
+	Name               string
+	Email              string
+	Phone              string
+	PasswordHash       pgtype.Text
+	Status             string
+	CreatedAt          time.Time
+	DeletedAt          pgtype.Timestamptz
+	DeletedBy          pgtype.Int8
+	AddressRecipient   pgtype.Text
+	AddressPhone       pgtype.Text
+	AddressLine        pgtype.Text
+	AddressSubdistrict pgtype.Text
+	AddressDistrict    pgtype.Text
+	AddressProvince    pgtype.Text
+	AddressPostcode    pgtype.Text
+}
+
+type CustomerCredential struct {
+	CustomerID     int64
+	Kind           string
+	TokenHash      []byte
+	ExpiresAt      time.Time
+	FailedAttempts int32
+	BlockedUntil   time.Time
 }
 
 type CustomerSession struct {

@@ -14,7 +14,9 @@ WHERE customers.id = sqlc.arg(customer_id)
 FOR SHARE OF customers;
 
 -- name: GetCustomerSession :one
-SELECT customer_sessions.customer_id, customers.name, customers.email, customers.phone, customer_sessions.expires_at
+SELECT customer_sessions.customer_id, customers.name, customers.email, customers.phone, customer_sessions.expires_at,
+    customers.address_recipient, customers.address_phone, customers.address_line, customers.address_subdistrict,
+    customers.address_district, customers.address_province, customers.address_postcode
 FROM customer_sessions
 JOIN customers ON customers.id = customer_sessions.customer_id
 WHERE customer_sessions.token_hash = $1;

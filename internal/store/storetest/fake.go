@@ -27,11 +27,12 @@ type Fake struct {
 	// ActivityErr makes writing an Activity log entry fail, and the change with it.
 	ActivityErr error
 
-	mu               sync.Mutex
-	users            []store.User
-	customers        []store.Customer
-	sessions         map[string]store.Session
-	customerSessions map[string]store.CustomerSession
+	mu                  sync.Mutex
+	users               []store.User
+	customers           []store.Customer
+	sessions            map[string]store.Session
+	customerSessions    map[string]store.CustomerSession
+	customerCredentials map[int64]store.EmailCredential
 	// signups is each email's code or grant, keyed by the email in lower case.
 	signups       map[string]store.SignupCredential
 	links         map[int64]store.SetupLink
@@ -54,7 +55,7 @@ var _ Store = (*Fake)(nil)
 func NewFake() *Fake {
 	return &Fake{
 		sessions: map[string]store.Session{}, links: map[int64]store.SetupLink{}, credentials: map[int64]store.EmailCredential{},
-		customerSessions: map[string]store.CustomerSession{}, signups: map[string]store.SignupCredential{},
+		customerSessions: map[string]store.CustomerSession{}, customerCredentials: map[int64]store.EmailCredential{}, signups: map[string]store.SignupCredential{},
 	}
 }
 

@@ -53,7 +53,7 @@ func TestTheContractPublishesEveryOperationOfLoggingIn(t *testing.T) {
 // users-and-access R4: nobody can sign up. What needs no session is this list and no
 // more, so an operation that makes a User can't be reached without logging in.
 func TestOnlyTheseOperationsNeedNoSession(t *testing.T) {
-	public := []string{"complete-signup", "create-customer-session", "create-session", "get-health", "identify-login-email", "list-storefront-products", "read-setup-link", "request-first-time-code", "request-password-reset", "request-signup-code", "reset-email-password", "set-email-password", "set-password", "verify-first-time-code", "verify-signup-code"}
+	public := []string{"complete-signup", "create-customer-session", "create-session", "get-health", "identify-login-email", "list-storefront-products", "read-setup-link", "request-customer-password-reset", "request-customer-password-setup", "request-first-time-code", "request-password-reset", "request-signup-code", "reset-customer-password", "reset-email-password", "set-customer-password", "set-email-password", "set-password", "verify-customer-password-setup-code", "verify-first-time-code", "verify-signup-code"}
 
 	var got []string
 	for id, op := range operations(t) {
@@ -154,31 +154,37 @@ func TestEveryOperationNamesItsErrorCodes(t *testing.T) {
 	ops := operations(t)
 
 	for id, code := range map[string]string{
-		"create-session":          "login-failed",
-		"end-session":             "session-ended",
-		"get-current-user":        "session-ended",
-		"read-setup-link":         "setup-link-invalid",
-		"set-password":            "setup-link-invalid",
-		"list-users":              "session-ended",
-		"create-user":             "email-taken",
-		"update-user":             "target-is-owner",
-		"reset-password":          "user-inactive",
-		"create-email-user":       "email-taken",
-		"request-first-time-code": "email-auth-unavailable",
-		"verify-first-time-code":  "first-time-code-invalid",
-		"set-email-password":      "password-setup-invalid",
-		"request-password-reset":  "email-auth-unavailable",
-		"reset-email-password":    "password-reset-invalid",
-		"identify-login-email":    "login-check-limited",
-		"delete-product":          "product-not-archived",
-		"delete-user":             "user-not-inactive",
-		"delete-order":            "order-pending",
-		"request-signup-code":     "customer-email-taken",
-		"verify-signup-code":      "signup-code-invalid",
-		"complete-signup":         "signup-invalid",
-		"create-customer-session": "login-failed",
-		"end-customer-session":    "session-ended",
-		"get-current-customer":    "session-ended",
+		"create-session":                      "login-failed",
+		"end-session":                         "session-ended",
+		"get-current-user":                    "session-ended",
+		"read-setup-link":                     "setup-link-invalid",
+		"set-password":                        "setup-link-invalid",
+		"list-users":                          "session-ended",
+		"create-user":                         "email-taken",
+		"update-user":                         "target-is-owner",
+		"reset-password":                      "user-inactive",
+		"create-email-user":                   "email-taken",
+		"request-first-time-code":             "email-auth-unavailable",
+		"verify-first-time-code":              "first-time-code-invalid",
+		"set-email-password":                  "password-setup-invalid",
+		"request-password-reset":              "email-auth-unavailable",
+		"reset-email-password":                "password-reset-invalid",
+		"identify-login-email":                "login-check-limited",
+		"delete-product":                      "product-not-archived",
+		"delete-user":                         "user-not-inactive",
+		"delete-order":                        "order-pending",
+		"request-signup-code":                 "customer-email-taken",
+		"verify-signup-code":                  "signup-code-invalid",
+		"complete-signup":                     "signup-invalid",
+		"create-customer-session":             "login-failed",
+		"end-customer-session":                "session-ended",
+		"get-current-customer":                "session-ended",
+		"set-customer-password":               "customer-password-setup-invalid",
+		"reset-customer-password":             "customer-password-reset-invalid",
+		"update-current-customer":             "session-ended",
+		"request-customer-password-setup":     "email-auth-unavailable",
+		"request-customer-password-reset":     "email-auth-unavailable",
+		"verify-customer-password-setup-code": "signup-code-invalid",
 	} {
 		if !strings.Contains(ops[id].Description, "`"+code+"`") {
 			t.Errorf("%s: description %q does not name %s", id, ops[id].Description, code)
@@ -193,7 +199,7 @@ func TestTheContractPublishesEveryErrorCode(t *testing.T) {
 	model := contract.OpenAPI().Components.Schemas.Map()["ErrorModel"]
 
 	typ := model.Properties["type"]
-	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken", "insufficient-stock", "product-archived", "order-not-pending", "email-auth-unavailable", "first-time-code-invalid", "password-setup-invalid", "password-reset-invalid", "login-check-limited", "product-not-archived", "user-not-inactive", "order-pending", "login-blocked", "customer-email-taken", "signup-code-invalid", "signup-invalid"}
+	want := []any{"about:blank", "login-failed", "session-ended", "setup-link-invalid", "email-taken", "target-is-owner", "user-inactive", "sku-taken", "insufficient-stock", "product-archived", "order-not-pending", "email-auth-unavailable", "first-time-code-invalid", "password-setup-invalid", "password-reset-invalid", "login-check-limited", "product-not-archived", "user-not-inactive", "order-pending", "login-blocked", "customer-email-taken", "signup-code-invalid", "signup-invalid", "customer-password-setup-invalid", "customer-password-reset-invalid"}
 	if !slices.Equal(typ.Enum, want) {
 		t.Errorf("type enum = %v, want %v", typ.Enum, want)
 	}

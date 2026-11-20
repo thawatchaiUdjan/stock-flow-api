@@ -32,6 +32,12 @@ func HashSignupCode(secret []byte, email, code string) []byte {
 	return hashCode("signup-code", secret, email, code)
 }
 
+// HashCustomerCode is the same for the code a Customer who has none uses to set a password
+// (customers R7, R8), bound to that purpose.
+func HashCustomerCode(secret []byte, email, code string) []byte {
+	return hashCode("customer-code", secret, email, code)
+}
+
 func hashCode(purpose string, secret []byte, email, code string) []byte {
 	h := hmac.New(sha256.New, secret)
 	h.Write([]byte(purpose + "\x00" + strings.ToLower(email) + "\x00" + code))
