@@ -34,6 +34,18 @@ const (
 	ResultBlocked     = "blocked" // a login refused by the limits (R55-R57)
 )
 
+// The apps a login is for (users-and-access R36). The Storefront's arrive with Customers.
+const (
+	AppStockFlow  = "stockflow"
+	AppStorefront = "storefront"
+)
+
+// The channels an Order comes through (orders R21).
+const (
+	ChannelInShop = "in-shop"
+	ChannelOnline = "online"
+)
+
 // StartSessionParams is a login that passed its password check: the session to start and
 // the entry that records it. Entry.Result is set by StartSession.
 type StartSessionParams struct {

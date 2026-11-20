@@ -16,18 +16,20 @@ const countOrders = `-- name: CountOrders :one
 SELECT count(*) FROM orders
 WHERE orders.deleted_at IS NULL
     AND ($1::text IS NULL OR orders.status = $1)
-    AND ($2::text IS NULL
-        OR orders.number::text = $2
-        OR strpos(lower(orders.customer), lower($2)) > 0)
+    AND ($2::text IS NULL OR orders.channel = $2)
+    AND ($3::text IS NULL
+        OR orders.number::text = $3
+        OR strpos(lower(orders.customer), lower($3)) > 0)
 `
 
 type CountOrdersParams struct {
-	Status pgtype.Text
-	Search pgtype.Text
+	Status  pgtype.Text
+	Channel pgtype.Text
+	Search  pgtype.Text
 }
 
 func (q *Queries) CountOrders(ctx context.Context, arg CountOrdersParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countOrders, arg.Status, arg.Search)
+	row := q.db.QueryRow(ctx, countOrders, arg.Status, arg.Channel, arg.Search)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -43,7 +45,7 @@ type InsertOrderParams struct {
 	Customer  string
 	Note      string
 	Total     int64
-	CreatedBy int64
+	CreatedBy pgtype.Int8
 	CreatedAt time.Time
 }
 
@@ -133,21 +135,23 @@ func (q *Queries) ListOrderLines(ctx context.Context, orderID int64) ([]ListOrde
 }
 
 const listOrders = `-- name: ListOrders :many
-SELECT orders.id, orders.number, orders.created_at, orders.customer,
+SELECT orders.id, orders.number, orders.channel, orders.created_at, orders.customer,
     (SELECT count(*) FROM order_lines WHERE order_lines.order_id = orders.id)::integer AS line_count,
     orders.total, orders.status
 FROM orders
 WHERE orders.deleted_at IS NULL
     AND ($1::text IS NULL OR orders.status = $1)
-    AND ($2::text IS NULL
-        OR orders.number::text = $2
-        OR strpos(lower(orders.customer), lower($2)) > 0)
+    AND ($2::text IS NULL OR orders.channel = $2)
+    AND ($3::text IS NULL
+        OR orders.number::text = $3
+        OR strpos(lower(orders.customer), lower($3)) > 0)
 ORDER BY orders.number DESC
-LIMIT $4 OFFSET $3
+LIMIT $5 OFFSET $4
 `
 
 type ListOrdersParams struct {
 	Status    pgtype.Text
+	Channel   pgtype.Text
 	Search    pgtype.Text
 	RowOffset int32
 	RowLimit  int32
@@ -156,6 +160,7 @@ type ListOrdersParams struct {
 type ListOrdersRow struct {
 	ID        int64
 	Number    int64
+	Channel   string
 	CreatedAt time.Time
 	Customer  string
 	LineCount int32
@@ -169,6 +174,7 @@ type ListOrdersRow struct {
 func (q *Queries) ListOrders(ctx context.Context, arg ListOrdersParams) ([]ListOrdersRow, error) {
 	rows, err := q.db.Query(ctx, listOrders,
 		arg.Status,
+		arg.Channel,
 		arg.Search,
 		arg.RowOffset,
 		arg.RowLimit,
@@ -183,6 +189,7 @@ func (q *Queries) ListOrders(ctx context.Context, arg ListOrdersParams) ([]ListO
 		if err := rows.Scan(
 			&i.ID,
 			&i.Number,
+			&i.Channel,
 			&i.CreatedAt,
 			&i.Customer,
 			&i.LineCount,
@@ -236,33 +243,35 @@ func (q *Queries) MarkOrderDeleted(ctx context.Context, arg MarkOrderDeletedPara
 }
 
 const readOrder = `-- name: ReadOrder :one
-SELECT orders.id, orders.number, orders.customer, orders.note, orders.total, orders.status,
+SELECT orders.id, orders.number, orders.channel, orders.customer, orders.note, orders.total, orders.status,
     orders.created_by, creator.name AS created_by_name, orders.created_at,
     orders.completed_by, completer.name AS completed_by_name, orders.completed_at,
-    orders.cancelled_by, canceller.name AS cancelled_by_name, orders.cancelled_at
+    orders.cancelled_by, canceller.name AS cancelled_by_name, orders.cancelled_by_system, orders.cancelled_at
 FROM orders
-JOIN users creator ON creator.id = orders.created_by
+LEFT JOIN users creator ON creator.id = orders.created_by
 LEFT JOIN users completer ON completer.id = orders.completed_by
 LEFT JOIN users canceller ON canceller.id = orders.cancelled_by
 WHERE orders.number = $1 AND orders.deleted_at IS NULL
 `
 
 type ReadOrderRow struct {
-	ID              int64
-	Number          int64
-	Customer        string
-	Note            string
-	Total           int64
-	Status          string
-	CreatedBy       int64
-	CreatedByName   string
-	CreatedAt       time.Time
-	CompletedBy     pgtype.Int8
-	CompletedByName pgtype.Text
-	CompletedAt     pgtype.Timestamptz
-	CancelledBy     pgtype.Int8
-	CancelledByName pgtype.Text
-	CancelledAt     pgtype.Timestamptz
+	ID                int64
+	Number            int64
+	Channel           string
+	Customer          string
+	Note              string
+	Total             int64
+	Status            string
+	CreatedBy         pgtype.Int8
+	CreatedByName     pgtype.Text
+	CreatedAt         time.Time
+	CompletedBy       pgtype.Int8
+	CompletedByName   pgtype.Text
+	CompletedAt       pgtype.Timestamptz
+	CancelledBy       pgtype.Int8
+	CancelledByName   pgtype.Text
+	CancelledBySystem bool
+	CancelledAt       pgtype.Timestamptz
 }
 
 // The Users' names as they are now.
@@ -272,6 +281,7 @@ func (q *Queries) ReadOrder(ctx context.Context, number int64) (ReadOrderRow, er
 	err := row.Scan(
 		&i.ID,
 		&i.Number,
+		&i.Channel,
 		&i.Customer,
 		&i.Note,
 		&i.Total,
@@ -284,22 +294,25 @@ func (q *Queries) ReadOrder(ctx context.Context, number int64) (ReadOrderRow, er
 		&i.CompletedAt,
 		&i.CancelledBy,
 		&i.CancelledByName,
+		&i.CancelledBySystem,
 		&i.CancelledAt,
 	)
 	return i, err
 }
 
 const setOrderCancelled = `-- name: SetOrderCancelled :exec
-UPDATE orders SET status = 'cancelled', cancelled_by = $1::bigint, cancelled_at = $2::timestamptz
+UPDATE orders SET status = 'cancelled', cancelled_by = $1::bigint, cancelled_by_system = $1::bigint IS NULL,
+    cancelled_at = $2::timestamptz
 WHERE id = $3
 `
 
 type SetOrderCancelledParams struct {
-	UserID int64
+	UserID pgtype.Int8
 	At     time.Time
 	ID     int64
 }
 
+// Cancelled by a User, or by the system when user_id is NULL (orders R12).
 func (q *Queries) SetOrderCancelled(ctx context.Context, arg SetOrderCancelledParams) error {
 	_, err := q.db.Exec(ctx, setOrderCancelled, arg.UserID, arg.At, arg.ID)
 	return err

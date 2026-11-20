@@ -31,6 +31,20 @@ type Subject struct {
 	// AddProduct seeds a Product with any stock and Minimum stock, because the port has no
 	// operation that sets stock (context ADR 0006).
 	AddProduct func(t *testing.T, product store.Product) store.Product
+	// AddOnlineOrder seeds an Online order, which no operation of the port can create yet
+	// (the Online order ticket adds one), and returns its number.
+	AddOnlineOrder func(t *testing.T, seed OnlineOrderSeed) int64
+}
+
+// OnlineOrderSeed is an Online order with one line, Pending, or Completed by CompletedBy
+// when that is not 0. Seeding takes no stock.
+type OnlineOrderSeed struct {
+	Customer    string
+	ProductID   int64
+	Quantity    int32
+	Price       int64
+	CompletedBy int64
+	At          time.Time
 }
 
 // at is a fixed instant with Postgres's microsecond precision, so it survives a round trip.
@@ -805,6 +819,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 
 	runLoginLog(t, newSubject)
 	runActivityLog(t, newSubject)
+	runActors(t, newSubject)
 	runProducts(t, newSubject)
 	runStockMovements(t, newSubject)
 	runOrders(t, newSubject)

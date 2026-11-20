@@ -104,7 +104,7 @@ func registerSessions(api huma.API, deps Deps) {
 		entry := loginLogEntry(ctx, deps, store.ResultFailedLogin, input.Body.Email, user.ID)
 		// users-and-access R55-R57: before the password is looked at, and the same answer
 		// for every email.
-		blockedUntil, err := deps.Store.LoginBlockedUntil(ctx, store.LoginBlockParams{Email: input.Body.Email, IP: entry.Ip, At: entry.At})
+		blockedUntil, err := deps.Store.LoginBlockedUntil(ctx, store.LoginBlockParams{App: store.AppStockFlow, Email: input.Body.Email, IP: entry.Ip, At: entry.At})
 		if err != nil {
 			return nil, internalError(ctx, "log in: check login limits", err)
 		}

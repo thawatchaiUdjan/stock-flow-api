@@ -47,7 +47,8 @@ func (f *Fake) CreateOrder(_ context.Context, arg store.CreateOrderParams) (stor
 	f.numbered++
 	order := store.Order{
 		ID: int64(len(f.orders) + 1), Number: f.numbered, Customer: arg.Customer, Note: arg.Note,
-		Total: total, Status: store.OrderPending, CreatedBy: arg.UserID, CreatedAt: at,
+		Total: total, Status: store.OrderPending, CreatedBy: pgtype.Int8{Int64: arg.UserID, Valid: true}, CreatedAt: at,
+		Channel: store.ChannelInShop,
 	}
 	switch {
 	case utf8.RuneCountInString(order.Customer) > 120:
@@ -87,8 +88,32 @@ func (f *Fake) CreateOrder(_ context.Context, arg store.CreateOrderParams) (stor
 	return f.detail(order), nil
 }
 
+// AddOnlineOrder seeds an Online order, as OnlineOrderSeed says, and returns its number.
+func (f *Fake) AddOnlineOrder(seed OnlineOrderSeed) int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.numbered++
+	o := store.Order{
+		ID: int64(len(f.orders) + 1), Number: f.numbered, Channel: store.ChannelOnline, Customer: seed.Customer,
+		Total: int64(seed.Quantity) * seed.Price, Status: store.OrderPending, CreatedAt: seed.At,
+	}
+	if seed.CompletedBy != 0 {
+		o.Status = store.OrderCompleted
+		o.CompletedBy = pgtype.Int8{Int64: seed.CompletedBy, Valid: true}
+		o.CompletedAt = pgtype.Timestamptz{Time: seed.At, Valid: true}
+	}
+	f.orders = append(f.orders, o)
+	f.lines = append(f.lines, store.OrderLine{
+		ID: int64(len(f.lines) + 1), OrderID: o.ID, ProductID: seed.ProductID, Quantity: seed.Quantity, Price: seed.Price,
+	})
+	return o.Number
+}
+
 func (f *Fake) CompleteOrder(_ context.Context, arg store.FinishOrderParams) (store.OrderDetail, error) {
 	return f.finishOrder(arg, func(o *store.Order) error {
+		if arg.UserID == 0 {
+			return errors.New("violates orders_finished_check") // the system completes nothing
+		}
 		o.Status = store.OrderCompleted
 		o.CompletedBy = pgtype.Int8{Int64: arg.UserID, Valid: true}
 		o.CompletedAt = pgtype.Timestamptz{Time: arg.Now(), Valid: true}
@@ -110,7 +135,8 @@ func (f *Fake) CancelOrder(_ context.Context, arg store.FinishOrderParams) (stor
 		}
 		moved := f.applyMoves(plan)
 		o.Status = store.OrderCancelled
-		o.CancelledBy = pgtype.Int8{Int64: arg.UserID, Valid: true}
+		o.CancelledBy = pgtype.Int8{Int64: arg.UserID, Valid: arg.UserID != 0}
+		o.CancelledBySystem = arg.UserID == 0
 		o.CancelledAt = pgtype.Timestamptz{Time: moved[0].At, Valid: true}
 		return nil
 	})
@@ -130,7 +156,7 @@ func (f *Fake) finishOrder(arg store.FinishOrderParams, finish func(*store.Order
 	if o.Status != store.OrderPending {
 		return store.OrderDetail{}, store.ErrOrderNotPending
 	}
-	if f.userRef(arg.UserID) == nil {
+	if arg.UserID != 0 && f.userRef(arg.UserID) == nil {
 		return store.OrderDetail{}, errors.New("violates an orders user fkey")
 	}
 	if err := finish(o); err != nil {
@@ -158,7 +184,7 @@ func (f *Fake) ListOrders(_ context.Context, arg store.ListOrdersParams) ([]stor
 	if f.Err != nil {
 		return nil, f.Err
 	}
-	found := f.findOrders(arg.Status, arg.Search)
+	found := f.findOrders(arg.Status, arg.Channel, arg.Search)
 	rows := []store.ListOrdersRow{}
 	for i := int(arg.RowOffset); i < len(found) && len(rows) < int(arg.RowLimit); i++ {
 		o := found[i]
@@ -169,7 +195,7 @@ func (f *Fake) ListOrders(_ context.Context, arg store.ListOrdersParams) ([]stor
 			}
 		}
 		rows = append(rows, store.ListOrdersRow{
-			ID: o.ID, Number: o.Number, CreatedAt: o.CreatedAt, Customer: o.Customer, LineCount: count, Total: o.Total, Status: o.Status,
+			ID: o.ID, Number: o.Number, Channel: o.Channel, CreatedAt: o.CreatedAt, Customer: o.Customer, LineCount: count, Total: o.Total, Status: o.Status,
 		})
 	}
 	return rows, nil
@@ -181,16 +207,17 @@ func (f *Fake) CountOrders(_ context.Context, arg store.CountOrdersParams) (int6
 	if f.Err != nil {
 		return 0, f.Err
 	}
-	return int64(len(f.findOrders(arg.Status, arg.Search))), nil
+	return int64(len(f.findOrders(arg.Status, arg.Channel, arg.Search))), nil
 }
 
 // findOrders is the WHERE and ORDER BY of ListOrders.
-func (f *Fake) findOrders(status, search pgtype.Text) []store.Order {
+func (f *Fake) findOrders(status, channel, search pgtype.Text) []store.Order {
 	var found []store.Order
 	for _, o := range slices.Backward(f.orders) {
 		switch {
 		case o.DeletedAt.Valid:
 		case status.Valid && o.Status != status.String:
+		case channel.Valid && o.Channel != channel.String:
 		case search.Valid && strconv.FormatInt(o.Number, 10) != search.String &&
 			!strings.Contains(strings.ToLower(o.Customer), strings.ToLower(search.String)):
 		default:
@@ -209,10 +236,10 @@ func (f *Fake) detail(o store.Order) store.OrderDetail {
 		return pgtype.Text{}
 	}
 	d := store.OrderDetail{ReadOrderRow: store.ReadOrderRow{
-		ID: o.ID, Number: o.Number, Customer: o.Customer, Note: o.Note, Total: o.Total, Status: o.Status,
-		CreatedBy: o.CreatedBy, CreatedByName: name(pgtype.Int8{Int64: o.CreatedBy, Valid: true}).String, CreatedAt: o.CreatedAt,
+		ID: o.ID, Number: o.Number, Channel: o.Channel, Customer: o.Customer, Note: o.Note, Total: o.Total, Status: o.Status,
+		CreatedBy: o.CreatedBy, CreatedByName: name(o.CreatedBy), CreatedAt: o.CreatedAt,
 		CompletedBy: o.CompletedBy, CompletedByName: name(o.CompletedBy), CompletedAt: o.CompletedAt,
-		CancelledBy: o.CancelledBy, CancelledByName: name(o.CancelledBy), CancelledAt: o.CancelledAt,
+		CancelledBy: o.CancelledBy, CancelledByName: name(o.CancelledBy), CancelledBySystem: o.CancelledBySystem, CancelledAt: o.CancelledAt,
 	}}
 	for _, l := range f.lines {
 		if l.OrderID == o.ID {

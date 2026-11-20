@@ -51,30 +51,34 @@ type LoginCheck struct {
 }
 
 type LoginLog struct {
-	ID        int64
-	At        time.Time
-	Email     string
-	UserID    pgtype.Int8
-	Result    string
-	Ip        string
-	UserAgent string
+	ID         int64
+	At         time.Time
+	Email      string
+	UserID     pgtype.Int8
+	Result     string
+	Ip         string
+	UserAgent  string
+	App        string
+	CustomerID pgtype.Int8
 }
 
 type Order struct {
-	ID          int64
-	Number      int64
-	Customer    string
-	Note        string
-	Total       int64
-	Status      string
-	CreatedBy   int64
-	CreatedAt   time.Time
-	CompletedBy pgtype.Int8
-	CompletedAt pgtype.Timestamptz
-	CancelledBy pgtype.Int8
-	CancelledAt pgtype.Timestamptz
-	DeletedAt   pgtype.Timestamptz
-	DeletedBy   pgtype.Int8
+	ID                int64
+	Number            int64
+	Customer          string
+	Note              string
+	Total             int64
+	Status            string
+	CreatedBy         pgtype.Int8
+	CreatedAt         time.Time
+	CompletedBy       pgtype.Int8
+	CompletedAt       pgtype.Timestamptz
+	CancelledBy       pgtype.Int8
+	CancelledAt       pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	DeletedBy         pgtype.Int8
+	Channel           string
+	CancelledBySystem bool
 }
 
 type OrderLine struct {
@@ -118,9 +122,10 @@ type StockMovement struct {
 	Change     int32
 	StockAfter int32
 	At         time.Time
-	UserID     int64
+	UserID     pgtype.Int8
 	Note       string
 	OrderID    pgtype.Int8
+	System     bool
 }
 
 type User struct {

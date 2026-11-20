@@ -75,7 +75,7 @@ func runStockMovements(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}
 		want := store.ListStockMovementsRow{
 			ID: moved[0].ID, Kind: "receive", ProductID: tea.ID, ProductName: "Thai tea", ProductSku: "TEA-01",
-			Change: 12, StockAfter: 17, At: at, UserID: user.ID, UserName: "Somchai", Note: "Delivery 12",
+			Change: 12, StockAfter: 17, At: at, UserID: pgtype.Int8{Int64: user.ID, Valid: true}, UserName: pgtype.Text{String: "Somchai", Valid: true}, Note: "Delivery 12",
 		}
 		if len(moved) != 1 || !equalMovement(moved[0], want) {
 			t.Fatalf("moved = %+v, want [%+v]", moved, want)

@@ -16,9 +16,9 @@ FOR UPDATE;
 UPDATE products SET stock = sqlc.arg(stock) WHERE id = sqlc.arg(id);
 
 -- name: InsertStockMovement :one
-INSERT INTO stock_movements (kind, product_id, change, stock_after, at, user_id, note, order_id)
+INSERT INTO stock_movements (kind, product_id, change, stock_after, at, user_id, system, note, order_id)
 VALUES (sqlc.arg(kind), sqlc.arg(product_id), sqlc.arg(change), sqlc.arg(stock_after), sqlc.arg(at),
-    sqlc.arg(user_id), sqlc.arg(note), sqlc.narg(order_id))
+    sqlc.narg(user_id), sqlc.narg(user_id)::bigint IS NULL, sqlc.arg(note), sqlc.narg(order_id))
 RETURNING id;
 
 -- A Deleted Order still names its number but is flagged so it is not linked (stock-movements R13).
@@ -27,12 +27,12 @@ RETURNING id;
 SELECT stock_movements.id, stock_movements.kind, stock_movements.product_id,
     products.name AS product_name, products.sku AS product_sku,
     stock_movements.change, stock_movements.stock_after, stock_movements.at,
-    stock_movements.user_id, users.name AS user_name, stock_movements.note,
+    stock_movements.user_id, users.name AS user_name, stock_movements.system, stock_movements.note,
     stock_movements.order_id, orders.number AS order_number,
     (orders.deleted_at IS NOT NULL)::boolean AS order_deleted
 FROM stock_movements
 JOIN products ON products.id = stock_movements.product_id
-JOIN users ON users.id = stock_movements.user_id
+LEFT JOIN users ON users.id = stock_movements.user_id
 LEFT JOIN orders ON orders.id = stock_movements.order_id
 WHERE stock_movements.id = $1;
 
@@ -44,25 +44,30 @@ WHERE stock_movements.id = $1;
 SELECT stock_movements.id, stock_movements.kind, stock_movements.product_id,
     products.name AS product_name, products.sku AS product_sku,
     stock_movements.change, stock_movements.stock_after, stock_movements.at,
-    stock_movements.user_id, users.name AS user_name, stock_movements.note,
+    stock_movements.user_id, users.name AS user_name, stock_movements.system, stock_movements.note,
     stock_movements.order_id, orders.number AS order_number,
     (orders.deleted_at IS NOT NULL)::boolean AS order_deleted
 FROM stock_movements
 JOIN products ON products.id = stock_movements.product_id
-JOIN users ON users.id = stock_movements.user_id
+LEFT JOIN users ON users.id = stock_movements.user_id
 LEFT JOIN orders ON orders.id = stock_movements.order_id
 WHERE (sqlc.narg(product_id)::bigint IS NULL OR stock_movements.product_id = sqlc.narg(product_id))
     AND (sqlc.narg(kind)::text IS NULL OR stock_movements.kind = sqlc.narg(kind))
     AND (sqlc.narg(from_at)::timestamptz IS NULL OR stock_movements.at >= sqlc.narg(from_at))
     AND (sqlc.narg(until_at)::timestamptz IS NULL OR stock_movements.at < sqlc.narg(until_at))
     AND (sqlc.narg(before)::bigint IS NULL OR stock_movements.id < sqlc.narg(before))
+    AND (NOT sqlc.arg(in_shop_only)::boolean OR (stock_movements.user_id IS NOT NULL AND (orders.channel IS NULL OR orders.channel = 'in-shop')))
 ORDER BY stock_movements.id DESC
 LIMIT sqlc.arg(row_limit) OFFSET sqlc.arg(row_offset)::integer;
 
+-- in_shop_only is the legacy list: movements a User made, and none of an Online order, which
+-- the legacy operations cannot open (business ADR 0014).
 -- navigation-and-lists R6, context ADR 0009: count filters before page selection.
 -- name: CountStockMovements :one
 SELECT count(*) FROM stock_movements
+LEFT JOIN orders ON orders.id = stock_movements.order_id
 WHERE (sqlc.narg(product_id)::bigint IS NULL OR stock_movements.product_id = sqlc.narg(product_id))
     AND (sqlc.narg(kind)::text IS NULL OR stock_movements.kind = sqlc.narg(kind))
     AND (sqlc.narg(from_at)::timestamptz IS NULL OR stock_movements.at >= sqlc.narg(from_at))
-    AND (sqlc.narg(until_at)::timestamptz IS NULL OR stock_movements.at < sqlc.narg(until_at));
+    AND (sqlc.narg(until_at)::timestamptz IS NULL OR stock_movements.at < sqlc.narg(until_at))
+    AND (NOT sqlc.arg(in_shop_only)::boolean OR (stock_movements.user_id IS NOT NULL AND (orders.channel IS NULL OR orders.channel = 'in-shop')));

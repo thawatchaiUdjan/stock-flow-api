@@ -296,7 +296,7 @@ func runLoginLog(t *testing.T, newSubject func(t *testing.T) Subject) {
 	}
 	blockedUntil := func(t *testing.T, s Subject, email, ip string, now time.Time) time.Time {
 		t.Helper()
-		until, err := s.Store.LoginBlockedUntil(ctx, store.LoginBlockParams{Email: email, IP: ip, At: now})
+		until, err := s.Store.LoginBlockedUntil(ctx, store.LoginBlockParams{App: store.AppStockFlow, Email: email, IP: ip, At: now})
 		if err != nil {
 			t.Fatal(err)
 		}

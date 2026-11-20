@@ -68,7 +68,7 @@ func TestOnlyTheseOperationsNeedNoSession(t *testing.T) {
 	}
 }
 
-// business ADR 0013: only a Product, a User or an Order is deleted, and only softly. Stock
+// business ADR 0013: only a Product, a User or an Order (legacy or /v2) is deleted, and only softly. Stock
 // movements, the Login log and the rest never are (stock-movements R8, users-and-access R39).
 func TestOnlyProductsUsersAndOrdersAreDeleted(t *testing.T) {
 	var got []string
@@ -79,7 +79,7 @@ func TestOnlyProductsUsersAndOrdersAreDeleted(t *testing.T) {
 	}
 
 	slices.Sort(got)
-	if want := []string{"delete-order", "delete-product", "delete-user"}; !slices.Equal(got, want) {
+	if want := []string{"delete-order", "delete-order-v2", "delete-product", "delete-user"}; !slices.Equal(got, want) {
 		t.Errorf("DELETE operations = %v, want %v", got, want)
 	}
 }

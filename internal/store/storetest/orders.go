@@ -101,7 +101,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 		// orders R1, R3, R4, R10.
 		o := created.ReadOrderRow
 		if o.Number != 1 || o.Customer != "Khun Dao" || o.Note != "Pick up at 5" || o.Total != 3*1250+2*4500 ||
-			o.Status != "pending" || o.CreatedBy != user.ID || o.CreatedByName != "Somchai" || !o.CreatedAt.Equal(at) ||
+			o.Status != "pending" || o.CreatedBy.Int64 != user.ID || o.CreatedByName.String != "Somchai" || !o.CreatedAt.Equal(at) ||
 			o.CompletedBy.Valid || o.CompletedAt.Valid || o.CancelledBy.Valid || o.CancelledAt.Valid {
 			t.Errorf("order = %+v", o)
 		}
@@ -133,7 +133,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}{{tea.ID, -2, 8}, {cup.ID, -3, 0}} {
 			m := listed[i]
 			if m.Kind != "order" || m.ProductID != wantMove.product || m.Change != wantMove.change || m.StockAfter != wantMove.after ||
-				m.UserID != user.ID || !m.At.Equal(at) || m.OrderID != link || m.OrderNumber != number {
+				m.UserID.Int64 != user.ID || !m.At.Equal(at) || m.OrderID != link || m.OrderNumber != number {
 				t.Errorf("movement %d = %+v, want an order movement of %+v linked to Order 1", i, m, wantMove)
 			}
 		}
@@ -301,7 +301,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 		o := completed.ReadOrderRow
 		if o.Status != "completed" || o.CompletedBy.Int64 != other.ID || o.CompletedByName.String != "Malee" ||
 			!o.CompletedAt.Valid || !o.CompletedAt.Time.Equal(at.Add(3600e9)) || o.CancelledBy.Valid || o.CancelledAt.Valid ||
-			o.CreatedBy != creator.ID || len(completed.Lines) != 1 {
+			o.CreatedBy.Int64 != creator.ID || len(completed.Lines) != 1 {
 			t.Errorf("order = %+v", completed)
 		}
 		if got, err := s.Store.GetOrder(ctx, 1); err != nil || got.ReadOrderRow != o {
@@ -347,7 +347,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 			change, after int32
 		}{{cup.ID, 5, 5}, {tea.ID, 4, 10}} {
 			m := listed[i]
-			if m.ProductID != want.product || m.Change != want.change || m.StockAfter != want.after || m.UserID != admin.ID ||
+			if m.ProductID != want.product || m.Change != want.change || m.StockAfter != want.after || m.UserID.Int64 != admin.ID ||
 				!m.At.Equal(at.Add(3600e9)) || m.OrderID != link || m.OrderNumber.Int64 != 1 {
 				t.Errorf("cancellation %d = %+v, want %+v by the Admin, linked to Order 1", i, m, want)
 			}

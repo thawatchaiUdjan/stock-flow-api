@@ -74,6 +74,7 @@ func loginLogEntry(ctx context.Context, deps Deps, result, email string, userID 
 		Email:     clip(email, maxEmailChars),
 		UserID:    pgtype.Int8{Int64: userID, Valid: userID != 0},
 		Result:    result,
+		App:       pgtype.Text{String: store.AppStockFlow, Valid: true},
 		Ip:        info.ip,
 		UserAgent: info.userAgent,
 	}
@@ -139,40 +140,15 @@ func registerLoginLog(api huma.API, deps Deps) {
 		Middlewares: huma.Middlewares{ownerOnly(api, deps)},
 		Errors:      []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusUnprocessableEntity, http.StatusInternalServerError},
 	}, func(ctx context.Context, input *listLoginLogInput) (*listLoginLogOutput, error) {
-		// Huma has applied the default (50) and the bounds (1 to 100).
-		limit := input.Limit
-		rowLimit := limit
-		if !input.Offset.Set {
-			rowLimit++
-		}
-		// One more than the page, to know whether another page follows.
-		rows, err := deps.Store.ListLoginLog(ctx, store.ListLoginLogParams{
-			UserID:    pgtype.Int8{Int64: input.UserID, Valid: input.UserID != 0},
-			Result:    pgtype.Text{String: input.Result, Valid: input.Result != ""},
-			Before:    pgtype.Int8{Int64: input.Before, Valid: input.Before != 0},
-			RowOffset: int32(input.Offset.Value),
-			RowLimit:  int32(rowLimit),
-		})
+		// business ADR 0014: the legacy log is StockFlow's logins only.
+		page, err := listLoginLogEntries(ctx, deps, input, store.AppStockFlow)
 		if err != nil {
-			return nil, internalError(ctx, "list login log", err)
+			return nil, err
 		}
 		out := &listLoginLogOutput{}
-		// navigation-and-lists R6, context ADR 0009: legacy responses omit totals.
-		if input.Offset.Set {
-			total, err := deps.Store.CountLoginLog(ctx, store.CountLoginLogParams{UserID: pgtype.Int8{Int64: input.UserID, Valid: input.UserID != 0}, Result: pgtype.Text{String: input.Result, Valid: input.Result != ""}})
-			if err != nil {
-				return nil, internalError(ctx, "count login log", err)
-			}
-			out.Body.Total = &total
-		}
-		out.Body.Entries = make([]loginLogEntryBody, 0, len(rows))
-		if len(rows) > limit {
-			rows = rows[:limit]
-			if !input.Offset.Set {
-				out.Body.NextBefore = &rows[limit-1].ID
-			}
-		}
-		for _, row := range rows {
+		out.Body.NextBefore, out.Body.Total = page.nextBefore, page.total
+		out.Body.Entries = make([]loginLogEntryBody, 0, len(page.rows))
+		for _, row := range page.rows {
 			entry := loginLogEntryBody{
 				ID: row.ID, At: row.At, Email: row.Email, Result: row.Result, IP: row.Ip, UserAgent: row.UserAgent,
 			}
@@ -183,4 +159,54 @@ func registerLoginLog(api huma.API, deps Deps) {
 		}
 		return out, nil
 	})
+}
+
+// loginLogPage is one page of the Login log, in either paging mode.
+type loginLogPage struct {
+	rows       []store.ListLoginLogRow
+	nextBefore *int64
+	total      *int64
+}
+
+// listLoginLogEntries reads a page of the Login log: one app's entries, or with an empty
+// app both's (users-and-access R36, navigation-and-lists R6).
+func listLoginLogEntries(ctx context.Context, deps Deps, input *listLoginLogInput, app string) (loginLogPage, error) {
+	// Huma has applied the default (50) and the bounds (1 to 100).
+	limit := input.Limit
+	rowLimit := limit
+	if !input.Offset.Set {
+		rowLimit++
+	}
+	filter := store.CountLoginLogParams{
+		UserID: pgtype.Int8{Int64: input.UserID, Valid: input.UserID != 0},
+		Result: pgtype.Text{String: input.Result, Valid: input.Result != ""},
+		App:    pgtype.Text{String: app, Valid: app != ""},
+	}
+	// One more than the page, to know whether another page follows.
+	rows, err := deps.Store.ListLoginLog(ctx, store.ListLoginLogParams{
+		UserID: filter.UserID, Result: filter.Result, App: filter.App,
+		Before:    pgtype.Int8{Int64: input.Before, Valid: input.Before != 0},
+		RowOffset: int32(input.Offset.Value),
+		RowLimit:  int32(rowLimit),
+	})
+	if err != nil {
+		return loginLogPage{}, internalError(ctx, "list login log", err)
+	}
+	var page loginLogPage
+	// navigation-and-lists R6, context ADR 0009: legacy responses omit totals.
+	if input.Offset.Set {
+		total, err := deps.Store.CountLoginLog(ctx, filter)
+		if err != nil {
+			return loginLogPage{}, internalError(ctx, "count login log", err)
+		}
+		page.total = &total
+	}
+	if len(rows) > limit {
+		rows = rows[:limit]
+		if !input.Offset.Set {
+			page.nextBefore = &rows[limit-1].ID
+		}
+	}
+	page.rows = rows
+	return page, nil
 }

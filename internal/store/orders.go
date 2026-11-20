@@ -44,8 +44,9 @@ type CreateOrderParams struct {
 	Lines    []OrderLineParams
 }
 
-// FinishOrderParams is a User completing or cancelling the Order of Number. Now gives the
-// time, called once the Order is held.
+// FinishOrderParams is a User completing or cancelling the Order of Number, or the system
+// cancelling it when UserID is 0 (orders R12, R25). Now gives the time, called once the
+// Order is held.
 type FinishOrderParams struct {
 	Number int64
 	UserID int64
@@ -103,7 +104,7 @@ func (s *Store) CreateOrder(ctx context.Context, arg CreateOrderParams) (created
 
 		at := arg.Now()
 		order, err := q.InsertOrder(ctx, InsertOrderParams{
-			Customer: arg.Customer, Note: arg.Note, Total: total, CreatedBy: arg.UserID, CreatedAt: at,
+			Customer: arg.Customer, Note: arg.Note, Total: total, CreatedBy: pgtype.Int8{Int64: arg.UserID, Valid: true}, CreatedAt: at,
 		})
 		if err != nil {
 			return fmt.Errorf("insert order: %w", err)
@@ -163,7 +164,7 @@ func (s *Store) CancelOrder(ctx context.Context, arg FinishOrderParams) (OrderDe
 			return err
 		}
 		// Cancelled when the stock came back.
-		if err := q.SetOrderCancelled(ctx, SetOrderCancelledParams{ID: id, UserID: arg.UserID, At: moved[0].At}); err != nil {
+		if err := q.SetOrderCancelled(ctx, SetOrderCancelledParams{ID: id, UserID: userOrSystem(arg.UserID), At: moved[0].At}); err != nil {
 			return fmt.Errorf("set order cancelled: %w", err)
 		}
 		return nil
@@ -215,6 +216,12 @@ func orderDetail(ctx context.Context, q *Queries, number int64) (OrderDetail, er
 		return OrderDetail{}, fmt.Errorf("list order lines: %w", err)
 	}
 	return OrderDetail{ReadOrderRow: order, Lines: lines}, nil
+}
+
+// userOrSystem is a User's id, or NULL for the system, whose id is 0 (orders R12,
+// stock-movements R2).
+func userOrSystem(userID int64) pgtype.Int8 {
+	return pgtype.Int8{Int64: userID, Valid: userID != 0}
 }
 
 // orderLink is the Order a movement is made by, or none.

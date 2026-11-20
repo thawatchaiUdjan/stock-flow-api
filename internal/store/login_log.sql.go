@@ -13,19 +13,23 @@ import (
 )
 
 const addLoginLogEntry = `-- name: AddLoginLogEntry :exec
-INSERT INTO login_log (at, email, user_id, result, ip, user_agent)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO login_log (at, email, user_id, result, ip, user_agent, app, customer_id)
+VALUES ($1, $2, $3, $4, $5, $6,
+    coalesce($7::text, 'stockflow'), $8)
 `
 
 type AddLoginLogEntryParams struct {
-	At        time.Time
-	Email     string
-	UserID    pgtype.Int8
-	Result    string
-	Ip        string
-	UserAgent string
+	At         time.Time
+	Email      string
+	UserID     pgtype.Int8
+	Result     string
+	Ip         string
+	UserAgent  string
+	App        pgtype.Text
+	CustomerID pgtype.Int8
 }
 
+// app is StockFlow unless the entry says it is the Storefront's (users-and-access R36).
 func (q *Queries) AddLoginLogEntry(ctx context.Context, arg AddLoginLogEntryParams) error {
 	_, err := q.db.Exec(ctx, addLoginLogEntry,
 		arg.At,
@@ -34,6 +38,8 @@ func (q *Queries) AddLoginLogEntry(ctx context.Context, arg AddLoginLogEntryPara
 		arg.Result,
 		arg.Ip,
 		arg.UserAgent,
+		arg.App,
+		arg.CustomerID,
 	)
 	return err
 }
@@ -42,16 +48,18 @@ const countLoginLog = `-- name: CountLoginLog :one
 SELECT count(*) FROM login_log
 WHERE ($1::bigint IS NULL OR login_log.user_id = $1)
     AND ($2::text IS NULL OR login_log.result = $2)
+    AND ($3::text IS NULL OR login_log.app = $3)
 `
 
 type CountLoginLogParams struct {
 	UserID pgtype.Int8
 	Result pgtype.Text
+	App    pgtype.Text
 }
 
 // navigation-and-lists R6, context ADR 0009: count filters before page selection.
 func (q *Queries) CountLoginLog(ctx context.Context, arg CountLoginLogParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countLoginLog, arg.UserID, arg.Result)
+	row := q.db.QueryRow(ctx, countLoginLog, arg.UserID, arg.Result, arg.App)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -59,33 +67,37 @@ func (q *Queries) CountLoginLog(ctx context.Context, arg CountLoginLogParams) (i
 
 const listLoginLog = `-- name: ListLoginLog :many
 SELECT login_log.id, login_log.at, login_log.email, login_log.user_id, users.name AS user_name,
-    login_log.result, login_log.ip, login_log.user_agent
+    login_log.result, login_log.ip, login_log.user_agent, login_log.app, login_log.customer_id
 FROM login_log
 LEFT JOIN users ON users.id = login_log.user_id
 WHERE ($1::bigint IS NULL OR login_log.user_id = $1)
     AND ($2::text IS NULL OR login_log.result = $2)
-    AND ($3::bigint IS NULL OR login_log.id < $3)
+    AND ($3::text IS NULL OR login_log.app = $3)
+    AND ($4::bigint IS NULL OR login_log.id < $4)
 ORDER BY login_log.id DESC
-LIMIT $5 OFFSET $4::integer
+LIMIT $6 OFFSET $5::integer
 `
 
 type ListLoginLogParams struct {
 	UserID    pgtype.Int8
 	Result    pgtype.Text
+	App       pgtype.Text
 	Before    pgtype.Int8
 	RowOffset int32
 	RowLimit  int32
 }
 
 type ListLoginLogRow struct {
-	ID        int64
-	At        time.Time
-	Email     string
-	UserID    pgtype.Int8
-	UserName  pgtype.Text
-	Result    string
-	Ip        string
-	UserAgent string
+	ID         int64
+	At         time.Time
+	Email      string
+	UserID     pgtype.Int8
+	UserName   pgtype.Text
+	Result     string
+	Ip         string
+	UserAgent  string
+	App        string
+	CustomerID pgtype.Int8
 }
 
 // Newest first by id, which follows the order the entries were written: the cursor
@@ -95,6 +107,7 @@ func (q *Queries) ListLoginLog(ctx context.Context, arg ListLoginLogParams) ([]L
 	rows, err := q.db.Query(ctx, listLoginLog,
 		arg.UserID,
 		arg.Result,
+		arg.App,
 		arg.Before,
 		arg.RowOffset,
 		arg.RowLimit,
@@ -115,6 +128,8 @@ func (q *Queries) ListLoginLog(ctx context.Context, arg ListLoginLogParams) ([]L
 			&i.Result,
 			&i.Ip,
 			&i.UserAgent,
+			&i.App,
+			&i.CustomerID,
 		); err != nil {
 			return nil, err
 		}
@@ -128,20 +143,21 @@ func (q *Queries) ListLoginLog(ctx context.Context, arg ListLoginLogParams) ([]L
 
 const recentFailedLoginsByEmail = `-- name: RecentFailedLoginsByEmail :many
 SELECT at FROM login_log
-WHERE result = 'failed-login' AND lower(email) = lower($1) AND at > $2
+WHERE result = 'failed-login' AND app = $1 AND lower(email) = lower($2) AND at > $3
 ORDER BY at DESC
 LIMIT 5
 `
 
 type RecentFailedLoginsByEmailParams struct {
+	App   string
 	Email string
 	Since time.Time
 }
 
-// users-and-access R55: the newest failures for an email, in any letter case, as far back
-// as a block can still reach. LIMIT is the count that blocks.
+// users-and-access R55: the newest failures for an email, in any letter case, in one app,
+// as far back as a block can still reach. LIMIT is the count that blocks.
 func (q *Queries) RecentFailedLoginsByEmail(ctx context.Context, arg RecentFailedLoginsByEmailParams) ([]time.Time, error) {
-	rows, err := q.db.Query(ctx, recentFailedLoginsByEmail, arg.Email, arg.Since)
+	rows, err := q.db.Query(ctx, recentFailedLoginsByEmail, arg.App, arg.Email, arg.Since)
 	if err != nil {
 		return nil, err
 	}
@@ -162,19 +178,20 @@ func (q *Queries) RecentFailedLoginsByEmail(ctx context.Context, arg RecentFaile
 
 const recentFailedLoginsByIP = `-- name: RecentFailedLoginsByIP :many
 SELECT at FROM login_log
-WHERE result = 'failed-login' AND ip = $1 AND at > $2
+WHERE result = 'failed-login' AND app = $1 AND ip = $2 AND at > $3
 ORDER BY at DESC
 LIMIT 50
 `
 
 type RecentFailedLoginsByIPParams struct {
+	App   string
 	Ip    string
 	Since time.Time
 }
 
-// users-and-access R56: the newest failures from an address within the last hour.
+// users-and-access R56: the newest failures from an address within the last hour, in one app.
 func (q *Queries) RecentFailedLoginsByIP(ctx context.Context, arg RecentFailedLoginsByIPParams) ([]time.Time, error) {
-	rows, err := q.db.Query(ctx, recentFailedLoginsByIP, arg.Ip, arg.Since)
+	rows, err := q.db.Query(ctx, recentFailedLoginsByIP, arg.App, arg.Ip, arg.Since)
 	if err != nil {
 		return nil, err
 	}

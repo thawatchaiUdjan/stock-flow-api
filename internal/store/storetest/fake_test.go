@@ -11,9 +11,10 @@ func TestFakeKeepsTheStoreContract(t *testing.T) {
 	storetest.Run(t, func(*testing.T) storetest.Subject {
 		fake := storetest.NewFake()
 		return storetest.Subject{
-			Store:      fake,
-			AddUser:    func(_ *testing.T, user store.User) store.User { return fake.AddUser(user) },
-			AddProduct: func(_ *testing.T, product store.Product) store.Product { return fake.AddProduct(product) },
+			Store:          fake,
+			AddUser:        func(_ *testing.T, user store.User) store.User { return fake.AddUser(user) },
+			AddProduct:     func(_ *testing.T, product store.Product) store.Product { return fake.AddProduct(product) },
+			AddOnlineOrder: func(_ *testing.T, seed storetest.OnlineOrderSeed) int64 { return fake.AddOnlineOrder(seed) },
 		}
 	})
 }

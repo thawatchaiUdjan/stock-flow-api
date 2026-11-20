@@ -75,19 +75,24 @@ func finishOf(by pgtype.Int8, name pgtype.Text, at pgtype.Timestamptz) *orderFin
 
 func orderOf(d store.OrderDetail) order {
 	o := order{
-		ID: d.ID, Number: d.Number, CreatedAt: d.CreatedAt, CreatedBy: orderUser{ID: d.CreatedBy, Name: d.CreatedByName},
+		ID: d.ID, Number: d.Number, CreatedAt: d.CreatedAt, CreatedBy: orderUser{ID: d.CreatedBy.Int64, Name: d.CreatedByName.String},
 		Customer: d.Customer, Note: d.Note, Total: d.Total, Status: d.Status,
 		Completed: finishOf(d.CompletedBy, d.CompletedByName, d.CompletedAt),
 		Cancelled: finishOf(d.CancelledBy, d.CancelledByName, d.CancelledAt),
-		Lines:     make([]orderLine, 0, len(d.Lines)),
+		Lines:     orderLinesOf(d.Lines),
 	}
-	for _, l := range d.Lines {
-		o.Lines = append(o.Lines, orderLine{
+	return o
+}
+
+func orderLinesOf(lines []store.ListOrderLinesRow) []orderLine {
+	out := make([]orderLine, 0, len(lines))
+	for _, l := range lines {
+		out = append(out, orderLine{
 			Product:  orderLineProduct{ID: l.ProductID, Name: l.ProductName, SKU: l.ProductSku},
 			Quantity: l.Quantity, Price: l.Price, Amount: int64(l.Quantity) * l.Price, // orders R4
 		})
 	}
-	return o
+	return out
 }
 
 type orderOutput struct {
@@ -168,20 +173,10 @@ func registerOrders(api huma.API, deps Deps) {
 		Middlewares: huma.Middlewares{anyRole(api, deps)},
 		Errors:      []int{http.StatusUnauthorized},
 	}, func(ctx context.Context, input *listOrdersInput) (*listOrdersOutput, error) {
-		search := strings.TrimSpace(input.Search)
-		filter := store.CountOrdersParams{
-			Status: pgtype.Text{String: input.Status, Valid: input.Status != ""},
-			Search: pgtype.Text{String: search, Valid: search != ""},
-		}
-		rows, err := deps.Store.ListOrders(ctx, store.ListOrdersParams{
-			Status: filter.Status, Search: filter.Search, RowOffset: int32(input.Offset), RowLimit: int32(input.Limit),
-		})
+		// business ADR 0014: the legacy list is of In-shop orders only.
+		rows, total, err := listOrderRows(ctx, deps, input, store.ChannelInShop)
 		if err != nil {
-			return nil, internalError(ctx, "list orders", err)
-		}
-		total, err := deps.Store.CountOrders(ctx, filter)
-		if err != nil {
-			return nil, internalError(ctx, "count orders", err)
+			return nil, err
 		}
 		out := &listOrdersOutput{}
 		out.Body.Orders = make([]orderSummary, 0, len(rows))
@@ -207,6 +202,9 @@ func registerOrders(api huma.API, deps Deps) {
 		Errors:      []int{http.StatusUnauthorized, http.StatusNotFound},
 	}, func(ctx context.Context, input *orderNumberInput) (*orderOutput, error) {
 		got, err := deps.Store.GetOrder(ctx, input.Number)
+		if err == nil && got.Channel != store.ChannelInShop {
+			err = store.ErrNotFound // business ADR 0014, as inShopOrder
+		}
 		if err != nil {
 			return nil, orderError(ctx, "get order", err)
 		}
@@ -266,6 +264,9 @@ func registerOrders(api huma.API, deps Deps) {
 		Middlewares: huma.Middlewares{anyRole(api, deps)},
 		Errors:      []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusConflict},
 	}, func(ctx context.Context, input *orderNumberInput) (*orderOutput, error) {
+		if err := inShopOrder(ctx, deps, input.Number); err != nil {
+			return nil, orderError(ctx, "complete order", err)
+		}
 		completed, err := deps.Store.CompleteOrder(ctx, store.FinishOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, Now: deps.Now})
 		if err != nil {
 			return nil, orderError(ctx, "complete order", err)
@@ -288,6 +289,9 @@ func registerOrders(api huma.API, deps Deps) {
 		Middlewares: huma.Middlewares{ownerOrAdmin(api, deps)},
 		Errors:      []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict},
 	}, func(ctx context.Context, input *orderNumberInput) (*orderOutput, error) {
+		if err := inShopOrder(ctx, deps, input.Number); err != nil {
+			return nil, orderError(ctx, "cancel order", err)
+		}
 		cancelled, err := deps.Store.CancelOrder(ctx, store.FinishOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, Now: deps.Now})
 		if err != nil {
 			return nil, orderError(ctx, "cancel order", err)
@@ -311,12 +315,47 @@ func registerOrders(api huma.API, deps Deps) {
 		Errors:        []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict},
 	}, func(ctx context.Context, input *orderNumberInput) (*struct{}, error) {
 		// orders R20
+		if err := inShopOrder(ctx, deps, input.Number); err != nil {
+			return nil, orderError(ctx, "delete order", err)
+		}
 		err := deps.Store.DeleteOrder(ctx, store.DeleteOrderParams{Number: input.Number, UserID: sessionOf(ctx).UserID, At: deps.Now()})
 		if err != nil {
 			return nil, orderError(ctx, "delete order", err)
 		}
 		return nil, nil
 	})
+}
+
+// listOrderRows is the page of the Orders List and how many Orders match, of one channel or,
+// with an empty channel, of both (orders R15, R16).
+func listOrderRows(ctx context.Context, deps Deps, input *listOrdersInput, channel string) ([]store.ListOrdersRow, int64, error) {
+	search := strings.TrimSpace(input.Search)
+	filter := store.CountOrdersParams{
+		Status:  pgtype.Text{String: input.Status, Valid: input.Status != ""},
+		Channel: pgtype.Text{String: channel, Valid: channel != ""},
+		Search:  pgtype.Text{String: search, Valid: search != ""},
+	}
+	rows, err := deps.Store.ListOrders(ctx, store.ListOrdersParams{
+		Status: filter.Status, Channel: filter.Channel, Search: filter.Search, RowOffset: int32(input.Offset), RowLimit: int32(input.Limit),
+	})
+	if err != nil {
+		return nil, 0, internalError(ctx, "list orders", err)
+	}
+	total, err := deps.Store.CountOrders(ctx, filter)
+	if err != nil {
+		return nil, 0, internalError(ctx, "count orders", err)
+	}
+	return rows, total, nil
+}
+
+// inShopOrder is ErrNotFound for an Online order: the legacy operations cover In-shop
+// orders only, and answer for an Online one as for no Order (business ADR 0014).
+func inShopOrder(ctx context.Context, deps Deps, number int64) error {
+	got, err := deps.Store.GetOrder(ctx, number)
+	if err == nil && got.Channel != store.ChannelInShop {
+		return store.ErrNotFound
+	}
+	return err
 }
 
 // orderError is the answer of an operation on one Order, when it fails.

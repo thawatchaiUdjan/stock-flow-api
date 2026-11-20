@@ -466,8 +466,8 @@ func TestALogInIsRefusedWhenItCannotBeRecorded(t *testing.T) {
 // users-and-access R39: nothing in the API edits or deletes an entry, or writes one.
 func TestTheLogHasOnlyAReadOperation(t *testing.T) {
 	for id, op := range operations(t) {
-		if strings.Contains(op.Path, "login-log") && (op.Method != http.MethodGet || id != "list-login-log") {
-			t.Errorf("%s %s (%s): only list-login-log may reach the log", op.Method, op.Path, id)
+		if strings.Contains(op.Path, "login-log") && (op.Method != http.MethodGet || (id != "list-login-log" && id != "list-login-log-v2")) {
+			t.Errorf("%s %s (%s): only the list operations may reach the log", op.Method, op.Path, id)
 		}
 	}
 }

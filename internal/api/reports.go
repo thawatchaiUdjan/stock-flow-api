@@ -143,7 +143,7 @@ func registerReports(api huma.API, deps Deps) {
 		if err != nil {
 			return nil, internalError(ctx, "list products to restock", err)
 		}
-		newest, err := deps.Store.ListOrders(ctx, store.ListOrdersParams{RowLimit: newestOrders})
+		newest, err := deps.Store.ListOrders(ctx, store.ListOrdersParams{Channel: pgtype.Text{String: store.ChannelInShop, Valid: true}, RowLimit: newestOrders})
 		if err != nil {
 			return nil, internalError(ctx, "list newest orders", err)
 		}
