@@ -188,7 +188,11 @@ func (f *Fake) GetCustomerSession(_ context.Context, tokenHash []byte) (store.Ge
 		return store.GetCustomerSessionRow{}, store.ErrNotFound
 	}
 	c, _ := f.customer(session.CustomerID)
-	return store.GetCustomerSessionRow{CustomerID: c.ID, Name: c.Name, Email: c.Email, Phone: c.Phone, ExpiresAt: session.ExpiresAt}, nil
+	return store.GetCustomerSessionRow{
+		CustomerID: c.ID, Name: c.Name, Email: c.Email, Phone: c.Phone, ExpiresAt: session.ExpiresAt,
+		AddressRecipient: c.AddressRecipient, AddressPhone: c.AddressPhone, AddressLine: c.AddressLine, AddressSubdistrict: c.AddressSubdistrict,
+		AddressDistrict: c.AddressDistrict, AddressProvince: c.AddressProvince, AddressPostcode: c.AddressPostcode,
+	}, nil
 }
 
 func (f *Fake) EndCustomerSession(_ context.Context, arg store.EndCustomerSessionParams) error {

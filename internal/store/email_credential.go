@@ -47,7 +47,28 @@ func (credential EmailCredential) VerifyCode(arg VerifyFirstTimeCodeParams) (Ema
 // AllowsPassword requires both the expected purpose and current User eligibility.
 // It enforces users-and-access R31, R42 and R48.
 func (credential EmailCredential) AllowsPassword(user User, arg EmailPasswordParams) bool {
-	return (arg.Kind == SetupGrant || arg.Kind == ResetLink) && user.CanUseEmailCredential(arg.Kind) &&
+	return credential.allowsPassword(user.CanUseEmailCredential(arg.Kind), arg)
+}
+
+// CanUseEmailCredential is the same policy for a Customer (customers R12, R15): Active, not
+// Deleted, a Reset link only with a password, a code or grant only without one.
+func (c Customer) CanUseEmailCredential(kind string) bool {
+	if c.Status != "active" || c.DeletedAt.Valid {
+		return false
+	}
+	if kind == ResetLink {
+		return c.PasswordHash.Valid
+	}
+	return !c.PasswordHash.Valid
+}
+
+// AllowsCustomerPassword is AllowsPassword for a Customer.
+func (credential EmailCredential) AllowsCustomerPassword(c Customer, arg EmailPasswordParams) bool {
+	return credential.allowsPassword(c.CanUseEmailCredential(arg.Kind), arg)
+}
+
+func (credential EmailCredential) allowsPassword(eligible bool, arg EmailPasswordParams) bool {
+	return (arg.Kind == SetupGrant || arg.Kind == ResetLink) && eligible &&
 		credential.Kind == arg.Kind && credential.ExpiresAt.After(arg.At) &&
 		subtle.ConstantTimeCompare(credential.TokenHash, arg.TokenHash) == 1
 }

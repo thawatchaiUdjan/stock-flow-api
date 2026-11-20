@@ -37,6 +37,11 @@ type Store interface {
 	ReadEmailPasswordUser(context.Context, store.EmailPasswordParams) (store.User, error)
 	SetEmailPassword(context.Context, store.EmailPasswordParams, store.ActivityBy) (store.User, error)
 	ReserveEmailRequest(context.Context, store.EmailRequestParams) (bool, error)
+	IssueCustomerCredential(context.Context, store.EmailCredentialParams) (store.Customer, error)
+	VerifyCustomerCode(context.Context, store.VerifyFirstTimeCodeParams) (bool, error)
+	ReadCustomerCredential(context.Context, store.EmailPasswordParams) error
+	SetCustomerPassword(context.Context, store.EmailPasswordParams, store.ActivityBy) (store.Customer, error)
+	UpdateProfile(context.Context, store.ChangeProfileParams, store.ActivityBy) (store.Customer, error)
 	GetCustomerByEmail(ctx context.Context, email string) (store.Customer, error)
 	IssueSignupCode(context.Context, store.SignupCodeParams) error
 	VerifySignupCode(context.Context, store.VerifyFirstTimeCodeParams) (bool, error)
@@ -113,6 +118,7 @@ func New(deps Deps) (http.Handler, huma.API) {
 	registerHistoryV2(api, deps)
 	registerStorefront(api, deps)
 	registerStorefrontAuth(api, deps)
+	registerStorefrontAccount(api, deps)
 	registerStockMovements(api, deps)
 	registerOrders(api, deps)
 	registerReports(api, deps)

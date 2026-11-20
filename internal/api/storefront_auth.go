@@ -48,10 +48,21 @@ type customerSessionInput struct {
 }
 
 type currentCustomer struct {
-	ID    int64  `json:"id" doc:"Identifies the Customer."`
-	Name  string `json:"name" doc:"The Customer's name, in any language."`
-	Email string `json:"email" doc:"The Customer's email, in lower case."`
-	Phone string `json:"phone" doc:"The Customer's phone number: 9 or 10 digits, starting with 0."`
+	ID              int64            `json:"id" doc:"Identifies the Customer."`
+	Name            string           `json:"name" doc:"The Customer's name, in any language."`
+	Email           string           `json:"email" doc:"The Customer's email, in lower case."`
+	Phone           string           `json:"phone" doc:"The Customer's phone number: 9 or 10 digits, starting with 0."`
+	DeliveryAddress *deliveryAddress `json:"deliveryAddress" doc:"The saved Delivery address, or null when there is none."`
+}
+
+// TransformSchema marks deliveryAddress nullable, as loginLogEntryV2 does for its actor.
+func (currentCustomer) TransformSchema(_ huma.Registry, s *huma.Schema) *huma.Schema {
+	field := s.Properties["deliveryAddress"]
+	s.Properties["deliveryAddress"] = &huma.Schema{
+		Description: field.Description,
+		OneOf:       []*huma.Schema{{Ref: field.Ref}, {Type: "null"}},
+	}
+	return s
 }
 
 type requestSignupCodeInput struct {
@@ -207,7 +218,7 @@ func registerStorefrontAuth(api huma.API, deps Deps) {
 		case err != nil:
 			return nil, internalError(ctx, "complete sign-up", err)
 		}
-		return &completeSignupOutput{Body: customerBody(created.ID, created.Name, created.Email, created.Phone)}, nil
+		return &completeSignupOutput{Body: customerBody(created)}, nil
 	})
 
 	huma.Register(api, huma.Operation{
@@ -264,7 +275,7 @@ func registerStorefrontAuth(api huma.API, deps Deps) {
 			return nil, failed
 		}
 		out := &customerLogInOutput{SetCookie: customerSessionCookie(token, cookieLifetime)}
-		out.Body = customerBody(customer.ID, customer.Name, customer.Email, customer.Phone)
+		out.Body = customerBody(customer)
 		return out, nil
 	})
 
@@ -297,12 +308,17 @@ func registerStorefrontAuth(api huma.API, deps Deps) {
 		if err != nil {
 			return nil, err
 		}
-		return &currentCustomerOutput{Body: customerBody(session.CustomerID, session.Name, session.Email, session.Phone)}, nil
+		return &currentCustomerOutput{Body: customerBody(session.Customer())}, nil
 	})
 }
 
-func customerBody(id int64, name, emailAddress, phone string) currentCustomer {
-	return currentCustomer{ID: id, Name: name, Email: emailAddress, Phone: phone}
+func customerBody(c store.Customer) currentCustomer {
+	body := currentCustomer{ID: c.ID, Name: c.Name, Email: c.Email, Phone: c.Phone}
+	if a := c.DeliveryAddress(); a != nil {
+		d := deliveryAddress(*a)
+		body.DeliveryAddress = &d
+	}
+	return body
 }
 
 // sendVerificationCode emails a sign-up code and says how it went (customers R5, R6, R8).

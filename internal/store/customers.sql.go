@@ -16,7 +16,7 @@ const createCustomer = `-- name: CreateCustomer :one
 INSERT INTO customers (name, email, phone, password_hash, created_at)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (lower(email)) WHERE deleted_at IS NULL DO NOTHING
-RETURNING id, name, email, phone, password_hash, status, created_at, deleted_at, deleted_by
+RETURNING id, name, email, phone, password_hash, status, created_at, deleted_at, deleted_by, address_recipient, address_phone, address_line, address_subdistrict, address_district, address_province, address_postcode
 `
 
 type CreateCustomerParams struct {
@@ -46,6 +46,13 @@ func (q *Queries) CreateCustomer(ctx context.Context, arg CreateCustomerParams) 
 		&i.CreatedAt,
 		&i.DeletedAt,
 		&i.DeletedBy,
+		&i.AddressRecipient,
+		&i.AddressPhone,
+		&i.AddressLine,
+		&i.AddressSubdistrict,
+		&i.AddressDistrict,
+		&i.AddressProvince,
+		&i.AddressPostcode,
 	)
 	return i, err
 }
@@ -106,7 +113,7 @@ func (q *Queries) DeleteSignupCredential(ctx context.Context, lower string) erro
 }
 
 const getCustomerByEmail = `-- name: GetCustomerByEmail :one
-SELECT id, name, email, phone, password_hash, status, created_at, deleted_at, deleted_by FROM customers WHERE lower(email) = lower($1) AND deleted_at IS NULL
+SELECT id, name, email, phone, password_hash, status, created_at, deleted_at, deleted_by, address_recipient, address_phone, address_line, address_subdistrict, address_district, address_province, address_postcode FROM customers WHERE lower(email) = lower($1) AND deleted_at IS NULL
 `
 
 func (q *Queries) GetCustomerByEmail(ctx context.Context, lower string) (Customer, error) {
@@ -122,23 +129,39 @@ func (q *Queries) GetCustomerByEmail(ctx context.Context, lower string) (Custome
 		&i.CreatedAt,
 		&i.DeletedAt,
 		&i.DeletedBy,
+		&i.AddressRecipient,
+		&i.AddressPhone,
+		&i.AddressLine,
+		&i.AddressSubdistrict,
+		&i.AddressDistrict,
+		&i.AddressProvince,
+		&i.AddressPostcode,
 	)
 	return i, err
 }
 
 const getCustomerSession = `-- name: GetCustomerSession :one
-SELECT customer_sessions.customer_id, customers.name, customers.email, customers.phone, customer_sessions.expires_at
+SELECT customer_sessions.customer_id, customers.name, customers.email, customers.phone, customer_sessions.expires_at,
+    customers.address_recipient, customers.address_phone, customers.address_line, customers.address_subdistrict,
+    customers.address_district, customers.address_province, customers.address_postcode
 FROM customer_sessions
 JOIN customers ON customers.id = customer_sessions.customer_id
 WHERE customer_sessions.token_hash = $1
 `
 
 type GetCustomerSessionRow struct {
-	CustomerID int64
-	Name       string
-	Email      string
-	Phone      string
-	ExpiresAt  time.Time
+	CustomerID         int64
+	Name               string
+	Email              string
+	Phone              string
+	ExpiresAt          time.Time
+	AddressRecipient   pgtype.Text
+	AddressPhone       pgtype.Text
+	AddressLine        pgtype.Text
+	AddressSubdistrict pgtype.Text
+	AddressDistrict    pgtype.Text
+	AddressProvince    pgtype.Text
+	AddressPostcode    pgtype.Text
 }
 
 func (q *Queries) GetCustomerSession(ctx context.Context, tokenHash []byte) (GetCustomerSessionRow, error) {
@@ -150,6 +173,13 @@ func (q *Queries) GetCustomerSession(ctx context.Context, tokenHash []byte) (Get
 		&i.Email,
 		&i.Phone,
 		&i.ExpiresAt,
+		&i.AddressRecipient,
+		&i.AddressPhone,
+		&i.AddressLine,
+		&i.AddressSubdistrict,
+		&i.AddressDistrict,
+		&i.AddressProvince,
+		&i.AddressPostcode,
 	)
 	return i, err
 }

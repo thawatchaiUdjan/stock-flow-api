@@ -47,7 +47,7 @@ func Render(message Message) (Content, error) {
 		content.Text = fmt.Sprintf("%s\n\n%s\n\nYour code: %s\n\n%s\n\nSet up password: %s\n\n%s\n\nStockFlow\n", greeting, data.Intro, message.Code, data.Expiry, message.Link, data.Help)
 	case ResetLink:
 		content.Subject = "Reset your StockFlow password"
-		data.Title, data.Intro, data.Action = "Reset your password", "Someone requested a new password for your StockFlow User. Choose your own new password using the link below.", "Reset password"
+		data.Title, data.Intro, data.Action = "Reset your password", "Someone requested a new password for your StockFlow account. Choose your own new password using the link below.", "Reset password"
 		data.Expiry = "This link expires in 30 minutes (" + message.ExpiresAt.UTC().Format("02 Jan 2006, 15:04 UTC") + ")."
 		content.Text = fmt.Sprintf("%s\n\n%s\n\n%s\n\nReset password: %s\n\nYour current password remains unchanged until you complete this reset.\n\n%s\n\nStockFlow\n", greeting, data.Intro, data.Expiry, message.Link, data.Help)
 	case ResetComplete:

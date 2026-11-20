@@ -62,6 +62,7 @@ func staff(email string) store.User {
 func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 	runEmailAuth(t, newSubject)
 	runCustomers(t, newSubject)
+	runCustomerCredentials(t, newSubject)
 	ctx := context.Background()
 
 	t.Run("finds a User by email whatever its letter case", func(t *testing.T) {
