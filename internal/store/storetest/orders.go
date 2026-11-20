@@ -145,7 +145,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 		tea := s.AddProduct(t, priced("Thai tea", "TEA-01", 4500, 10))
 		createOrder(t, s, newOrder(user, "", line(tea, 2)))
 
-		if _, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: tea.ID, Price: pgtype.Int8{Int64: 9900, Valid: true}}); err != nil {
+		if _, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: tea.ID, Price: pgtype.Int8{Int64: 9900, Valid: true}}, SystemBy); err != nil {
 			t.Fatal(err)
 		}
 
@@ -320,7 +320,7 @@ func runOrders(t *testing.T, newSubject func(t *testing.T) Subject) {
 		cup := s.AddProduct(t, priced("Cup", "CUP-01", 100, 5))
 		created := createOrder(t, s, newOrder(creator, "", line(tea, 4), line(cup, 5)))
 		// orders R12: even to a Product Archived since.
-		if _, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: cup.ID, Status: text("archived")}); err != nil {
+		if _, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: cup.ID, Status: text("archived")}, SystemBy); err != nil {
 			t.Fatal(err)
 		}
 

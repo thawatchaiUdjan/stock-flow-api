@@ -123,7 +123,7 @@ func TestTwoProductsCreatedAtOnceWithOneSKUMakeOne(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := s.CreateProduct(ctx, store.InsertProductParams{Name: "Thai tea", Sku: sku, Unit: "box"})
+			_, err := s.CreateProduct(ctx, store.InsertProductParams{Name: "Thai tea", Sku: sku, Unit: "box"}, storetest.SystemBy)
 			errs <- err
 		}()
 	}
@@ -1042,4 +1042,30 @@ func TestTheBlankUserNameAndAdjustmentNoteMigrationAppliesAndReverses(t *testing
 	assertViolates(t, err, "users_name_check")
 	_, err = pool.Exec(ctx, insertMove, "adjustment", " ")
 	assertViolates(t, err, "stock_movements_adjustment_note_check")
+}
+
+// activity-log R8: the schema refuses to edit or remove an entry, whoever asks, and
+// refuses an entry whose actor has an id when it should not (R2).
+func TestTheSchemaRefusesToChangeOrRemoveAnActivityLogEntry(t *testing.T) {
+	ctx := context.Background()
+	pool := open(t, testdb.URL(t))
+	if _, err := store.NewStore(pool).CreateProduct(ctx, store.InsertProductParams{Name: "Thai tea", Sku: "TEA-01", Unit: "box"}, storetest.SystemBy); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, statement := range map[string]string{
+		"update":   `UPDATE activity_log SET action = 'deleted'`,
+		"delete":   `DELETE FROM activity_log`,
+		"truncate": `TRUNCATE activity_log`,
+	} {
+		_, err := pool.Exec(ctx, statement)
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "23001" {
+			t.Errorf("%s: err = %v, want a restrict_violation", name, err)
+		}
+	}
+	var action string
+	if err := pool.QueryRow(ctx, `SELECT action FROM activity_log`).Scan(&action); err != nil || action != "added" {
+		t.Errorf("entry = %q, %v, want it untouched", action, err)
+	}
 }

@@ -23,23 +23,25 @@ type DeleteParams struct {
 	At     time.Time
 }
 
-// DeleteProduct marks an Archived Product Deleted (products R17, business ADR 0013). It
-// answers ErrNotFound for no such Product, Deleted ones included, and ErrProductNotArchived
-// for an Active one. A single statement: an Archived Product made Active at the same moment
-// is either still Archived here or not, and the check on the table agrees.
-func (s *Store) DeleteProduct(ctx context.Context, arg DeleteParams) error {
-	deleted, err := s.Queries.MarkProductDeleted(ctx, MarkProductDeletedParams{ID: arg.ID, UserID: arg.UserID, At: arg.At})
-	if err != nil {
-		return fmt.Errorf("mark product deleted: %w", err)
-	}
-	if deleted > 0 {
-		return nil
-	}
-	// Nothing changed: say why.
-	if _, err := s.Queries.GetProduct(ctx, arg.ID); err != nil {
-		return err // ErrNotFound, or a real failure
-	}
-	return ErrProductNotArchived
+// DeleteProduct marks an Archived Product Deleted and writes its Activity log entry in
+// the same transaction (products R17, activity-log R3, business ADR 0013). It answers
+// ErrNotFound for no such Product, Deleted ones included, and ErrProductNotArchived for an
+// Active one. The Product is held, so an Archive or restore at the same moment runs before
+// or after, never between.
+func (s *Store) DeleteProduct(ctx context.Context, arg DeleteParams, by ActivityBy) error {
+	return InTx(ctx, s.pool, func(q *Queries) error {
+		product, err := q.LockProduct(ctx, arg.ID)
+		if err != nil {
+			return err // ErrNotFound, or a real failure
+		}
+		if product.Status != "archived" {
+			return ErrProductNotArchived
+		}
+		if _, err := q.MarkProductDeleted(ctx, MarkProductDeletedParams{ID: arg.ID, UserID: arg.UserID, At: arg.At}); err != nil {
+			return fmt.Errorf("mark product deleted: %w", err)
+		}
+		return q.addActivity(ctx, ProductDeleted(product, by))
+	})
 }
 
 // DeleteUser marks an Inactive User Deleted (users-and-access R54, business ADR 0013). It

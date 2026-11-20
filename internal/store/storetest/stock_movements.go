@@ -374,7 +374,7 @@ func runStockMovements(t *testing.T, newSubject func(t *testing.T) Subject) {
 		if _, err := s.Store.MoveStock(ctx, move(store.KindReceive, user, "", change(tea, 1))); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: tea.ID, Name: text("Green tea"), Sku: text("GRN-01")}); err != nil {
+		if _, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: tea.ID, Name: text("Green tea"), Sku: text("GRN-01")}, SystemBy); err != nil {
 			t.Fatal(err)
 		}
 

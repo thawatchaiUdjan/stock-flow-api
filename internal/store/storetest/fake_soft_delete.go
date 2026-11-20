@@ -9,7 +9,7 @@ import (
 	"github.com/thawatchaiUdjan/stock-flow-api/internal/store"
 )
 
-func (f *Fake) DeleteProduct(_ context.Context, arg store.DeleteParams) error {
+func (f *Fake) DeleteProduct(_ context.Context, arg store.DeleteParams, by store.ActivityBy) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Err != nil {
@@ -22,8 +22,13 @@ func (f *Fake) DeleteProduct(_ context.Context, arg store.DeleteParams) error {
 	case f.products[i].Status != "archived":
 		return store.ErrProductNotArchived
 	}
+	entry := store.ProductDeleted(f.products[i], by)
+	if err := f.checkActivity(entry); err != nil {
+		return err
+	}
 	f.products[i].DeletedAt = pgtype.Timestamptz{Time: arg.At, Valid: true}
 	f.products[i].DeletedBy = pgtype.Int8{Int64: arg.UserID, Valid: true}
+	f.record(entry)
 	return nil
 }
 

@@ -804,6 +804,7 @@ func Run(t *testing.T, newSubject func(t *testing.T) Subject) {
 	})
 
 	runLoginLog(t, newSubject)
+	runActivityLog(t, newSubject)
 	runProducts(t, newSubject)
 	runStockMovements(t, newSubject)
 	runOrders(t, newSubject)

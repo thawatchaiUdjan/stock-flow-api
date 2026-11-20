@@ -53,7 +53,7 @@ func runProducts(t *testing.T, newSubject func(t *testing.T) Subject) {
 
 		got, err := s.Store.CreateProduct(ctx, store.InsertProductParams{
 			Name: "Thai tea", Sku: "TEA-01", Unit: "box", Price: 12050, MinimumStock: 5,
-		})
+		}, SystemBy)
 
 		if err != nil {
 			t.Fatal(err)
@@ -72,7 +72,7 @@ func runProducts(t *testing.T, newSubject func(t *testing.T) Subject) {
 
 	t.Run("gets a Product by id, and reports an unknown id as not found", func(t *testing.T) {
 		s := newSubject(t)
-		created, err := s.Store.CreateProduct(ctx, newProduct("Thai tea", "TEA-01"))
+		created, err := s.Store.CreateProduct(ctx, newProduct("Thai tea", "TEA-01"), SystemBy)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -90,11 +90,11 @@ func runProducts(t *testing.T, newSubject func(t *testing.T) Subject) {
 	// products R3.
 	t.Run("refuses a SKU another Product has, whatever its letter case", func(t *testing.T) {
 		s := newSubject(t)
-		if _, err := s.Store.CreateProduct(ctx, newProduct("Thai tea", "Tea-01")); err != nil {
+		if _, err := s.Store.CreateProduct(ctx, newProduct("Thai tea", "Tea-01"), SystemBy); err != nil {
 			t.Fatal(err)
 		}
 
-		_, err := s.Store.CreateProduct(ctx, newProduct("Green tea", "tEA-01"))
+		_, err := s.Store.CreateProduct(ctx, newProduct("Green tea", "tEA-01"), SystemBy)
 
 		if !errors.Is(err, store.ErrSKUTaken) {
 			t.Errorf("err = %v, want ErrSKUTaken", err)
@@ -107,22 +107,22 @@ func runProducts(t *testing.T, newSubject func(t *testing.T) Subject) {
 	// products R3: the SKU can change, and a Product can keep or recase its own.
 	t.Run("changes a SKU unless another Product has it, in any letter case", func(t *testing.T) {
 		s := newSubject(t)
-		first, _ := s.Store.CreateProduct(ctx, newProduct("Thai tea", "TEA-01"))
-		second, _ := s.Store.CreateProduct(ctx, newProduct("Green tea", "TEA-02"))
+		first, _ := s.Store.CreateProduct(ctx, newProduct("Thai tea", "TEA-01"), SystemBy)
+		second, _ := s.Store.CreateProduct(ctx, newProduct("Green tea", "TEA-02"), SystemBy)
 
-		_, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: second.ID, Sku: text("tea-01")})
+		_, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: second.ID, Sku: text("tea-01")}, SystemBy)
 		if !errors.Is(err, store.ErrSKUTaken) {
 			t.Errorf("taking another's SKU: err = %v, want ErrSKUTaken", err)
 		}
-		recased, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: first.ID, Sku: text("tea-01")})
+		recased, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: first.ID, Sku: text("tea-01")}, SystemBy)
 		if err != nil || recased.Sku != "tea-01" {
 			t.Errorf("recasing its own SKU: got %+v, %v", recased, err)
 		}
-		moved, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: second.ID, Sku: text("TEA-03")})
+		moved, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: second.ID, Sku: text("TEA-03")}, SystemBy)
 		if err != nil || moved.Sku != "TEA-03" {
 			t.Errorf("changing the SKU: got %+v, %v", moved, err)
 		}
-		freed, err := s.Store.CreateProduct(ctx, newProduct("Black tea", "tea-02"))
+		freed, err := s.Store.CreateProduct(ctx, newProduct("Black tea", "tea-02"), SystemBy)
 		if err != nil {
 			t.Errorf("the SKU TEA-02 was left free but: %v (%+v)", err, freed)
 		}
@@ -136,7 +136,7 @@ func runProducts(t *testing.T, newSubject func(t *testing.T) Subject) {
 
 		got, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{
 			ID: seeded.ID, Name: text("ชาไทย"), Price: pgtype.Int8{Int64: 0, Valid: true},
-		})
+		}, SystemBy)
 
 		if err != nil {
 			t.Fatal(err)
@@ -150,13 +150,13 @@ func runProducts(t *testing.T, newSubject func(t *testing.T) Subject) {
 
 	t.Run("updates every field, archives and restores", func(t *testing.T) {
 		s := newSubject(t)
-		created, _ := s.Store.CreateProduct(ctx, newProduct("Thai tea", "TEA-01"))
+		created, _ := s.Store.CreateProduct(ctx, newProduct("Thai tea", "TEA-01"), SystemBy)
 
 		got, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{
 			ID: created.ID, Name: text("Green tea"), Sku: text("GRN"), Unit: text("pack"),
 			Price: pgtype.Int8{Int64: 999999999, Valid: true}, MinimumStock: pgtype.Int4{Int32: 0, Valid: true},
 			Status: text("archived"),
-		})
+		}, SystemBy)
 
 		if err != nil {
 			t.Fatal(err)
@@ -168,7 +168,7 @@ func runProducts(t *testing.T, newSubject func(t *testing.T) Subject) {
 		if got != want {
 			t.Errorf("got %+v, want %+v", got, want)
 		}
-		restored, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: created.ID, Status: text("active")})
+		restored, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: created.ID, Status: text("active")}, SystemBy)
 		if err != nil || restored.Status != "active" {
 			t.Errorf("restored = %+v, %v", restored, err)
 		}
@@ -177,7 +177,7 @@ func runProducts(t *testing.T, newSubject func(t *testing.T) Subject) {
 	t.Run("reports an update of no Product as not found", func(t *testing.T) {
 		s := newSubject(t)
 
-		_, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: 99, Name: text("Thai tea")})
+		_, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: 99, Name: text("Thai tea")}, SystemBy)
 
 		if !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("err = %v, want ErrNotFound", err)
@@ -202,7 +202,7 @@ func runProducts(t *testing.T, newSubject func(t *testing.T) Subject) {
 			"a price over 9,999,999": {Name: "Tea", Sku: "A", Unit: "pcs", Price: 1000000000},
 			"a negative minimum":     {Name: "Tea", Sku: "A", Unit: "pcs", MinimumStock: -1},
 		} {
-			if _, err := s.Store.CreateProduct(ctx, bad); err == nil || errors.Is(err, store.ErrSKUTaken) {
+			if _, err := s.Store.CreateProduct(ctx, bad, SystemBy); err == nil || errors.Is(err, store.ErrSKUTaken) {
 				t.Errorf("%s: err = %v, want a refusal", name, err)
 			}
 		}
@@ -217,7 +217,7 @@ func runProducts(t *testing.T, newSubject func(t *testing.T) Subject) {
 			"a unit with a space":   {Name: "Tea", Sku: "G", Unit: "6 pack"},
 			"a SKU of mixed things": {Name: "Tea", Sku: "aB-9-z", Unit: "pcs"},
 		} {
-			if _, err := s.Store.CreateProduct(ctx, ok); err != nil {
+			if _, err := s.Store.CreateProduct(ctx, ok, SystemBy); err != nil {
 				t.Errorf("%s: err = %v, want it accepted", name, err)
 			}
 		}
@@ -233,7 +233,7 @@ func runProducts(t *testing.T, newSubject func(t *testing.T) Subject) {
 			"a no-break space unit": {ID: tea.ID, Unit: text("\u00a0")},
 			"an ideographic unit":   {ID: tea.ID, Unit: text("\u3000")},
 		} {
-			if _, err := s.Store.UpdateProduct(ctx, change); err == nil || errors.Is(err, store.ErrNotFound) {
+			if _, err := s.Store.UpdateProduct(ctx, change, SystemBy); err == nil || errors.Is(err, store.ErrNotFound) {
 				t.Errorf("%s: err = %v, want a refusal", name, err)
 			}
 		}
@@ -262,7 +262,7 @@ func runProducts(t *testing.T, newSubject func(t *testing.T) Subject) {
 			}
 			// The state follows a change of the Minimum stock too.
 			if tc.minimum == 5 && tc.stock == 5 {
-				changed, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: p.ID, MinimumStock: pgtype.Int4{Int32: 4, Valid: true}})
+				changed, err := s.Store.UpdateProduct(ctx, store.ChangeProductParams{ID: p.ID, MinimumStock: pgtype.Int4{Int32: 4, Valid: true}}, SystemBy)
 				if err != nil || changed.StockState != "in-stock" {
 					t.Errorf("minimum lowered to 4 under a stock of 5: state = %q, %v; want in-stock", changed.StockState, err)
 				}

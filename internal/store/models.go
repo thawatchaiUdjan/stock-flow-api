@@ -10,6 +10,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ActivityLog struct {
+	ID          int64
+	At          time.Time
+	ActorKind   string
+	ActorID     pgtype.Int8
+	ActorName   string
+	ActorEmail  string
+	ActorRole   string
+	Action      string
+	SubjectKind string
+	SubjectID   int64
+	SubjectName string
+	SubjectRef  string
+	Changes     []byte
+	Ip          string
+	UserAgent   string
+}
+
 type EmailCredential struct {
 	UserID         int64
 	Kind           string

@@ -50,3 +50,7 @@ WHERE deleted_at IS NULL AND status = sqlc.arg(status)
 -- name: MarkProductDeleted :execrows
 UPDATE products SET deleted_at = sqlc.arg(at)::timestamptz, deleted_by = sqlc.arg(user_id)::bigint
 WHERE id = sqlc.arg(id) AND deleted_at IS NULL AND status = 'archived';
+
+-- Held while a change reads the Product's values before and after (activity-log R2).
+-- name: LockProduct :one
+SELECT * FROM products WHERE id = $1 AND deleted_at IS NULL FOR UPDATE;

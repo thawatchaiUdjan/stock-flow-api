@@ -1,5 +1,121 @@
 components:
   schemas:
+    ActivityActor:
+      additionalProperties: false
+      properties:
+        email:
+          description: As it was when the change was made. Empty for the system and the installation.
+          type: string
+        id:
+          description: The id of the User or Customer; null for the system and the installation.
+          format: int64
+          type:
+            - integer
+            - "null"
+        kind:
+          description: A User, a Customer, the system, or the installation.
+          enum:
+            - user
+            - customer
+            - system
+            - installation
+          type: string
+        name:
+          description: As it was when the change was made.
+          type: string
+        role:
+          description: A User's Role as it was; empty for any other actor.
+          type: string
+      required:
+        - kind
+        - id
+        - name
+        - email
+        - role
+      type: object
+    ActivityChange:
+      additionalProperties: false
+      properties:
+        after:
+          description: Its value after.
+        before:
+          description: Its value before.
+        field:
+          description: The field that changed.
+          type: string
+      required:
+        - field
+        - before
+        - after
+      type: object
+    ActivityEntryBody:
+      additionalProperties: false
+      properties:
+        action:
+          description: "What was done: added, edited, archived, restored or deleted for a Product."
+          type: string
+        actor:
+          $ref: "#/components/schemas/ActivityActor"
+          description: Who made it.
+        at:
+          description: When the change was made.
+          format: date-time
+          type: string
+        changes:
+          description: For an edit, each changed field with its value before and after; empty otherwise.
+          items:
+            $ref: "#/components/schemas/ActivityChange"
+          type: array
+        id:
+          description: Identifies the entry. Later entries have higher ids.
+          format: int64
+          type: integer
+        ip:
+          description: The IP address of the request. Empty when no person made the change.
+          type: string
+        subject:
+          $ref: "#/components/schemas/ActivitySubject"
+          description: What it was done to.
+        userAgent:
+          description: The browser or device. Empty when none.
+          type: string
+      required:
+        - id
+        - at
+        - actor
+        - action
+        - subject
+        - changes
+        - ip
+        - userAgent
+      type: object
+    ActivitySubject:
+      additionalProperties: false
+      properties:
+        id:
+          description: Its id.
+          format: int64
+          type: integer
+        kind:
+          description: What was changed.
+          enum:
+            - product
+            - order
+            - user
+            - customer
+          type: string
+        name:
+          description: Its name as it was when the change was made, so the entry stays readable once it is Deleted.
+          type: string
+        ref:
+          description: Its SKU, Order number or email as it was.
+          type: string
+      required:
+        - kind
+        - id
+        - name
+        - ref
+      type: object
     AdjustStockBody:
       additionalProperties: false
       properties:
@@ -480,6 +596,30 @@ components:
           type: string
       required:
         - next
+      type: object
+    ListActivityLogOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/ListActivityLogOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        entries:
+          description: Newest first.
+          items:
+            $ref: "#/components/schemas/ActivityEntryBody"
+          type: array
+        total:
+          description: Exact count of the entries matching every filter, whatever the page.
+          format: int64
+          minimum: 0
+          type: integer
+      required:
+        - entries
+        - total
       type: object
     ListLoginLogOutputBody:
       additionalProperties: false
@@ -2988,6 +3128,129 @@ paths:
       summary: Reset a User's password
       tags:
         - Users
+  /v2/activity-log:
+    get:
+      description: "Every recorded change, newest first, in numbered pages of 10, 25 or 50 with an exact total. An out-of-range page is empty with the actual total. Entries cannot be changed or removed. Owner only: answers 403 to an Admin or Staff. Answers a plain 401 with no session cookie, and 401 `session-ended` with a cookie that matches no live session."
+      operationId: list-activity-log
+      parameters:
+        - description: Only the changes made by this kind of actor.
+          explode: false
+          in: query
+          name: actorKind
+          schema:
+            description: Only the changes made by this kind of actor.
+            enum:
+              - user
+              - customer
+              - system
+              - installation
+            type: string
+        - description: Only the changes made by the User or Customer with this id; use with actorKind.
+          explode: false
+          in: query
+          name: actorId
+          schema:
+            description: Only the changes made by the User or Customer with this id; use with actorKind.
+            format: int64
+            minimum: 1
+            type: integer
+        - description: Only the changes to this kind of record.
+          explode: false
+          in: query
+          name: kind
+          schema:
+            description: Only the changes to this kind of record.
+            enum:
+              - product
+              - order
+              - user
+              - customer
+            type: string
+        - description: Only this action, such as edited.
+          explode: false
+          in: query
+          name: action
+          schema:
+            description: Only this action, such as edited.
+            maxLength: 40
+            pattern: ^[a-z-]+$
+            type: string
+        - description: Only the changes on or after this day of the Shop, in Bangkok time (YYYY-MM-DD).
+          explode: false
+          in: query
+          name: from
+          schema:
+            description: Only the changes on or after this day of the Shop, in Bangkok time (YYYY-MM-DD).
+            format: date
+            type: string
+        - description: Only the changes on or before this day of the Shop, in Bangkok time (YYYY-MM-DD).
+          explode: false
+          in: query
+          name: to
+          schema:
+            description: Only the changes on or before this day of the Shop, in Bangkok time (YYYY-MM-DD).
+            format: date
+            type: string
+        - description: "How many matching entries to skip: page number times limit."
+          explode: false
+          in: query
+          name: offset
+          schema:
+            default: 0
+            description: "How many matching entries to skip: page number times limit."
+            format: int32
+            maximum: 2147483647
+            minimum: 0
+            type: integer
+        - description: The most entries on a page.
+          explode: false
+          in: query
+          name: limit
+          schema:
+            default: 25
+            description: The most entries on a page.
+            enum:
+              - 10
+              - 25
+              - 50
+            format: int32
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListActivityLogOutputBody"
+          description: OK
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unauthorized
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Forbidden
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Unprocessable Entity
+        "500":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Internal Server Error
+      security:
+        - session: []
+      summary: List the Activity log
+      tags:
+        - Activity log
   /v2/login/identify:
     post:
       description: Login's email step. Answers `password` for an Active User with a password; `no-account` alike for an unknown email and an Inactive User; `installation-link` for the Owner before installation setup, sending nothing; and `first-time-code` for an Active Admin or Staff User without a password, after sending a First-time code within the shared send limits (`codeDelivery` says whether one went out). Answers 429 `login-check-limited` with Retry-After after 100 checks from one IP address in a rolling hour, and 503 `email-auth-unavailable` only where a code would be sent and email access is not configured. Not recorded in the Login log.
